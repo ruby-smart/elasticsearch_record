@@ -79,8 +79,6 @@ module ElasticsearchRecord
         # spawn a new aggregation and return the aggs
         response = aggregate(metric_key, { metric => { field: column } }).aggregations
 
-        Debugger.debug(response," response")
-
         response[metric_key][node]
       end
     end

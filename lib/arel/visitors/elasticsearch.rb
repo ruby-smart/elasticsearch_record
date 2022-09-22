@@ -123,7 +123,8 @@ module Arel # :nodoc: all
         # updating multiple entries need a script
         assign(:script, {}) do
           assign(:inline, "") do
-            collect(o.values)
+            updates = collect(o.values)
+            assign(updates.join('; ')) if updates
           end
         end
 
@@ -192,7 +193,7 @@ module Arel # :nodoc: all
         resolve(o, :visit_Query) if o.queries.present?
 
         # sets the aggs
-        resolve(o, :visit_Aggs)  if o.aggs.present?
+        resolve(o, :visit_Aggs) if o.aggs.present?
 
         # set possible fields to select
         if o.projections.present?
@@ -270,11 +271,15 @@ module Arel # :nodoc: all
       end
 
       def visit_Arel_Nodes_Assignment(o)
-        if o.right.is_a?(ActiveModel::Attribute) && o.right.value_before_type_cast.is_a?(Symbol)
-          assign("ctx._source.#{visit(o.left)} = ctx._source.#{visit(o.right)}; ")
-        else
-          assign "ctx._source.#{visit(o.left)} = #{quote(visit(o.right))}; "
-        end
+        value = visit(o.right)
+
+        value_assign = if o.right.value_before_type_cast.is_a?(Symbol)
+                         "ctx._source.#{value}"
+                       else
+                         quote(value)
+                       end
+
+        "ctx._source.#{visit(o.left)} = #{value_assign}"
       end
 
       def visit_Arel_Nodes_Comment(o)
@@ -293,7 +298,21 @@ module Arel # :nodoc: all
 
       def visit_Sort(o)
         assign(:sort, {}) do
-          assign({ visit(o.expr) => visit(o.direction) })
+          key = visit(o.expr)
+          dir = visit(o.direction)
+
+          # special key: _rand
+          if key == '_rand'
+            assign({
+                     "_script" => {
+                       "script" => "Math.random()",
+                       "type"   => "number",
+                       "order"  => dir
+                     }
+                   })
+          else
+            assign(key => dir)
+          end
         end
       end
 
@@ -364,6 +383,7 @@ module Arel # :nodoc: all
       def visit_Array(o)
         collect(o)
       end
+
       alias :visit_Set :visit_Array
 
       ###########

@@ -14,7 +14,7 @@ module ElasticsearchRecord
     TYPE_DELETE          = :delete
     TYPE_DELETE_BY_QUERY = :delete_by_query
 
-    TYPES      = [TYPE_SEARCH, TYPE_MSEARCH, TYPE_CREATE, TYPE_UPDATE, TYPE_UPDATE_BY_QUERY, TYPE_DELETE, TYPE_DELETE_BY_QUERY].freeze
+    TYPES = [TYPE_SEARCH, TYPE_MSEARCH, TYPE_CREATE, TYPE_UPDATE, TYPE_UPDATE_BY_QUERY, TYPE_DELETE, TYPE_DELETE_BY_QUERY].freeze
     # defines which queries are read & write queries ...
     READ_TYPES = [TYPE_SEARCH, TYPE_MSEARCH].freeze
 
@@ -25,11 +25,6 @@ module ElasticsearchRecord
     # defines the index the query should be executed on
     # @!attribute String
     attr_reader :index
-
-    # defines the query status.
-    # @see STATUSES
-    # @!attribute Symbol
-    attr_reader :type
 
     # defines the query type.
     # @see TYPES
@@ -47,7 +42,7 @@ module ElasticsearchRecord
 
     # defines the query body - in most cases this is a hash
     # @!attribute Hash
-    attr_reader :body
+    attr_accessor :body
 
     # defines the query arguments to be passed to the API
     # @!attribute Hash
@@ -57,13 +52,23 @@ module ElasticsearchRecord
     # @!attribute Array
     attr_reader :columns
 
-    def initialize(index: nil, type: TYPE_UNDEFINED, status: STATUS_VALID, body: nil, refresh: nil, arguments: {})
-      @index       = index
-      @type        = type
-      @status      = status
-      @refresh     = refresh
-      @body        = body
-      @arguments   = arguments
+    def initialize(index: nil, type: TYPE_UNDEFINED, status: STATUS_VALID, body: nil, refresh: nil, arguments: {}, columns: [])
+      @index     = index
+      @type      = type
+      @status    = status
+      @refresh   = refresh
+      @body      = body
+      @arguments = arguments
+      @columns   = columns
+    end
+
+    # sets the failed status for this query.
+    # returns self
+    # @return [ElasticsearchRecord::Query]
+    def failed!
+      @status = STATUS_FAILED
+
+      self
     end
 
     # returns true, if the query is valid (e.g. index & type defined)

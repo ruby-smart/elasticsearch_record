@@ -1,7 +1,14 @@
 # frozen_string_literal: true
 
 require 'active_record/connection_adapters'
+
+# new
+require 'active_record/connection_adapters/elasticsearch/column'
+require 'active_record/connection_adapters/elasticsearch/database_statements'
+require 'active_record/connection_adapters/elasticsearch/quoting'
+require 'active_record/connection_adapters/elasticsearch/schema_statements'
 require 'active_record/connection_adapters/elasticsearch/type'
+
 require 'arel/visitors/elasticsearch'
 require 'arel/collectors/elasticsearch_query'
 
@@ -43,21 +50,6 @@ module ActiveRecord # :nodoc:
       include Elasticsearch::SchemaStatements
       include Elasticsearch::DatabaseStatements
 
-      # NATIVE_DATABASE_TYPES = {
-      #   primary_key: "integer PRIMARY KEY AUTOINCREMENT NOT NULL",
-      #   string:      { name: "varchar" },
-      #   text:        { name: "text" },
-      #   integer:     { name: "integer" },
-      #   float:       { name: "float" },
-      #   decimal:     { name: "decimal" },
-      #   datetime:    { name: "datetime" },
-      #   time:        { name: "time" },
-      #   date:        { name: "date" },
-      #   binary:      { name: "blob" },
-      #   boolean:     { name: "boolean" },
-      #   json:        { name: "json" },
-      # }
-
       class << self
         def base_structure_keys
           @base_structure_keys ||= BASE_STRUCTURE.map { |struct| struct['name'] }.freeze
@@ -68,8 +60,8 @@ module ActiveRecord # :nodoc:
           client = ::Elasticsearch::Client.new(config.except(:adapter))
           client.ping
           client
-        rescue Elastic::Transport::Transport::ServerError => error
-          raise ActiveRecord::ConnectionNotEstablished, error.message
+        rescue ::Elastic::Transport::Transport::ServerError => error
+          raise ::ActiveRecord::ConnectionNotEstablished, error.message
         end
 
         private
@@ -129,7 +121,7 @@ module ActiveRecord # :nodoc:
       end
 
       # reinitialize the constant with new types
-      TYPE_MAP = Type::HashLookupTypeMap.new.tap { |m| initialize_type_map(m) }
+      TYPE_MAP = ActiveRecord::Type::HashLookupTypeMap.new.tap { |m| initialize_type_map(m) }
 
       private
 
@@ -149,12 +141,12 @@ module ActiveRecord # :nodoc:
       end
 
       # provide a custom log instrumenter for elasticsearch subscribers
-      def log(gate, arguments, name, binds=[], async: false, &block)
+      def log(gate, arguments, name, binds = [], async: false, &block)
         @instrumenter.instrument(
           "query.elasticsearch_record",
           gate:      gate,
           name:      name,
-          arguments: arguments,
+          arguments: gate == 'core.msearch' ? arguments.deep_dup : arguments,
           binds:     binds,
           async:     async) do
           @lock.synchronize(&block)
@@ -185,8 +177,9 @@ module ActiveRecord # :nodoc:
       #
       # This is an internal hook to make possible connection adapters to build
       # custom result objects with response-specific data.
-      def build_result(response, columns = [])
-        ElasticsearchRecord::Result.new(response, columns)
+      # @return [ElasticsearchRecord::Result]
+      def build_result(response, columns: [], column_types: {})
+        ElasticsearchRecord::Result.new(response, columns, column_types)
       end
 
       # register native types

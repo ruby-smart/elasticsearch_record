@@ -110,7 +110,11 @@ module Arel # :nodoc: all
             self.current[args[0]] = args[1]
           end
         elsif self.current.is_a?(String)
-          self.current = self.current.to_s + args[0].to_s
+          if args[0].is_a?(Array)
+            self.current = self.current.to_s + args[0].map(&:to_s).join
+          else
+            self.current = self.current.to_s + args[0].to_s
+          end
         else
           self.current = args[0]
         end

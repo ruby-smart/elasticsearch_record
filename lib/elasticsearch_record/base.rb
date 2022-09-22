@@ -1,4 +1,4 @@
-require 'elasticsearch'
+require 'active_record'
 
 module ElasticsearchRecord
   class Base < ::ActiveRecord::Base

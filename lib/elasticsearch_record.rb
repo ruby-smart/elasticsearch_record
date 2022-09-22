@@ -1,15 +1,20 @@
 # frozen_string_literal: true
 
-require_relative "elasticsearch_record/version"
+# VERSION
+require_relative 'elasticsearch_record/version'
 
-require "active_record"
+require 'active_record'
 
+# new arel
 require 'arel/collectors/elasticsearch_query'
 require 'arel/nodes/select_agg'
 require 'arel/nodes/select_configure'
 require 'arel/nodes/select_kind'
 require 'arel/nodes/select_query'
 require 'arel/visitors/elasticsearch'
+
+# new adapter
+require 'active_record/connection_adapters/elasticsearch_adapter'
 
 module ElasticsearchRecord
   extend ActiveSupport::Autoload
@@ -21,7 +26,6 @@ module ElasticsearchRecord
     autoload :Persistence
     autoload :Querying
     autoload :Query
-    # autoload :Relation
     autoload :Result
   end
 

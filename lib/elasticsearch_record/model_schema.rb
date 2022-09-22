@@ -3,8 +3,8 @@ module ElasticsearchRecord
     extend ActiveSupport::Concern
 
     included do
-      class_attribute :index_name, instance_writer: false, default: nil
-      class_attribute :index_delimiter, instance_writer: false, default: "_"
+      class_attribute :index_base_name, instance_writer: false, default: nil
+      class_attribute :index_name_delimiter, instance_writer: false, default: "_"
     end
 
     module ClassMethods
@@ -12,8 +12,8 @@ module ElasticsearchRecord
       def undecorated_table_name(model_name)
         klass = model_name.instance_variable_get(:@klass)
 
-        klass.index_name || begin
-                              table_name = model_name.to_s.demodulize.underscore.split('_').join(klass.index_delimiter)
+        klass.index_base_name || begin
+                              table_name = model_name.to_s.demodulize.underscore.split('_').join(klass.index_name_delimiter)
                               pluralize_table_names ? table_name.pluralize : table_name
                             end
       end

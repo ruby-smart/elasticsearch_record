@@ -1,6 +1,6 @@
 # ElasticsearchRecord
 
-ElasticsearchRecord provides ActiveRecord functionality for Elasticsearch docs.
+ElasticsearchRecord provides ActiveRecord functionality for Elasticsearch indexed documents.
 
 -----
 
@@ -8,7 +8,7 @@ ElasticsearchRecord provides ActiveRecord functionality for Elasticsearch docs.
 - This is still in development!
 - Specs & documentation will follow. 
 - You might experience BUGs and Exceptions...
-- Currently supports only ActiveRecord 7.0 + Elasticsearch 8.4
+- Currently supports only ActiveRecord 7.0 + Elasticsearch 8.4 (downgrade is planned)
 
 -----
 
@@ -67,7 +67,7 @@ Or install it yourself as:
 ```
 _Alternatively you can change your 'development' connection with nested keys for your default database & elasticsearch..._
 
-### b) Require ```elasticsearch_record``` in your application.rb:
+### b) Require ```elasticsearch_record/instrumentation``` in your application.rb (if you want to...):
 ```ruby
 # config/application.rb
 require_relative "boot"
@@ -75,15 +75,13 @@ require_relative "boot"
 require "rails"
 # Pick the frameworks you want:
 
-# <...>
-require 'elasticsearch_record'
+# ...
+require 'elasticsearch_record/instrumentation'
 
 module Application
-   # <...>
+   # ...
 end
 ```
-
-_Alternatively you can require it in your gemfile with ```require: true```
 
 ### c) Create a model that inherits from ```ElasticsearchRecord::Base``` model.
 ```ruby
@@ -161,9 +159,22 @@ Search.where(:should, term: {name: 'Mano'})
 - hits
 - results
 - total
+- msearch
 
 ### Additional methods 
 - to_query
+
+-----
+
+### Useful model-class attributes
+- index_base_name
+- index_name_delimiter
+
+### Useful model methods
+- source_column_names
+- searchable_column_names
+- find_by_query
+- msearch
 
 
 ## Docs

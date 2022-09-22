@@ -26,6 +26,7 @@ module ActiveRecord
         # @param [Array] binds
         # @param [Boolean] prepare
         # @param [Boolean] async
+        # @return [ElasticsearchRecord::Result]
         def exec_query(query, name = "QUERY", binds = [], prepare: false, async: false)
           # validate the query
           raise ActiveRecord::StatementInvalid, 'Unable to execute invalid query' unless query.valid?
@@ -35,7 +36,7 @@ module ActiveRecord
 
           build_result(
             api(*query.api_gate, query.arguments, name, binds, async: async),
-            query.columns
+            columns: query.columns
           )
         end
 
@@ -64,6 +65,21 @@ module ActiveRecord
           exec_query(query, name, binds).total
         end
 
+        # executes a msearch for provided arels
+        # @return [ElasticsearchRecord::Result]
+        def select_multiple(arels, name = "Multi", binds = [], preparable: false, async: false)
+          # transform arels to query objects
+          queries = arels.map { |arel| to_sql(arel_from_relation(arel)) }
+
+          # build new msearch query
+          query = ElasticsearchRecord::Query.new(
+            index: queries.first&.index,
+            type:  ElasticsearchRecord::Query::TYPE_MSEARCH,
+            body:  queries.map { |q| { search: q.body } })
+
+          exec_query(query, name, binds, prepare: preparable, async: async)
+        end
+
         private
 
         # calls the +elasticsearch-api+ endpoints by provided namespace and action.
@@ -77,17 +93,22 @@ module ActiveRecord
         # @return [Elasticsearch::API::Response, Object]
         def api(namespace, action, arguments = {}, name = 'API', binds = [], async: false)
           response = log("#{namespace}.#{action}", arguments, name, binds, async: async) do
-            ActiveSupport::Dependencies.interlock.permit_concurrent_loads do
+            result = ActiveSupport::Dependencies.interlock.permit_concurrent_loads do
               if namespace == :core
                 @connection.__send__(action, arguments)
               else
                 @connection.__send__(namespace).__send__(action, arguments)
               end
             end
+
+            # reverse information for the LogSubscriber - shows the 'query-time' in the logs
+            arguments[:_qt] = result['took'] if result.is_a?(::Elasticsearch::API::Response)
+
+            result
           end
 
           # raise timeouts
-          if response.is_a?(::Elasticsearch::API::Response) && response['timed_out']
+          if response['timed_out']
             raise(ActiveRecord::StatementTimeout, "Elasticsearch api request failed due a timeout")
           end
 

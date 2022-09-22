@@ -36,15 +36,15 @@ module ElasticsearchRecord
                end
         name  = "CACHE #{name}" if payload[:cached]
 
-        index = payload[:arguments][:index] || '?'
+        name = "#{name} (query time: #{payload[:arguments][:_qt].round(1)}ms)" if payload[:arguments][:_qt]
 
-        query  = payload[:arguments].except(:index).inspect.gsub(/:(\w+)=>/, '\1: ').presence || '-'
+        query  = payload[:arguments].except(:index, :_qt).inspect.gsub(/:(\w+)=>/, '\1: ').presence || '-'
 
         # final coloring
         name = color(name, CYAN, true)
         query  = color(query, gate_color(payload[:gate]), true) if colorize_logging
 
-        debug "  #{name} [#{index}] #{query}"
+        debug "  #{name} #{query}"
       end
 
       private

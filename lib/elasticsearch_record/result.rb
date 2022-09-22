@@ -47,12 +47,18 @@ module ElasticsearchRecord
     # Returns true if this result set includes the column named +name+
     # used by ActiveRecord
     def includes_column?(name)
-      @columns.include? name
+      @columns&.include?(name)
     end
 
-    # Returns the number of elements in the response hits array.
+    # Returns the number of elements in the response array.
     def length
-      _response_hits.length
+      if response.key?('hits')
+        response['hits']['hits'].length
+      elsif response.key?('responses')
+        response['responses'].length
+      else
+        0
+      end
     end
 
     # Calls the given block once for each element in row collection, passing
@@ -131,12 +137,6 @@ module ElasticsearchRecord
 
     private
 
-    # access the response RAW hits array
-    # @return [Array]
-    def _response_hits
-      response.key?('hits') ? response['hits']['hits'] : []
-    end
-
     def column_type(name, type_overrides = {})
       type_overrides.fetch(name, Type.default_value)
     end
@@ -151,26 +151,50 @@ module ElasticsearchRecord
       0
     end
 
+    # used for msearch results
+    def _results_for_responses
+      response['responses'].map { |response| self.class.new(response, self.columns, self.column_types) }
+    end
+
+    def _results_for_hits
+      # PLEASE NOTE: the 'hits' response has multiple nodes: BASE nodes & the +_source+ node.
+      # The real data is within the source node, but we also want the BASE nodes for possible score & type check
+      base_fields = ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.base_structure_keys
+
+      # check for provided columns
+      if @columns.present?
+        # We freeze the strings to prevent them getting duped when
+        # used as keys in ActiveRecord::Base's @attributes hash.
+        # ALSO IMPORTANT: remove base_fields from possible provided columns
+        columns = @columns ? (@columns - base_fields).map(&:-@) : []
+
+        # this is the hashed result array
+        response['hits']['hits'].map { |doc|
+          result = doc.slice(*base_fields)
+          columns.each do |column|
+            result[column] = doc['_source'][column]
+          end
+
+          result
+        }
+      else
+        # if we don't have any columns we just resolve the _source data as it is
+        # this might end up in unknown (but mapped) attributes (if they are stored as nil in ES)
+
+        # this is the hashed result array
+        response['hits']['hits'].map { |doc|
+          doc.slice(*base_fields).merge(doc['_source'])
+        }
+      end
+    end
+
     def results
-      @results ||= begin
-                     # PLEASE NOTE: the 'hits' response has multiple nodes: BASE nodes & the +_source+ node.
-                     # The real data is within the source node, but we also want the BASE nodes for possible score & type check
-                     base_fields = ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.base_structure_keys
-
-                     # We freeze the strings to prevent them getting duped when
-                     # used as keys in ActiveRecord::Base's @attributes hash.
-                     # ALSO IMPORTANT: remove base_fields from possible provided columns
-                     columns = @columns ? (@columns - base_fields).map(&:-@) : []
-
-                     # this is the hashed result array
-                     _response_hits.map { |doc|
-                       result = doc.slice(*base_fields)
-                       columns.each do |column|
-                         result[column] = doc['_source'][column]
-                       end
-
-                       result
-                     }
+      @results ||= if response.key?('hits')
+                     _results_for_hits
+                   elsif response.key?('responses')
+                     _results_for_responses
+                   else
+                     []
                    end
     end
   end

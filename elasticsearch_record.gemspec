@@ -3,14 +3,13 @@
 require_relative "lib/elasticsearch_record/version"
 
 Gem::Specification.new do |spec|
-  spec.name    = "elasticsearch_record"
-  spec.version = ElasticsearchRecord.version
-  spec.authors = ["Tobias Gonsior"]
-  spec.email   = ["info@ruby-smart.org"]
-  spec.summary               = "ActiveRecord functionality for Elasticsearch docs."
-  spec.description           = <<DESC
-ElasticsearchRecord is a ActiveRecord functionality-fork for Elasticsearch and tries to provide the same experience for
-the known framework.
+  spec.name        = "elasticsearch_record"
+  spec.version     = ElasticsearchRecord.version
+  spec.authors     = ["Tobias Gonsior"]
+  spec.email       = ["info@ruby-smart.org"]
+  spec.summary     = "ActiveRecord functionality for Elasticsearch docs."
+  spec.description = <<DESC
+ElasticsearchRecord is a ActiveRecord-fork for Elasticsearch and tries to provide the same experience.
 DESC
 
   spec.homepage              = "https://github.com/ruby-smart/elasticsearch_record"
@@ -24,20 +23,18 @@ DESC
 
   # Specify which files should be added to the gem when it is released.
   # The `git ls-files -z` loads the files in the RubyGem that have been added into git.
-  spec.files         = Dir.chdir(__dir__) do
+  spec.files = Dir.chdir(__dir__) do
     `git ls-files -z`.split("\x0").reject do |f|
       (f == __FILE__) || f.match(%r{\A(?:(?:bin|test|spec|features)/|\.(?:git|travis|circleci)|appveyor)})
     end
   end
 
-  spec.bindir        = "exe"
-  spec.executables   = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
-  spec.add_dependency 'active_record',  '~> 7.0.0'
-  spec.add_dependency 'elasticsearch',  '~> 8.4'
+  spec.add_dependency 'activerecord', '~> 7.0.0'
+  spec.add_dependency 'elasticsearch', '~> 8.4'
 
-  spec.add_development_dependency 'rspec',  '~> 3.11'
-  spec.add_development_dependency 'simplecov',  '~> 0.21'
+  spec.add_development_dependency 'rspec', '~> 3.0'
+  spec.add_development_dependency 'simplecov', '~> 0.21'
   spec.add_development_dependency 'rake', "~> 13.0"
 end
