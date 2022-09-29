@@ -14,17 +14,11 @@ module ActiveRecord
           query.write?
         end
 
-        # executes a plain SQL query
-        # toDo: this is not final ... build_result is missing ... - also better use a query-builder ...
-        def exec_sql(sql, name = "SQL")
-          api(:sql, :query, { body: { query: sql } }, name)
-        end
-
         # gets called for all queries
         # @param [ElasticsearchRecord::Query] query
         # @param [String (frozen)] name
         # @param [Array] binds
-        # @param [Boolean] prepare
+        # @param [Boolean] prepare - used by the default AbstractAdapter - but not supported and therefore never used!
         # @param [Boolean] async
         # @return [ElasticsearchRecord::Result]
         def exec_query(query, name = "QUERY", binds = [], prepare: false, async: false)
@@ -35,7 +29,7 @@ module ActiveRecord
           check_if_write_query(query)
 
           build_result(
-            api(*query.api_gate, query.arguments, name, binds, async: async),
+            api(*query.gate, query.arguments, name, async: async),
             columns: query.columns
           )
         end
@@ -67,7 +61,7 @@ module ActiveRecord
 
         # executes a msearch for provided arels
         # @return [ElasticsearchRecord::Result]
-        def select_multiple(arels, name = "Multi", binds = [], preparable: false, async: false)
+        def select_multiple(arels, name = "Multi", async: false)
           # transform arels to query objects
           queries = arels.map { |arel| to_sql(arel_from_relation(arel)) }
 
@@ -77,10 +71,44 @@ module ActiveRecord
             type:  ElasticsearchRecord::Query::TYPE_MSEARCH,
             body:  queries.map { |q| { search: q.body } })
 
-          exec_query(query, name, binds, prepare: preparable, async: async)
+          exec_query(query, name, async: async)
         end
 
-        private
+        # executes a count query for provided arel
+        # @return [Integer]
+        def select_count(arel, name = "Count", async: false)
+          query = to_sql(arel_from_relation(arel))
+
+          # build new count query from existing query
+          query = ElasticsearchRecord::Query.new(
+            index: query.index,
+            type:  ElasticsearchRecord::Query::TYPE_COUNT,
+            body:  query.body)
+
+          exec_query(query, name, async: async).response['count']
+        end
+
+        # # This is used in the StatementCache object. It returns an object that
+        # # can be used to query the database repeatedly.
+        # # @see ActiveRecord::ConnectionAdapters::DatabaseStatements#cacheable_query
+        # def cacheable_query(klass, arel) # :nodoc:
+        #   # the provided klass is a ActiveRecord::StatementCache and only supports SQL _(String)_ queries.
+        #   # We force overwrite this class with our own
+        #
+        #
+        #   ActiveRecord::StatementCache.partial_query_collector
+        #
+        #   raise "STOP HERE!!!!!!"
+        #   if prepared_statements
+        #     sql, binds = visitor.compile(arel.ast, collector)
+        #     query = klass.query(sql)
+        #   else
+        #     collector = klass.partial_query_collector
+        #     parts, binds = visitor.compile(arel.ast, collector)
+        #     query = klass.partial_query(parts)
+        #   end
+        #   [query, binds]
+        # end
 
         # calls the +elasticsearch-api+ endpoints by provided namespace and action.
         # if a block was provided it'll yield the response.body and returns the blocks result.
@@ -89,31 +117,32 @@ module ActiveRecord
         # @param [Symbol] action - the API action to call in tha namespace
         # @param [Hash] arguments - action arguments
         # @param [String (frozen)] name - the logging name
-        # @param [Boolean] async - send async (default: false) - not implemented yet
+        # @param [Boolean] async - send async (default: false) - currently not supported
         # @return [Elasticsearch::API::Response, Object]
-        def api(namespace, action, arguments = {}, name = 'API', binds = [], async: false)
-          response = log("#{namespace}.#{action}", arguments, name, binds, async: async) do
-            result = ActiveSupport::Dependencies.interlock.permit_concurrent_loads do
-              if namespace == :core
-                @connection.__send__(action, arguments)
-              else
-                @connection.__send__(namespace).__send__(action, arguments)
-              end
+        def api(namespace, action, arguments = {}, name = 'API', async: false)
+          raise ::StandardError, 'ASYNC api calls are not supported' if async
+
+          Debugger.debug([namespace, action, arguments, name],"CALLING API")
+
+          # resolve the API target
+          target = namespace == :core ? @connection : @connection.__send__(namespace)
+
+          log("#{namespace}.#{action}", arguments, name, async: async) do
+            response = ActiveSupport::Dependencies.interlock.permit_concurrent_loads do
+              target.__send__(action, arguments)
             end
 
-            # reverse information for the LogSubscriber - shows the 'query-time' in the logs
-            arguments[:_qt] = result['took'] if result.is_a?(::Elasticsearch::API::Response)
+            if response.is_a?(::Elasticsearch::API::Response)
+              # reverse information for the LogSubscriber - shows the 'query-time' in the logs
+              # this works, since we use a referenced hash ...
+              arguments[:_qt] = response['took']
 
-            result
+              # raise timeouts
+              raise(ActiveRecord::StatementTimeout, "Elasticsearch api request failed due a timeout") if response['timed_out']
+            end
+
+            response
           end
-
-          # raise timeouts
-          if response['timed_out']
-            raise(ActiveRecord::StatementTimeout, "Elasticsearch api request failed due a timeout")
-          end
-
-          # return response
-          response
         end
       end
     end

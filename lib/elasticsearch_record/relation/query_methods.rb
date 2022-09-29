@@ -2,6 +2,16 @@ module ElasticsearchRecord
   module Relation
     module QueryMethods
 
+      # unsupported method
+      def joins(*)
+        raise ActiveRecord::StatementInvalid, 'Unsupported method "joins"'
+      end
+
+      # unsupported method
+      # def includes(*)
+      #   raise ActiveRecord::StatementInvalid, 'Unsupported method "includes"'
+      # end
+
       # sets or overwrites the query kind (e.g. compound queries -> :bool, :boosting, :constant_score, ...).
       # Also other query kinds like :intervals, :match, ... are allowed.
       # As an alternative you can also call the #query(<kind>,{argument}) method.
@@ -34,11 +44,14 @@ module ElasticsearchRecord
 
       # same like +#configure!+, but on the same relation (no spawn)
       def configure!(*args)
-        # :nodoc:
         check_if_method_has_arguments!(__callee__, args)
 
         if args.length == 1 && args.first.is_a?(Hash)
           self.configure_value = self.configure_value.merge(args[0])
+        elsif args.length == 2 && args[0] == :__query__
+          tmp = self.configure_value[:__query__] || []
+          tmp << args[1]
+          self.configure_value = self.configure_value.merge(:__query__ => tmp)
         elsif args.length == 2
           self.configure_value = self.configure_value.merge(args[0] => args[1])
         end

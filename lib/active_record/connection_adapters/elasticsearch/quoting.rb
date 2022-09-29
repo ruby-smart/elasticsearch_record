@@ -11,7 +11,7 @@ module ActiveRecord
           when BigDecimal, Numeric, nil, true, false then value
           when ActiveSupport::Duration then value.to_i
           when Array then value.map { |val| quote(val) }
-          when Hash then value.transform_values { |value| quote(value) }
+          when Hash then value.transform_values { |val| quote(val) }
           else
             super
           end

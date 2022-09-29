@@ -12,10 +12,18 @@ module ActiveRecord
           api(:indices, :get_settings, { index: :_all }, 'SCHEMA').keys
         end
 
-        # returns a array of all mappings by provided table_name
-        # @param [String] table_name
-        def mappings(table_name)
-          api(:indices, :get_mapping, { index: table_name }, 'SCHEMA').dig(table_name, 'mappings')
+        # returns a hash of all mappings by provided index_name
+        # @param [String] index_name
+        # @return [Hash]
+        def mappings(index_name)
+          api(:indices, :get_mapping, { index: index_name }, 'SCHEMA').dig(index_name, 'mappings')
+        end
+
+        # returns a hash of all settings by provided index_name
+        # @param [String] index_name
+        # @return [Hash]
+        def settings(index_name)
+          api(:indices, :get_settings, { index: index_name }, 'SCHEMA').dig(index_name, 'settings','index')
         end
 
         # Returns the list of a table's column names, data types, and default values.
@@ -49,12 +57,10 @@ module ActiveRecord
           # fallback for possible empty type
           field_type = field['type'].presence || (field['properties'].present? ? 'nested' : 'object')
 
-          type_metadata = fetch_type_metadata(field_type)
-
           ActiveRecord::ConnectionAdapters::Elasticsearch::Column.new(
             field["name"],
             field["null_value"],
-            type_metadata,
+            fetch_type_metadata(field_type),
             field['null'].nil? ? true : field['null'],
             nil,
             comment: field['meta'] ? field['meta'].map { |k, v| "#{k}: #{v}" }.join(' | ') : nil,
@@ -114,6 +120,13 @@ module ActiveRecord
         def table_exists?(table_name)
           # just reference to the data sources
           data_source_exists?(table_name)
+        end
+
+        # returns the maximum allowed size for queries.
+        # The query will raise an ActiveRecord::StatementInvalid if the requested limit is above this value.
+        # @return [Integer]
+        def max_result_window
+          10000
         end
       end
     end

@@ -1,21 +1,35 @@
 module ElasticsearchRecord
   module Relation
     module CalculationMethods
+      # Count the records.
+      #
+      #   Person.count
+      #   => the total count of all people
+      #
+      #   Person.count(:age)
+      #   => returns the total count of all people whose age is present in database
       def count(column_name = nil)
-        if block_given?
-          unless column_name.nil?
-            raise ArgumentError, "Column name argument is not supported when a block is passed."
-          end
+        # fallback to default
+        return super() if block_given?
 
-          super()
-        elsif column_name.present?
-          where(:filter, { exists: { field: column_name } }).total
+        # check for combined cases
+        if self.distinct_value && column_name
+          self.cardinality(column_name)
+        elsif column_name
+          where(:filter, { exists: { field: column_name } }).count
+        elsif self.group_values.any?
+          self.composite(*self.group_values)
+        elsif self.select_values.any?
+          self.composite(*self.select_values)
         else
-          total
+          # since total will be limited to 10000 results, we need to resolve the real values by a custom query
+          klass.connection.select_count(arel, "#{klass.name} Count")
         end
       end
 
-      # Calculates the percentiles on a given column. Returns a hash with empty values (but keys still exists) if there is no row.
+      # A multi-value metrics aggregation that calculates one or more
+      # percentiles over numeric values extracted from the aggregated documents.
+      # Returns a hash with empty values (but keys still exists) if there is no row.
       #
       #   Person.percentiles(:year)
       #   > {
@@ -27,14 +41,40 @@ module ElasticsearchRecord
       #     "95.0" => 2021.0,
       #     "99.0" => 2022.0
       #     }
+      # @param [Symbol, String] column_name
       def percentiles(column_name)
-        calculate(:percentiles, column_name, :values)
+        calculate(:percentiles, column_name, node: :values)
+      end
+
+      # A multi-value metrics aggregation that calculates one or more
+      # percentile ranks over numeric values extracted from the aggregated documents.
+      #
+      # Percentile rank show the percentage of observed values which are below certain value.
+      # For example, if a value is greater than or equal to 95% of the observed values it is
+      # said to be at the 95th percentile rank.
+      #
+      #   Person.percentile_ranks(:year, [500,600])
+      #   > {
+      #      "1.0" => 2016.0,
+      #      "5.0" => 2016.0,
+      #     "25.0" => 2016.0,
+      #     "50.0" => 2017.0,
+      #     "75.0" => 2017.0,
+      #     "95.0" => 2021.0,
+      #     "99.0" => 2022.0
+      #     }
+      # @param [Symbol, String] column_name
+      # @param [Array] values
+      def percentile_ranks(column_name, values)
+        calculate(:percentiles, column_name, opts: { values: values }, node: :values)
       end
 
       # Calculates the cardinality on a given column. Returns +0+ if there's no row.
       #
       #   Person.cardinality(:age)
       #   > 12
+      #
+      # @param [Symbol, String] column_name
       def cardinality(column_name)
         calculate(:cardinality, column_name)
       end
@@ -42,6 +82,8 @@ module ElasticsearchRecord
       # Calculates the average value on a given column. Returns +nil+ if there's no row. See #calculate for examples with options.
       #
       #   Person.average(:age) # => 35.8
+      #
+      # @param [Symbol, String] column_name
       def average(column_name)
         calculate(:avg, column_name)
       end
@@ -51,6 +93,8 @@ module ElasticsearchRecord
       #
       #   Person.minimum(:age)
       #   > 7
+      #
+      # @param [Symbol, String] column_name
       def minimum(column_name)
         calculate(:min, column_name)
       end
@@ -60,6 +104,8 @@ module ElasticsearchRecord
       # #calculate for examples with options.
       #
       #   Person.maximum(:age) # => 93
+      #
+      # @param [Symbol, String] column_name
       def maximum(column_name)
         calculate(:max, column_name)
       end
@@ -69,15 +115,23 @@ module ElasticsearchRecord
       # #calculate for examples with options.
       #
       #   Person.sum(:age) # => 4562
-      def sum(column_name = nil)
+      #
+      # @param [Symbol, String] column_name (optional)
+      def sum(column_name)
         calculate(:sum, column_name)
       end
 
-      def calculate(metric, column, node = :value)
+      # creates a aggregation with the provided metric (e.g. :sum) and column.
+      # returns the metric node (default: :value) from the aggregations result.
+      # @param [Symbol, String] metric
+      # @param [Symbol, String] column
+      # @param [Hash] opts - additional arguments that get merged with the metric definition
+      # @param [Symbol] node (default :value)
+      def calculate(metric, column, opts: {}, node: :value)
         metric_key = "#{column}_#{metric}"
 
         # spawn a new aggregation and return the aggs
-        response = aggregate(metric_key, { metric => { field: column } }).aggregations
+        response = aggregate(metric_key, { metric => { field: column }.merge(opts) }).aggregations
 
         response[metric_key][node]
       end

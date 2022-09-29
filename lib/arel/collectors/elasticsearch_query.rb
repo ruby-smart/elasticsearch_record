@@ -5,70 +5,61 @@ require 'elasticsearch_record/query'
 module Arel # :nodoc: all
   module Collectors
     class ElasticsearchQuery < ::ElasticsearchRecord::Query
-
-      # defines if the query is preparable.
-      # used by the default Arel process ...
-      # @!attribute Boolean
-      attr_accessor :preparable
-
-      # defines a claim Struct, which will be executed through the +#claim+ method
-      Claim = ::Struct.new(:action, :args, :block) {
-        def key
-          args[0].is_a?(Symbol) ? args[0] : nil
-        end
-      }
-
       def initialize
         super
-        @stack = []
-        # force initialize a body as hash
-        @body  ||= {}
-      end
 
-      # instead of returning the query hash, we return self
-      def value
-        self
+        # force initialize a body as hash
+        @body ||= {}
+
+        # stack is used to point on a specific hash node
+        @stack = []
       end
 
       # send a proposal to this query -
-      # @param [ElasticsearchRecord::Query::Claim] claim
-      def claim(claim)
-        case claim.action
+      # @param [Symbol] action - the claim action
+      # @param [Array] args - args to claim
+      # @param [Proc] block - a optional block to create a nested scope on the current provided key
+      def claim(action, *args, &block)
+        case action
         when :index
           # change the index name
-          @index = claim.args[0]
+          @index = args[0]
         when :type
           # change the query type
-          @type = claim.args[0]
+          @type = args[0]
         when :status
           # change the query status
-          @status = claim.args[0]
+          @status = args[0]
         when :columns
           # change the query columns
-          @columns = claim.args[0]
+          @columns = args[0]
         when :argument
           # adds / sets any argument
-          @arguments[claim.args[0]] = claim.args[1]
+          @arguments[args[0]] = args[1]
         when :body
           # set the body var
-          @body = claim.args[0]
+          @body = args[0]
         when :assign
           # calls a assign on the body
-          assign(*claim.args)
+          assign(*args)
 
-          if claim.block.present?
-            raise "Unsupported claim key: '#{claim.args[0]}' for provided block. Provide a Symbol as key!" unless claim.key
+          if block_given?
+            raise "Unsupported claim key: '#{args[0]}' for provided block. Provide a Symbol as key!" unless args[0].is_a?(Symbol)
 
-            scope(claim.key) do
-              claim.block.call
+            scope(args[0]) do
+              block.call
             end
           end
         else
-          raise "Unsupported claim action: #{claim.action}"
+          raise "Unsupported claim action: #{action}"
         end
       end
 
-      alias :<< :claim
+      def <<(claim)
+        Debugger.debug(claim,"receiving a claim")
+
+        self.claim(claim[0], *claim[1], &claim[2])
+      end
 
       def current
         @current ||= @stack.any? ? @body.dig(*@stack) : @body
@@ -85,6 +76,10 @@ module Arel # :nodoc: all
         @current = nil
       end
 
+      def value
+        self
+      end
+
       private
 
       def parent
@@ -93,6 +88,21 @@ module Arel # :nodoc: all
       end
 
       def assign(*args)
+        # check for special provided key, to claim through an assign
+        if args[0] == :__query__
+          if args[1].is_a?(Array)
+            args[1].each do |arg|
+              key = arg.keys.first
+              claim(key, arg[key])
+            end
+          else
+            key = args[1].keys.first
+            claim(key, args[1][key])
+          end
+
+          return self
+        end
+
         if self.current.is_a?(Array)
           if args[0].is_a?(Array)
             self.current += args[0]

@@ -19,14 +19,15 @@ module Arel # :nodoc: all
       end
 
       def compile(node, collector = Arel::Collectors::ElasticsearchQuery.new)
-        # since creating a query is a linear process we don't need to forward the collector each time.
-        # we just set them once and accessing it through the claim method.
+        Debugger.debug([node, collector],"START COMPILE")
+
+        # we don't need to forward the collector each time - we just set it and always access it, when we need.
         self.collector = collector
 
-        # so we just visit the first node without any collector ...
+        # so we just visit the first node without any additionally provided collector ...
         accept(node)
 
-        # ... and return the final result - which is in this case the +Arel::Collectors::ElasticsearchQuery+ itself
+        # ... and return the final result
         self.collector.value
       end
 
@@ -85,7 +86,11 @@ module Arel # :nodoc: all
       # @param [Array] args - either <key>,<value> or <Hash{<key> => <value>, ...}> or <Array>
       # @param [Proc] block
       def claim(action, *args, &block)
-        self.collector << Arel::Collectors::ElasticsearchQuery::Claim.new(action, args, block)
+        # self.collector.claim(action, *args, &block)
+
+        Debugger.debug([action, args, block], "sending claim to: #{self.collector}")
+
+        self.collector << [action, args, block]
       end
 
       ######################
@@ -184,8 +189,8 @@ module Arel # :nodoc: all
         resolve(o.source)
 
         # IMPORTANT: Since Elasticsearch does not store nil-values in the +_source+ / +doc+ it will NOT return
-        # empty / nil columns - instead the nil columns do not exist - which is a big mess,
-        # since those columns are not editable after we initialize the record ...
+        # empty / nil columns - instead the nil columns do not exist!!!
+        # This is a big mess, because those missing columns are +not+ editable or savable in any way after we initialize the record...
         # To prevent NOT-accessible attributes, we need to provide the "full-column-definition" to the query.
         claim(:columns, o.source.left.instance_variable_get(:@klass).source_column_names)
 
@@ -195,16 +200,8 @@ module Arel # :nodoc: all
         # sets the aggs
         resolve(o, :visit_Aggs) if o.aggs.present?
 
-        # set possible fields to select
-        if o.projections.present?
-          fields = collect(o.projections)
-          # don't set fields if the default 'wildcard' +*+ is provided.
-          if fields[0] != '*'
-            assign(:_source, fields)
-            # also overwrite the columns in the query
-            claim(:columns, fields)
-          end
-        end
+        # sets the selects
+        resolve(o, :visit_Selects) if o.projections.present?
       end
 
       # CUSTOM node by elasticsearch_record
@@ -242,6 +239,24 @@ module Arel # :nodoc: all
       end
 
       # CUSTOM node by elasticsearch_record
+      def visit_Selects(o)
+        fields = collect(o.projections)
+
+        case fields[0]
+        when '*'
+          # force return all fields
+          # assign(:_source, true)
+        when ::ActiveRecord::FinderMethods::ONE_AS_ONE
+          # force return NO fields
+          assign(:_source, false)
+        else
+          assign(:_source, fields)
+          # also overwrite the columns in the query
+          claim(:columns, fields)
+        end
+      end
+
+      # CUSTOM node by elasticsearch_record
       def visit_Arel_Nodes_SelectKind(o)
         visit(o.expr)
       end
@@ -270,6 +285,7 @@ module Arel # :nodoc: all
         assign(visit(o.left) => visit(o.right))
       end
 
+      # used to write new data to columns
       def visit_Arel_Nodes_Assignment(o)
         value = visit(o.right)
 
@@ -301,7 +317,7 @@ module Arel # :nodoc: all
           key = visit(o.expr)
           dir = visit(o.direction)
 
-          # special key: _rand
+          # we provide a special key: _rand to create a simple random method ...
           if key == '_rand'
             assign({
                      "_script" => {
@@ -344,9 +360,14 @@ module Arel # :nodoc: all
       end
 
       def visit_Arel_Table(o)
-        raise "table_alias is NOT supported" if o.table_alias
+        raise ActiveRecord::StatementInvalid, "table alias are not supported (#{o.table_alias})" if o.table_alias
 
         o.name
+      end
+
+      def visit_ActiveModel_Attribute(o)
+        Debugger.debug(o.value,"visit_ActiveModel_Attribute")
+        o.value
       end
 
       def visit_Struct_Raw(o)
@@ -365,7 +386,7 @@ module Arel # :nodoc: all
 
       alias :visit_Integer :visit_Struct_Value
       alias :visit_ActiveModel_Attribute_WithCastValue :visit_Struct_Value
-      alias :visit_ActiveModel_Attribute :visit_Struct_Value
+      # alias :visit_ActiveModel_Attribute :visit_Struct_Value
       alias :visit_ActiveRecord_Relation_QueryAttribute :visit_Struct_Value
 
       def visit_Struct_Name(o)

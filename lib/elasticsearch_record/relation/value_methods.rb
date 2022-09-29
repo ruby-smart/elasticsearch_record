@@ -45,7 +45,7 @@ module ElasticsearchRecord
 
       private
 
-      # alternative method to avoid the const
+      # alternative method to avoid redefining the const +VALID_UNSCOPING_VALUES+
       def _valid_unscoping_values
         Set.new(ActiveRecord::Relation::VALID_UNSCOPING_VALUES.to_a + [:kind, :configure, :query, :aggs])
       end

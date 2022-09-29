@@ -1,14 +1,16 @@
 # ElasticsearchRecord
 
-ElasticsearchRecord provides ActiveRecord functionality for Elasticsearch indexed documents.
+ActiveRecord functionality for Elasticsearch indexes & documents.
+
+_ElasticsearchRecord is a ActiveRecord-fork and tries to provide the same functionality for Elasticsearch._
 
 -----
 
 **PLEASE NOTE:**
-- This is still in development!
+- This is still in **development**!
 - Specs & documentation will follow. 
 - You might experience BUGs and Exceptions...
-- Currently supports only ActiveRecord 7.0 + Elasticsearch 8.4 (downgrade is planned)
+- Currently supports only ActiveRecord 7.0 + Elasticsearch 8.4 _(downgrade for rails 6.x is planned in future versions)_
 
 -----
 
@@ -30,16 +32,18 @@ Or install it yourself as:
 
 
 ## Features
-* CRUD: Reading and Writing Data as you already use
+* CRUD: Reading and Writing Data as already used for ActiveRecord models ```create, update, delete```
 * Query-chaining through the Active Record Query Interface
 * Query interface with additional methods for ```filter, must, must_not, should```
-* Aggregation queries
+* Aggregation queries ```aggregate```
 * Instrumentation for ElasticsearchRecord
 
 ## Contra - what it _(currently)_ can not
 * Query-based associations like 'has_one' through a single _(or multiple)_ queries - aka. joins
-* complex nested queries
+* complex, combined or nested queries ```and, or, Model.arel ...```
 * Create mappings / schema through migrations _(so no create_table, update_column, ...)_
+* Schema dumps
+* Manage indexes and mappings
 
 
 ## Setup
@@ -65,7 +69,8 @@ Or install it yourself as:
    password: '****'
    log: true
 ```
-_Alternatively you can change your 'development' connection with nested keys for your default database & elasticsearch..._
+_Alternatively you can change your 'development' connection with nested keys for your default database & elasticsearch.
+see @ https://guides.rubyonrails.org/active_record_multiple_databases.html_
 
 ### b) Require ```elasticsearch_record/instrumentation``` in your application.rb (if you want to...):
 ```ruby
@@ -112,7 +117,7 @@ Different to the default where-method you can now use it in different ways.
 
 Using it by default with a Hash, the method decides itself to either add a filter, or must_not query.
 
-_Hint: If not defined through ```#kind(...)``` it'll choose **:bool** as the default kind.
+_Hint: If not overwritten through ```kind(...)``` a default kind **:bool** will be used._
 ```ruby
 # use it by default
 Search.where(name: 'A nice object')
@@ -131,7 +136,16 @@ Search.where(name: nil)
 # use it with a prefix
 Search.where(:should, term: {name: 'Mano'})
 # > should: {term: {name: 'Mano'}}
+```
 
+### Usage Examples
+```ruby
+# save a new record
+model = Search.new(name: "Cool object", kind: "open")
+model.save
+
+# find a record by id
+MyEsIndex.find_by_id("xyzAbc34")
 ```
 
 ### Useful chain methods
@@ -147,6 +161,7 @@ Search.where(:should, term: {name: 'Mano'})
 
 ### Useful calculation methods
 - percentiles
+- percentile_ranks
 - cardinality
 - average
 - minimum
@@ -160,6 +175,10 @@ Search.where(:should, term: {name: 'Mano'})
 - results
 - total
 - msearch
+- agg_pluck
+- composite
+- point_in_time
+- pit_results
 
 ### Additional methods 
 - to_query
@@ -168,7 +187,6 @@ Search.where(:should, term: {name: 'Mano'})
 
 ### Useful model-class attributes
 - index_base_name
-- index_name_delimiter
 
 ### Useful model methods
 - source_column_names

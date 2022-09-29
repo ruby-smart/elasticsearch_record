@@ -1,5 +1,9 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [0.1.2] - 2022-09-23
+* [fix] Records / Elasticsearch index with additional 'id' fields not recognizing
+* [rem] unnecessary & overcomplicated .index_name_delimiter class attribute
+
 ## [0.1.1] - 2022-09-22
 * [add] msearch for klass & relation
 * [fix] Gemfile (remove duplicated requirements)

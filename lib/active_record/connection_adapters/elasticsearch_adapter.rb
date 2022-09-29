@@ -123,6 +123,14 @@ module ActiveRecord # :nodoc:
       # reinitialize the constant with new types
       TYPE_MAP = ActiveRecord::Type::HashLookupTypeMap.new.tap { |m| initialize_type_map(m) }
 
+      def initialize(*args)
+        super(*args)
+
+        # prepared statements are not supported by Elasticsearch.
+        # documentation for mysql prepares statements @ https://dev.mysql.com/doc/refman/8.0/en/sql-prepared-statements.html
+        @prepared_statements = false
+      end
+
       private
 
       def type_map
@@ -141,34 +149,31 @@ module ActiveRecord # :nodoc:
       end
 
       # provide a custom log instrumenter for elasticsearch subscribers
-      def log(gate, arguments, name, binds = [], async: false, &block)
+      def log(gate, arguments, name, async: false, &block)
         @instrumenter.instrument(
           "query.elasticsearch_record",
           gate:      gate,
           name:      name,
           arguments: gate == 'core.msearch' ? arguments.deep_dup : arguments,
-          binds:     binds,
           async:     async) do
           @lock.synchronize(&block)
         rescue => e
-          raise translate_exception_class(e, arguments, binds)
+          raise translate_exception_class(e, arguments, [])
         end
       end
 
+      # returns a new collector for the Arel visitor.
+      # @return [Arel::Collectors::ElasticsearchQuery]
       def collector
-        if prepared_statements
-          Arel::Collectors::Composite.new(
-            Arel::Collectors::ElasticsearchQuery.new,
-            Arel::Collectors::Bind.new,
-          )
-        else
-          Arel::Collectors::SubstituteBinds.new(
-            self,
-            Arel::Collectors::ElasticsearchQuery.new,
-          )
-        end
+        # IMPORTANT: since prepared statements doesn't make sense for elasticsearch,
+        # we don't have to check for +prepared_statements+ here.
+        # Also, bindings are (currently) not supported.
+        # So, we just need a query collector...
+        Arel::Collectors::ElasticsearchQuery.new
       end
 
+      # returns a new visitor to compile Arel into Elasticsearch Hashes (in this case we use a query object)
+      # @return [Arel::Visitors::Elasticsearch]
       def arel_visitor
         Arel::Visitors::Elasticsearch.new(self)
       end

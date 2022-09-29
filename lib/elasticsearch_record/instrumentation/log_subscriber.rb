@@ -36,7 +36,7 @@ module ElasticsearchRecord
                end
         name  = "CACHE #{name}" if payload[:cached]
 
-        name = "#{name} (query time: #{payload[:arguments][:_qt].round(1)}ms)" if payload[:arguments][:_qt]
+        name = "#{name} (took: #{payload[:arguments][:_qt].round(1)}ms)" if payload[:arguments][:_qt]
 
         query  = payload[:arguments].except(:index, :_qt).inspect.gsub(/:(\w+)=>/, '\1: ').presence || '-'
 

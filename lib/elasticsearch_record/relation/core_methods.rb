@@ -7,11 +7,20 @@ module ElasticsearchRecord
         super
       end
 
-      # transforms the current relation into arel and executes the query.
-      # returns the result object
+      # transforms the current relation into arel, compiles it to query and executes the query.
+      # returns the result object.
+      #
+      # PLEASE NOTE: This makes the query +immutable+ and raises a +ActiveRecord::ImmutableRelation+
+      # if you try to change it's values.
+      #
+      # PLEASE NOTE: resolving records _(instantiate)_ is never possible after calling this method!
+      #
       # @return [ElasticsearchRecord::Result]
-      def resolve
-        klass._query_by_sql(arel)
+      # @param [String] name - custom instrumentation name (default: 'Load')
+      def resolve(name = 'Load')
+        # this acts the same like +#_query_by_sql+ but we can customize the instrumentation name and
+        # do not store the records.
+        klass.connection.select_all(arel, "#{klass.name} #{name}")
       end
 
       # returns the query hash for the current relation
@@ -23,16 +32,16 @@ module ElasticsearchRecord
       # executes the elasticsearch msearch on the related klass
       #
       # @example
-      #   msearch([2020, 2019, 2018]).each{ |q, year| q.where(year: year) }
+      #   msearch([2020, 2019, 2018]).each{ |q, year| q.where!(year: year) }
       #
       # @param [Array] values - values to be yielded
-      # @param [nil, Symbol] response_type - optional type of search response (took, total , hits , aggregations , length , each)
+      # @param [nil, Symbol] response_type - optional type of search response (:took, :total , :hits , :aggregations , :length , :results, :each)
       def msearch(values = nil, response_type = nil)
         if values.nil?
           arels = [arel]
         else
           arels = values.map { |value|
-            # spawn a new relation and return the query-object
+            # spawn a new relation and return the arel-object
             yield(spawn, value).arel
           }
         end

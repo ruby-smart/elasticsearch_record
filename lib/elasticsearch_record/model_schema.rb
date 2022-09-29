@@ -4,18 +4,13 @@ module ElasticsearchRecord
 
     included do
       class_attribute :index_base_name, instance_writer: false, default: nil
-      class_attribute :index_name_delimiter, instance_writer: false, default: "_"
     end
 
     module ClassMethods
       # Guesses the table name, but does not decorate it with prefix and suffix information.
       def undecorated_table_name(model_name)
-        klass = model_name.instance_variable_get(:@klass)
-
-        klass.index_base_name || begin
-                              table_name = model_name.to_s.demodulize.underscore.split('_').join(klass.index_name_delimiter)
-                              pluralize_table_names ? table_name.pluralize : table_name
-                            end
+        # check the 'index_base_name' first, so +table_name_prefix+ & +table_name_suffix+ can still be used
+        index_base_name || super(model_name)
       end
 
       # returns an array with columns names, that are not virtual (and not a base structure).

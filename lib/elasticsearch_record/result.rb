@@ -4,57 +4,82 @@ module ElasticsearchRecord
   class Result
     include Enumerable
 
-    def self.empty # :nodoc:
+    # creates an empty response
+    # @return [ElasticsearchRecord::Result (frozen)]
+    def self.empty
       new(nil).freeze
     end
 
     attr_reader :response, :columns, :column_types
 
+    # initializes a new result object
+    # @param [Elasticsearch::API::Response, Object, nil] response
+    # @param [Array] columns
+    # @param [Hash] column_types
     def initialize(response, columns = [], column_types = {})
-      @response = response
+      # contains either the response or creates a empty hash (if nil)
+      @response = response.presence || {}
 
-      # used to cast values
+      # used to build computed_results
       @columns = columns
 
+      # used to cast values
       @column_types = column_types
     end
 
-    # used to resolve the response duration time
+    # returns the response duration time
     # @return [Integer]
     def took
       response['took']
     end
 
-    # used to resolve the total value
+    # returns the response total value.
+    # either chops the +total+ value directly from response, from hits or aggregations.
     # @return [Integer]
     def total
       # chop total only
       @total ||= _chop_total
     end
 
-    # access the response RAW hits hash
-    # @return [Hash]
+    # returns the response RAW hits hash.
+    # PLEASE NOTE: Does not return the nested hits (+response['hits']['hits']+) array!
+    # @return [ActiveSupport::HashWithIndifferentAccess, Hash]
     def hits
       response.key?('hits') ? response['hits'].with_indifferent_access : {}
     end
 
-    # access the response RAW aggregations hash
-    # @return [Hash]
+    # Returns the RAW values from the hits - aka. +rows+.
+    # PLEASE NOTE: The array will only contain the RAW data from each +_source+ (meta info like '_score' is not included)
+    # The +rows+ alias use used by the ActiveRecord ConnectionAdapters and must not be removed!
+    # @return [Array]
+    def results
+      return [] unless response['hits']
+
+      response['hits']['hits'].map { |result| result['_source'] }
+    end
+
+    alias_method :rows, :results
+
+    # returns the response RAW aggregations hash.
+    # @return [ActiveSupport::HashWithIndifferentAccess, Hash]
     def aggregations
       response.key?('aggregations') ? response['aggregations'].with_indifferent_access : {}
     end
 
-    # Returns true if this result set includes the column named +name+
+    # Returns true if this result set includes the column named +name+.
     # used by ActiveRecord
     def includes_column?(name)
       @columns&.include?(name)
     end
 
     # Returns the number of elements in the response array.
+    # Either uses the +hits+ length or the +responses+ length _(msearch)_.
+    # @return [Integer]
     def length
       if response.key?('hits')
         response['hits']['hits'].length
       elsif response.key?('responses')
+        # used by +msearch+
         response['responses'].length
       else
         0
@@ -67,9 +92,9 @@ module ElasticsearchRecord
     # Returns an +Enumerator+ if no block is given.
     def each(&block)
       if block_given?
-        results.each(&block)
+        computed_results.each(&block)
       else
-        results.to_enum { @results.size }
+        computed_results.to_enum { @computed_results.size }
       end
     end
 
@@ -80,28 +105,31 @@ module ElasticsearchRecord
 
     # Returns an array of hashes representing each row record.
     def to_ary
-      results
+      computed_results
     end
 
     alias :to_a :to_ary
 
     def [](idx)
-      results[idx]
+      computed_results[idx]
     end
 
     # Returns the last record from the rows collection.
     def last(n = nil)
-      n ? results.last(n) : results.last
+      n ? computed_results.last(n) : computed_results.last
     end
 
+    # used by ActiveRecord
     def result # :nodoc:
       self
     end
 
+    # used by ActiveRecord
     def cancel # :nodoc:
       self
     end
 
+    # used by ActiveRecord
     def cast_values(type_overrides = {})
       # :nodoc:
       if columns.one?
@@ -114,7 +142,7 @@ module ElasticsearchRecord
                  column_type(columns.first, type_overrides)
                end
 
-        results.map do |result|
+        computed_results.map do |result|
           type.deserialize(result[key])
         end
       else
@@ -126,7 +154,7 @@ module ElasticsearchRecord
 
         size = types.size
 
-        results.map do |result|
+        computed_results.map do |result|
           Array.new(size) { |i|
             key = columns[i]
             types[i].deserialize(result[key])
@@ -137,6 +165,7 @@ module ElasticsearchRecord
 
     private
 
+    # used by ActiveRecord
     def column_type(name, type_overrides = {})
       type_overrides.fetch(name, Type.default_value)
     end
@@ -151,11 +180,14 @@ module ElasticsearchRecord
       0
     end
 
-    # used for msearch results
+    # used for +msearch+ results
+    # @return [Array]
     def _results_for_responses
       response['responses'].map { |response| self.class.new(response, self.columns, self.column_types) }
     end
 
+    # used for +search+ results
+    # @return [Array]
     def _results_for_hits
       # PLEASE NOTE: the 'hits' response has multiple nodes: BASE nodes & the +_source+ node.
       # The real data is within the source node, but we also want the BASE nodes for possible score & type check
@@ -188,14 +220,17 @@ module ElasticsearchRecord
       end
     end
 
-    def results
-      @results ||= if response.key?('hits')
-                     _results_for_hits
-                   elsif response.key?('responses')
-                     _results_for_responses
-                   else
-                     []
-                   end
+    # builds computed results (used to build ActiveRecord models)
+    # @return [Array]
+    def computed_results
+      @computed_results ||= if response.key?('hits')
+                              _results_for_hits
+                            elsif response.key?('responses')
+                              # used by +msearch+
+                              _results_for_responses
+                            else
+                              []
+                            end
     end
   end
 end

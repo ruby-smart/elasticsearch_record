@@ -6,21 +6,31 @@ module ElasticsearchRecord
 
     # TYPE CONSTANTS
     TYPE_UNDEFINED       = :undefined
+    TYPE_COUNT           = :count
     TYPE_SEARCH          = :search
     TYPE_MSEARCH         = :msearch
+    TYPE_SQL             = :sql
     TYPE_CREATE          = :create
     TYPE_UPDATE          = :update
     TYPE_UPDATE_BY_QUERY = :update_by_query
     TYPE_DELETE          = :delete
     TYPE_DELETE_BY_QUERY = :delete_by_query
 
-    TYPES = [TYPE_SEARCH, TYPE_MSEARCH, TYPE_CREATE, TYPE_UPDATE, TYPE_UPDATE_BY_QUERY, TYPE_DELETE, TYPE_DELETE_BY_QUERY].freeze
-    # defines which queries are read & write queries ...
-    READ_TYPES = [TYPE_SEARCH, TYPE_MSEARCH].freeze
+    # includes valid types only
+    TYPES = [TYPE_COUNT, TYPE_SEARCH, TYPE_MSEARCH, TYPE_SQL, TYPE_CREATE, TYPE_UPDATE, TYPE_UPDATE_BY_QUERY, TYPE_DELETE, TYPE_DELETE_BY_QUERY].freeze
+
+    # includes reading types only
+    READ_TYPES = [TYPE_COUNT, TYPE_SEARCH, TYPE_MSEARCH, TYPE_SQL].freeze
 
     # defines a query to be executed if the query fails - +(none)+ queries
     # acts like the SQL-query "where('1=0')"
     FAILED_SEARCH_BODY = { size: 0, query: { bool: { filter: [{ term: { _id: '_' } }] } } }.freeze
+
+    # defines special api gates to be used per type.
+    # if not defined it simply uses +[:core,self.type]+
+    GATES = {
+      TYPE_SQL => [:sql, :query]
+    }
 
     # defines the index the query should be executed on
     # @!attribute String
@@ -74,21 +84,21 @@ module ElasticsearchRecord
     # returns true, if the query is valid (e.g. index & type defined)
     # @return [Boolean]
     def valid?
-      index.present? && TYPES.include?(self.type)
+      # type mus be valid + index must be present (not required for SQL)
+      TYPES.include?(self.type) #&& (index.present? || self.type == TYPE_SQL)
     end
 
     # returns the API gate to be called to execute the query.
     # each query type needs a different endpoint.
     # @see Elasticsearch::API
-    # @return [Array<Symbol>,<Symbol>] [<namespace>,<action>]
-    def api_gate
-      [:core, self.type]
+    # @return [Array<Symbol, Symbol>] - API gate [<namespace>,<action>]
+    def gate
+      GATES[self.type].presence || [:core, self.type]
     end
 
     # returns true if this is a write query
     # @return [Boolean]
     def write?
-      # please mention the +!+ NOT operator
       !READ_TYPES.include?(self.type)
     end
 
