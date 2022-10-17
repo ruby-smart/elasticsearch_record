@@ -7,7 +7,11 @@
 * [fix] calculation ```count``` method to support already known syntax (with column, distinct, limited, ...)
 * [fix] ```Arel::Nodes``` to support additional args (query, kind, aggs, ...)
 * [fix] _relation manager patch_ to not mash up different relations
-* [fix] ```Arel::Visitors::Elasticsearch``` build query where-clauses without existing default query-"kind"
+* [fix] ```ElasticsearchRecord``` total calculation for failed queries
+* [fix] ```Arel::Visitors::Elasticsearch```
+  * build query where-clauses without existing default query-"kind" 
+  * directly fail if a grouping _(visit_Arel_Nodes_Grouping)_ was provided
+  * forced _failed!_ state was not correctly  claimed
 * [ref] simplify ```Arel::Collectors::ElasticsearchQuery``` (remove stack & scoping)
 * [ref] simplify ```Arel::Visitors::Elasticsearch``` to support binds (statement cache) and simple where predicates
 

@@ -3,7 +3,7 @@ module ElasticsearchRecord
     module CoreMethods
       def instantiate_records(rows, &block)
         # slurp the total value from the rows (rows = ElasticsearchRecord::Result)
-        @total = rows.total
+        @total = rows.is_a?(::ElasticsearchRecord::Result) ? rows.total : rows.length
         super
       end
 

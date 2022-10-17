@@ -459,6 +459,12 @@ module Arel # :nodoc: all
         end
       end
 
+      # DIRECT FAIL
+      def visit_Arel_Nodes_Grouping(o)
+        # grouping is NOT supported and will force to fail the query
+        failed!
+      end
+
       # DIRECT ASSIGNMENT
       def visit_Arel_Nodes_HomogeneousIn(o)
         self.collector.preparable = false
@@ -572,7 +578,7 @@ module Arel # :nodoc: all
 
       # assigns a failed status to the current query
       def failed!
-        assign(:status, ElasticsearchRecord::Query::STATUS_FAILED)
+        claim(:status, ElasticsearchRecord::Query::STATUS_FAILED)
 
         nil
       end
