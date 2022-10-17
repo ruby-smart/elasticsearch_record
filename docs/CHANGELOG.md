@@ -8,13 +8,16 @@
 * [fix] ```Arel::Nodes``` to support additional args (query, kind, aggs, ...)
 * [fix] _relation manager patch_ to not mash up different relations
 * [fix] ```ElasticsearchRecord``` total calculation for failed queries
+* [fix] ```ElasticsearchRecord::Relation#count``` to correctly _unscope_
 * [fix] ```Arel::Visitors::Elasticsearch```
   * build query where-clauses without existing default query-"kind" 
   * directly fail if a grouping _(visit_Arel_Nodes_Grouping)_ was provided
   * forced _failed!_ state was not correctly claimed
   * buggy _assign_-method for nested arrays
+* [fix] ```Arel::Collectors::ElasticsearchQuery``` claim for _argument_
 * [ref] simplify ```Arel::Collectors::ElasticsearchQuery``` (remove stack & scoping)
 * [ref] simplify ```Arel::Visitors::Elasticsearch``` to support binds (statement cache) and simple where predicates
+* [ref] rename ```ElasticsearchRecord::Query#arguments``` -> _#query_arguments_
 
 ## [0.1.2] - 2022-09-23
 * [fix] Records / Elasticsearch index with additional 'id' fields not recognizing

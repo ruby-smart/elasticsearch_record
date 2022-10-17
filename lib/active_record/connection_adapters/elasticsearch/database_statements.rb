@@ -29,7 +29,7 @@ module ActiveRecord
           check_if_write_query(query)
 
           build_result(
-            api(*query.gate, query.arguments, name, async: async),
+            api(*query.gate, query.query_arguments, name, async: async),
             columns: query.columns
           )
         end
@@ -81,9 +81,10 @@ module ActiveRecord
 
           # build new count query from existing query
           query = ElasticsearchRecord::Query.new(
-            index: query.index,
-            type:  ElasticsearchRecord::Query::TYPE_COUNT,
-            body:  query.body)
+            index:     query.index,
+            type:      ElasticsearchRecord::Query::TYPE_COUNT,
+            body:      query.body,
+            arguments: query.arguments)
 
           exec_query(query, name, async: async).response['count']
         end

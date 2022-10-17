@@ -12,6 +12,9 @@ module ElasticsearchRecord
         # fallback to default
         return super() if block_given?
 
+        # reset column_name, if +:all+ was provided ...
+        column_name = nil if column_name == :all
+
         # check for combined cases
         if self.distinct_value && column_name
           self.cardinality(column_name)
@@ -24,10 +27,15 @@ module ElasticsearchRecord
         elsif limit_value == 0 # Shortcut when limit is zero.
           return 0
         elsif limit_value
-          spawn.limit!(nil).configure!(:__claim__, argument: { terminate_after: limit_value }).count
+          # since total will be limited to 10000 results, we need to resolve the real values by a custom query.
+          # This query is called through +#select_count+.
+          arel = spawn.unscope!(:offset, :limit, :order, :configure).configure!(:__claim__, argument: { terminate_after: limit_value }).arel
+          klass.connection.select_count(arel, "#{klass.name} Count")
         else
-          # since total will be limited to 10000 results, we need to resolve the real values by a custom query
-          klass.connection.select_count(offset(nil).arel, "#{klass.name} Count")
+          # since total will be limited to 10000 results, we need to resolve the real values by a custom query.
+          # This query is called through +#select_count+.
+          arel = spawn.unscope!(:offset, :limit, :order, :configure)
+          klass.connection.select_count(arel, "#{klass.name} Count")
         end
       end
 

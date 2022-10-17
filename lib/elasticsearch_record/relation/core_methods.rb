@@ -26,7 +26,7 @@ module ElasticsearchRecord
       # returns the query hash for the current relation
       # @return [Hash]
       def to_query
-        to_sql.arguments
+        to_sql.query_arguments
       end
 
       # executes the elasticsearch msearch on the related klass

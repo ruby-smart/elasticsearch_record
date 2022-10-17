@@ -52,7 +52,7 @@ module ElasticsearchRecord
 
     # defines the query body - in most cases this is a hash
     # @!attribute Hash
-    attr_accessor :body
+    attr_reader :body
 
     # defines the query arguments to be passed to the API
     # @!attribute Hash
@@ -106,7 +106,7 @@ module ElasticsearchRecord
     # Depends on the query status, index, body & refresh attributes.
     # Also used possible PRE-defined arguments to be merged with those mentioned attributes.
     # @return [Hash]
-    def arguments
+    def query_arguments
       # check for failed status
       return { index: self.index, body: FAILED_SEARCH_BODY } if self.status == STATUS_FAILED
 
@@ -124,6 +124,6 @@ module ElasticsearchRecord
       args
     end
 
-    alias :to_query :arguments
+    alias :to_query :query_arguments
   end
 end

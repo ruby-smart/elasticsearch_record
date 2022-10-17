@@ -34,9 +34,16 @@ module Arel # :nodoc: all
         when :columns
           # change the query columns
           @columns = args[0]
+        when :arguments
+          # change the query arguments
+          @arguments = args[0]
         when :argument
           # adds / sets any argument
-          @arguments[args[0]] = args[1]
+          if args.length == 2
+            @arguments[args[0]] = args[1]
+          else # should be a hash
+            @arguments.merge!(args[0])
+          end
         when :body
           # set the body var
           @body = args[0]
