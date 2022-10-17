@@ -7,6 +7,7 @@
 * [fix] calculation ```count``` method to support already known syntax (with column, distinct, limited, ...)
 * [fix] ```Arel::Nodes``` to support additional args (query, kind, aggs, ...)
 * [fix] _relation manager patch_ to not mash up different relations
+* [fix] ```Arel::Visitors::Elasticsearch``` build query where-clauses without existing default query-"kind"
 * [ref] simplify ```Arel::Collectors::ElasticsearchQuery``` (remove stack & scoping)
 * [ref] simplify ```Arel::Visitors::Elasticsearch``` to support binds (statement cache) and simple where predicates
 

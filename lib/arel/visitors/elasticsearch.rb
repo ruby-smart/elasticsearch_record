@@ -275,13 +275,20 @@ module Arel # :nodoc: all
 
       # CUSTOM node by elasticsearch_record
       def visit_Query(o)
-        # dont create a query node, if we do not have a kind
-        return unless o.kind
+        # in some cases we don't have a kind, but where conditions.
+        # in this case we force the kind as +:bool+.
+        kind = :bool if o.wheres.present? && o.kind.blank?
+
+        # resolve kind, if not already set
+        kind ||= o.kind.present? ? visit(o.kind.expr) : nil
+
+        # check for existing kind - we cannot create a node if we don't have any kind
+        return unless kind
 
         assign(:query, {}) do
           # this creates a kind node and creates nested queries
           # e.g. :bool => { ... }
-          assign(visit(o.kind.expr), {}) do
+          assign(kind, {}) do
             # each query has a type (e.g.: :filter) and one or multiple statements.
             # this is handled within the +visit_Arel_Nodes_SelectQuery+ method
             o.queries.each do |query|
