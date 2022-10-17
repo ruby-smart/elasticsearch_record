@@ -5,9 +5,10 @@
 * [rem] cleanup Debugging & logging
 * [fix] quoting for any values
 * [fix] calculation ```count``` method to support already known syntax (with column, distinct, limited, ...)
+* [fix] ```Arel::Nodes``` to support additional args (query, kind, aggs, ...)
+* [fix] _relation manager patch_ to not mash up different relations
 * [ref] simplify ```Arel::Collectors::ElasticsearchQuery``` (remove stack & scoping)
 * [ref] simplify ```Arel::Visitors::Elasticsearch``` to support binds (statement cache) and simple where predicates
-* [fix] ```Arel::Nodes``` to support additional args (query, kind, aggs, ...)
 
 ## [0.1.2] - 2022-09-23
 * [fix] Records / Elasticsearch index with additional 'id' fields not recognizing
