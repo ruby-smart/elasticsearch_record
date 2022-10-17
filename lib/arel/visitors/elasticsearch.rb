@@ -113,7 +113,9 @@ module Arel # :nodoc: all
             case value
             when Array
               if nested_args[0].is_a?(Array)
-                value += nested_args[0]
+                nested_args[0].each do |nested_arg|
+                  value << nested_arg
+                end
               else
                 value << nested_args[0]
               end

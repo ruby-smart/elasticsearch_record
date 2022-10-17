@@ -11,7 +11,8 @@
 * [fix] ```Arel::Visitors::Elasticsearch```
   * build query where-clauses without existing default query-"kind" 
   * directly fail if a grouping _(visit_Arel_Nodes_Grouping)_ was provided
-  * forced _failed!_ state was not correctly  claimed
+  * forced _failed!_ state was not correctly claimed
+  * buggy _assign_-method for nested arrays
 * [ref] simplify ```Arel::Collectors::ElasticsearchQuery``` (remove stack & scoping)
 * [ref] simplify ```Arel::Visitors::Elasticsearch``` to support binds (statement cache) and simple where predicates
 
