@@ -122,8 +122,6 @@ module ActiveRecord
         def api(namespace, action, arguments = {}, name = 'API', async: false)
           raise ::StandardError, 'ASYNC api calls are not supported' if async
 
-          Debugger.debug([namespace, action, arguments, name],"CALLING API")
-
           # resolve the API target
           target = namespace == :core ? @connection : @connection.__send__(namespace)
 

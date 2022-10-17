@@ -16,11 +16,14 @@ module Arel # :nodoc: all
       def initialize(connection)
         super()
         @connection = connection
+
+        # required for nested assignment.
+        # see +#assign+ method
+        @nested      = false
+        @nested_args = []
       end
 
       def compile(node, collector = Arel::Collectors::ElasticsearchQuery.new)
-        Debugger.debug([node, collector],"START COMPILE")
-
         # we don't need to forward the collector each time - we just set it and always access it, when we need.
         self.collector = collector
 
@@ -74,23 +77,89 @@ module Arel # :nodoc: all
       end
 
       # assign provided args on the collector.
-      # The assignment can be provided in multiple ways and depends on the current node.
-      # The node gets nested by providing a block
-      def assign(*args, &block)
-        claim(:assign, *args, &block)
+      # The TOP-Level assignment must be a (key, value) while sub-assignments will be collected by provided block.
+      # Sub-assignments will never claim on the query but 'merged' to the TOP-assignment.
+      #
+      #   assign(:query, {}) do
+      #    #... do some stuff ...
+      #    assign(:bool, {}) do
+      #     assign(:x,99)
+      #     assign({y: 45})
+      #    end
+      #   end
+      #   #> query: {bool: {x: 99, y: 45}}
+      def assign(*args)
+        # resolve possible TOP-LEVEL assignment
+        key, value = args
+
+        # if a block was provided we want to collect the nested assignments
+        if block_given?
+          raise ArgumentError, "Unsupported assignment value for provided block (#{key}). Provide any Object as value!" if value.nil?
+
+          # set nested state to tell all nested assignments to not claim it's values
+          old_nested, @nested = @nested, true
+          old_nested_args, @nested_args = @nested_args, []
+
+          # call block, but don't interact with its return.
+          # nested args are separately stored
+          yield
+
+          # restore nested state
+          @nested = old_nested
+
+          # assign nested args
+          @nested_args.each do |nested_args|
+            # ARRAY assignment
+            case value
+            when Array
+              if nested_args[0].is_a?(Array)
+                value += nested_args[0]
+              else
+                value << nested_args[0]
+              end
+            when Hash
+              if nested_args[0].is_a?(Hash)
+                value.merge!(nested_args[0])
+              elsif value[nested_args[0]].is_a?(Hash) && nested_args[1].is_a?(Hash)
+                value[nested_args[0]] = value[nested_args[0]].merge(nested_args[1])
+              elsif value[nested_args[0]].is_a?(Array) && nested_args[1].is_a?(Array)
+                value[nested_args[0]] += nested_args[1]
+              elsif nested_args[1].nil?
+                value.delete(nested_args[0])
+              else
+                value[nested_args[0]] = nested_args[1]
+              end
+            when String
+              if nested_args[0].is_a?(Array)
+                value = value + nested_args[0].map(&:to_s).join
+              else
+                value = value + nested_args[0].to_s
+              end
+            else
+              value = nested_args[0] unless nested_args.blank?
+            end
+          end
+
+          # clear nested args
+          @nested_args = old_nested_args
+        end
+
+        # for nested assignments we only want the assignable args - no +claim+ on the query!
+        if @nested
+          @nested_args << args
+          return
+        end
+
+        raise ArgumentError, "Unsupported assign key: '#{key}' for provided block. Provide a Symbol as key!" unless key.is_a?(Symbol)
+
+        claim(:assign, key, value)
       end
 
       # creates and sends a new claim to the collector.
-      # also yields the possible provided block.
       # @param [Symbol] action - claim action (:index, :type, :status, :argument, :body, :assign)
       # @param [Array] args - either <key>,<value> or <Hash{<key> => <value>, ...}> or <Array>
-      # @param [Proc] block
-      def claim(action, *args, &block)
-        # self.collector.claim(action, *args, &block)
-
-        Debugger.debug([action, args, block], "sending claim to: #{self.collector}")
-
-        self.collector << [action, args, block]
+      def claim(action, *args)
+        self.collector << [action, args]
       end
 
       ######################
@@ -195,7 +264,7 @@ module Arel # :nodoc: all
         claim(:columns, o.source.left.instance_variable_get(:@klass).source_column_names)
 
         # sets the query
-        resolve(o, :visit_Query) if o.queries.present?
+        resolve(o, :visit_Query) if o.queries.present? || o.wheres.present?
 
         # sets the aggs
         resolve(o, :visit_Aggs) if o.aggs.present?
@@ -213,14 +282,23 @@ module Arel # :nodoc: all
           # this creates a kind node and creates nested queries
           # e.g. :bool => { ... }
           assign(visit(o.kind.expr), {}) do
-            # each query has a type (e.g.: :filter) and one or multiple statements
+            # each query has a type (e.g.: :filter) and one or multiple statements.
+            # this is handled within the +visit_Arel_Nodes_SelectQuery+ method
             o.queries.each do |query|
-              resolve(query)
+              resolve(query) # visit_Arel_Nodes_SelectQuery
 
-              # we assign the opts on the type level
+              # assign additional opts on the type level
               assign(query.opts) if query.opts.present?
             end
 
+            # collect the where from predicate builds
+            # should call:
+            # - visit_Arel_Nodes_Equality
+            # - visit_Arel_Nodes_NotEqual
+            # - visit_Arel_Nodes_HomogeneousIn'
+            resolve(o.wheres) if o.wheres.present?
+
+            # annotations
             resolve(o.comment) if o.respond_to?(:comment)
           end
         end
@@ -275,9 +353,15 @@ module Arel # :nodoc: all
       def visit_Arel_Nodes_SelectQuery(o)
         # this creates a query select node (includes key, value(s) and additional opts)
         # e.g.
-        #   :filter  => { ... }
+        #   :filter  => [ ... ]
         #   :must =>  [ ... ]
-        assign(visit(o.left) => visit(o.right))
+
+        # the query value must always be a array, since it might be extended by where clause.
+        #   assign(:filter, []) ...
+        assign(visit(o.left), []) do
+          # assign(terms: ...)
+          assign(visit(o.right))
+        end
       end
 
       # CUSTOM node by elasticsearch_record
@@ -317,7 +401,7 @@ module Arel # :nodoc: all
           key = visit(o.expr)
           dir = visit(o.direction)
 
-          # we provide a special key: _rand to create a simple random method ...
+          # we support a special key: _rand to create a simple random method ...
           if key == '_rand'
             assign({
                      "_script" => {
@@ -335,16 +419,62 @@ module Arel # :nodoc: all
       alias :visit_Arel_Nodes_Ascending :visit_Sort
       alias :visit_Arel_Nodes_Descending :visit_Sort
 
-      def visit_Arel_Nodes_Equality(o)
-        return failed! if unboundable?(o.right)
 
-        { visit(o.left) => visit(o.right) }
+      # DIRECT ASSIGNMENT
+      def visit_Arel_Nodes_Equality(o)
+        right = visit(o.right)
+
+        return failed! if unboundable?(right)
+
+        key = visit(o.left)
+
+        if right.nil?
+          # transforms nil to exists
+          assign(:must_not, [{ exists: { field:  key } }])
+        else
+          assign(:filter, [{ term: { key => right } }])
+        end
       end
 
+      # DIRECT ASSIGNMENT
       def visit_Arel_Nodes_NotEqual(o)
-        return failed! if unboundable?(o.right)
+        right = visit(o.right)
 
-        { visit(o.left) => visit(o.right) }
+        return failed! if unboundable?(right)
+
+        key = visit(o.left)
+
+        if right.nil?
+          # transforms nil to exists
+          assign(:filter, [{ exists: { field:  key } }])
+        else
+          assign(:must_not, [{ term: { key => right } }])
+        end
+      end
+
+      # DIRECT ASSIGNMENT
+      def visit_Arel_Nodes_HomogeneousIn(o)
+        self.collector.preparable = false
+
+        values = o.casted_values
+
+        # IMPORTANT: For SQL defaults (see @ Arel::Collectors::SubstituteBinds) a value
+        # will +not+ directly assigned (see @ Arel::Visitors::ToSql#visit_Arel_Nodes_HomogeneousIn).
+        # instead it will be send as bind and then re-delegated to the SQL collector.
+        #
+        # This only works for linear SQL-queries and not nested Hashes
+        # (otherwise we have to collect those binds, and replace them afterwards).
+        #
+        # Here, we'll directly assign the "real" _(casted)_ values but also provide a additional bind.
+        # This will be ignored by the ElasticsearchQuery collector, but supports statement caches on the other side
+        # (see @ ActiveRecord::StatementCache::PartialQueryCollector)
+        self.collector.add_binds(values, o.proc_for_binds)
+
+        if o.type == :in
+          assign(:filter, [{ terms: { o.column_name => o.casted_values } }])
+        else
+          assign(:must_not, [{ terms: { o.column_name => o.casted_values } }])
+        end
       end
 
       def visit_Arel_Nodes_And(o)
@@ -365,11 +495,6 @@ module Arel # :nodoc: all
         o.name
       end
 
-      def visit_ActiveModel_Attribute(o)
-        Debugger.debug(o.value,"visit_ActiveModel_Attribute")
-        o.value
-      end
-
       def visit_Struct_Raw(o)
         o
       end
@@ -386,16 +511,34 @@ module Arel # :nodoc: all
 
       alias :visit_Integer :visit_Struct_Value
       alias :visit_ActiveModel_Attribute_WithCastValue :visit_Struct_Value
-      # alias :visit_ActiveModel_Attribute :visit_Struct_Value
-      alias :visit_ActiveRecord_Relation_QueryAttribute :visit_Struct_Value
 
-      def visit_Struct_Name(o)
+      def visit_Struct_Attribute(o)
         o.name
       end
 
-      alias :visit_Arel_Attributes_Attribute :visit_Struct_Name
-      alias :visit_Arel_Nodes_UnqualifiedColumn :visit_Struct_Name
-      alias :visit_ActiveModel_Attribute_FromUser :visit_Struct_Name
+      alias :visit_Arel_Attributes_Attribute :visit_Struct_Attribute
+      alias :visit_Arel_Nodes_UnqualifiedColumn :visit_Struct_Attribute
+      alias :visit_ActiveModel_Attribute_FromUser :visit_Struct_Attribute
+
+      def visit_Struct_BindValue(o)
+        # IMPORTANT: For SQL defaults (see @ Arel::Collectors::SubstituteBinds) a value
+        # will +not+ directly assigned (see @ Arel::Visitors::ToSql#visit_Arel_Nodes_HomogeneousIn).
+        # instead it will be send as bind and then re-delegated to the SQL collector.
+        #
+        # This only works for linear SQL-queries and not nested Hashes
+        # (otherwise we have to collect those binds, and replace them afterwards).
+        #
+        # Here, we'll directly assign the "real" _(casted)_ values but also provide a additional bind.
+        # This will be ignored by the ElasticsearchQuery collector, but supports statement caches on the other side
+        # (see @ ActiveRecord::StatementCache::PartialQueryCollector)
+        self.collector.add_bind(o)
+
+        o.value
+      end
+
+
+      alias :visit_ActiveModel_Attribute :visit_Struct_BindValue
+      alias :visit_ActiveRecord_Relation_QueryAttribute :visit_Struct_BindValue
 
       ##############
       # DATA TYPES #

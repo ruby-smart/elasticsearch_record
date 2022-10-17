@@ -11,7 +11,6 @@ module ElasticsearchRecord
   module Patches
     module Arel
       module UpdateManagerPatch
-
         def kind(value)
           if value
             @ast.kind = ::Arel::Nodes::SelectKind.new(value)

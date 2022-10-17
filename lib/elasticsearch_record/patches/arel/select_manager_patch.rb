@@ -9,6 +9,27 @@ module ElasticsearchRecord
   module Patches
     module Arel
       module SelectManagerPatch
+        def self.included(base)
+          base.send(:prepend, PrependMethods)
+        end
+
+        module PrependMethods
+          def compile_update(*args)
+            arel = super
+            arel.kind(_kind.expr) if _kind.present?
+            arel.query(_query.map(&:expr)) unless _query.empty?
+            arel.configure(_configure.expr) if _configure.present?
+            arel
+          end
+
+          def compile_delete(*args)
+            arel = super
+            arel.kind(_kind.expr) if _kind.present?
+            arel.query(_query.map(&:expr)) unless _query.empty?
+            arel.configure(_configure.expr) if _configure.present?
+            arel
+          end
+        end
 
         def kind(value)
           if value
@@ -60,22 +81,6 @@ module ElasticsearchRecord
 
         def _aggs
           @ctx.aggs
-        end
-
-        def compile_update(*args)
-          arel = super
-          arel.kind(_kind.expr) if _kind.present?
-          arel.query(_query.map(&:expr)) unless _query.empty?
-          arel.configure(_configure.expr) if _configure.present?
-          arel
-        end
-
-        def compile_delete(*args)
-          arel = super
-          arel.kind(_kind.expr) if _kind.present?
-          arel.query(_query.map(&:expr)) unless _query.empty?
-          arel.configure(_configure.expr) if _configure.present?
-          arel
         end
       end
     end

@@ -6,6 +6,31 @@ module ElasticsearchRecord
   module Patches
     module Arel
       module SelectCorePatch
+        def self.included(base)
+          base.send(:prepend, PrependMethods)
+        end
+
+        module PrependMethods
+          def initialize_copy(other)
+            super
+            @kind    = @kind.clone if @kind
+            @queries = @queries.clone if @queries
+            @aggs    = @aggs.clone if @aggs
+          end
+
+          def hash
+            [
+              super, @kind, @queries, @aggs
+            ].hash
+          end
+
+          def eql?(other)
+            super &&
+              self.kind == other.kind &&
+              self.queries == other.queries &&
+              self.aggs == other.aggs
+          end
+        end
 
         def kind
           @kind
@@ -29,26 +54,6 @@ module ElasticsearchRecord
 
         def aggs=(value)
           @aggs = value
-        end
-
-        def initialize_copy(other)
-          super
-          @kind    = @kind.clone if @kind
-          @queries = @queries.clone if @queries
-          @aggs    = @aggs.clone if @aggs
-        end
-
-        def hash
-          [
-            super, @kind, @queries, @aggs
-          ].hash
-        end
-
-        def eql?(other)
-          super &&
-            self.kind == other.kind &&
-            self.queries == other.queries &&
-            self.aggs == other.aggs
         end
       end
     end

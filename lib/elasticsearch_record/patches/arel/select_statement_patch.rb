@@ -6,25 +6,31 @@ module ElasticsearchRecord
   module Patches
     module Arel
       module SelectStatementPatch
+        def self.included(base)
+          base.send(:prepend, PrependMethods)
+        end
+
+        module PrependMethods
+          def initialize_copy(other)
+            super
+            @configure  = @configure&.deep_dup
+          end
+
+          def hash
+            [super, @configure].hash
+          end
+
+          def eql?(other)
+            super && configure == other.configure
+          end
+        end
+
         def configure
           @configure
         end
 
         def configure=(value)
           @configure = value
-        end
-
-        def initialize_copy(other)
-          super
-          @configure  = @configure&.deep_dup
-        end
-
-        def hash
-          [super, @configure].hash
-        end
-
-        def eql?(other)
-          super && configure == other.configure
         end
       end
     end

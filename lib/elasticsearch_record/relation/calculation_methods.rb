@@ -21,9 +21,13 @@ module ElasticsearchRecord
           self.composite(*self.group_values)
         elsif self.select_values.any?
           self.composite(*self.select_values)
+        elsif limit_value == 0 # Shortcut when limit is zero.
+          return 0
+        elsif limit_value
+          spawn.limit!(nil).configure!(:__claim__, argument: { terminate_after: limit_value }).count
         else
           # since total will be limited to 10000 results, we need to resolve the real values by a custom query
-          klass.connection.select_count(arel, "#{klass.name} Count")
+          klass.connection.select_count(offset(nil).arel, "#{klass.name} Count")
         end
       end
 

@@ -8,7 +8,7 @@ module ActiveRecord
         def quote(value)
           case value
             # those values do not need to be quoted
-          when BigDecimal, Numeric, nil, true, false then value
+          when BigDecimal, Numeric, String, Symbol, nil, true, false then value
           when ActiveSupport::Duration then value.to_i
           when Array then value.map { |val| quote(val) }
           when Hash then value.transform_values { |val| quote(val) }

@@ -3,7 +3,7 @@
 module ElasticsearchRecord # :nodoc:
   module Relation
     class QueryClauseTree
-      delegate :any?, :empty?, :key?, to: :predicates
+      delegate :any?, :empty?, :key?, :each, to: :predicates
 
       def self.empty
         @empty ||= new({}).freeze
@@ -23,6 +23,20 @@ module ElasticsearchRecord # :nodoc:
 
       def ast
         predicates.values.map(&:ast)
+      end
+
+      def merge(other)
+        dups = dupredicates
+
+        other.each do |key, values|
+          if dups.key?(key)
+            dups[key] = (dups[key] + values).uniq
+          else
+            dups[key] = values
+          end
+        end
+
+        QueryClauseTree.new(dups)
       end
 
       def +(other)

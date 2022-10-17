@@ -53,7 +53,16 @@ Or install it yourself as:
  # config/database.yml
  
  development:
-   ...
+   primary:
+    # <...>
+
+   # elasticsearch
+   elasticsearch:
+     adapter: elasticsearch
+     host: localhost:9200
+     user: elastic
+     password: '****'
+     log: true
  
  production:
    ...
@@ -61,16 +70,8 @@ Or install it yourself as:
  test:
    ...
  
- # elasticsearch
- elasticsearch:
-   adapter: elasticsearch
-   host: localhost:9200
-   user: elastic
-   password: '****'
-   log: true
+ 
 ```
-_Alternatively you can change your 'development' connection with nested keys for your default database & elasticsearch.
-see @ https://guides.rubyonrails.org/active_record_multiple_databases.html_
 
 ### b) Require ```elasticsearch_record/instrumentation``` in your application.rb (if you want to...):
 ```ruby

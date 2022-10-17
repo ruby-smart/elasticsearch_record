@@ -48,10 +48,10 @@ module ElasticsearchRecord
 
         if args.length == 1 && args.first.is_a?(Hash)
           self.configure_value = self.configure_value.merge(args[0])
-        elsif args.length == 2 && args[0] == :__query__
-          tmp = self.configure_value[:__query__] || []
+        elsif args.length == 2 && args[0] == :__claim__
+          tmp = self.configure_value[:__claim__] || []
           tmp << args[1]
-          self.configure_value = self.configure_value.merge(:__query__ => tmp)
+          self.configure_value = self.configure_value.merge(:__claim__ => tmp)
         elsif args.length == 2
           self.configure_value = self.configure_value.merge(args[0] => args[1])
         end
@@ -157,15 +157,9 @@ module ElasticsearchRecord
       #   # nested array
       #   where([ [:filter, {...}], [:must_not, {...}]])
       def where(*args)
-        if args.empty?
-          spawn
-        elsif args.first.blank? # == nil ...
-          self
-        elsif args.first == :none
-          none
-        else
-          spawn.where!(*args)
-        end
+        return none if args[0] == :none
+
+        super
       end
 
       def where!(opts, *rest)
@@ -215,37 +209,16 @@ module ElasticsearchRecord
             )
           end
 
-          opts.each { |k, v|
-            if v.is_a?(Array)
-              filter!({ terms: { k => v } }, rest)
-            elsif v.nil? # transforms nil to exists
-              must_not!({ exists: { field: k } }, rest)
-            else
-              filter!({ term: { k => v } }, rest)
-            end
-          }
+          # force set default kind
+          set_default_kind!
+
+          # builds predicates from opts (transforms this in a more unreadable way but is required for nested assignment & binds ...)
+          parts = predicate_builder.build_from_hash(opts) do |table_name|
+            lookup_table_klass_from_join_dependencies(table_name)
+          end
+
+          self.where_clause += ::ActiveRecord::Relation::WhereClause.new(parts)
         end
-
-        self
-      end
-
-      def not(*args)
-        spawn.not!(*args)
-      end
-
-      def not!(opts, *rest)
-        # hash -> {name: 'hans'}
-        opts = sanitize_forbidden_attributes(opts)
-
-        opts.each { |k, v|
-          data = if v.is_a?(Array)
-                   { terms: { k => v } }
-                 else
-                   { term: { k => v } }
-                 end
-
-          must_not!(data, rest)
-        }
 
         self
       end
@@ -287,6 +260,7 @@ module ElasticsearchRecord
         self.kind_value ||= :bool
       end
 
+      # overwrite default method to add additional values for kind, query, aggs, ...
       def build_arel(*args)
         arel = super(*args)
 

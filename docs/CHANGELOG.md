@@ -1,5 +1,14 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.0.0] - 2022-10-17
+* [add] patch for ```ActiveRecord::Relation::Merger``` - to support AR-relations
+* [rem] cleanup Debugging & logging
+* [fix] quoting for any values
+* [fix] calculation ```count``` method to support already known syntax (with column, distinct, limited, ...)
+* [ref] simplify ```Arel::Collectors::ElasticsearchQuery``` (remove stack & scoping)
+* [ref] simplify ```Arel::Visitors::Elasticsearch``` to support binds (statement cache) and simple where predicates
+* [fix] ```Arel::Nodes``` to support additional args (query, kind, aggs, ...)
+
 ## [0.1.2] - 2022-09-23
 * [fix] Records / Elasticsearch index with additional 'id' fields not recognizing
 * [rem] unnecessary & overcomplicated .index_name_delimiter class attribute
