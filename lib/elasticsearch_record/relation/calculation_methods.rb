@@ -29,12 +29,15 @@ module ElasticsearchRecord
         elsif limit_value
           # since total will be limited to 10000 results, we need to resolve the real values by a custom query.
           # This query is called through +#select_count+.
-          arel = spawn.unscope!(:offset, :limit, :order, :configure).configure!(:__claim__, argument: { terminate_after: limit_value }).arel
+          #
+          # HINT: :__claim__ directly interacts with the query-object and sets a 'terminate_after' argument
+          # (see @ Arel::Collectors::ElasticsearchQuery#assign)
+          arel = spawn.unscope!(:offset, :limit, :order, :configure, :aggs).configure!(:__claim__, argument: { terminate_after: limit_value }).arel
           klass.connection.select_count(arel, "#{klass.name} Count")
         else
           # since total will be limited to 10000 results, we need to resolve the real values by a custom query.
           # This query is called through +#select_count+.
-          arel = spawn.unscope!(:offset, :limit, :order, :configure)
+          arel = spawn.unscope!(:offset, :limit, :order, :configure, :aggs)
           klass.connection.select_count(arel, "#{klass.name} Count")
         end
       end

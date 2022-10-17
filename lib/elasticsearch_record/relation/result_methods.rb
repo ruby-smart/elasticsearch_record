@@ -82,14 +82,18 @@ module ElasticsearchRecord
 
       # executes the current query in a +point_in_time+ scope.
       # this will provide the possibility to resolve more than the +max_result_window+ (default: 10000) hits.
-      # resolves results (hits->hits) from the search but uses the pit query instead to resolve more than 10000 entries
+      # resolves results (hits->hits) from the search but uses the pit query instead to resolve more than 10000 entries.
+      #
+      # If a block was provided it'll yield the results array per batch size.
+      #
       # @param [String] keep_alive - how long to keep alive (for each single request) - default: '1m'
       # @param [Integer] batch_size - how many results per query (default: 1000 - this means at least 10 queries before reaching the +max_result_window+)
       def pit_results(keep_alive: '1m', batch_size: 1000)
-        # store a maximum limit value as break condition
-        maximum_results = limit_value ? limit_value : Float::INFINITY
+        # check if a limit or offset values was provided
+        results_limit  = limit_value ? limit_value : Float::INFINITY
+        results_offset = offset_value ? offset_value : 0
 
-        # search_after requires a order
+        # search_after requires a order - we resolve a order either from provided value or by default ...
         relation = ordered_relation
 
         # clear limit & offset
@@ -98,7 +102,7 @@ module ElasticsearchRecord
         # remove the 'index' from the query arguments (pit doesn't like that)
         relation.configure!(:__claim__, { index: nil })
 
-        # prepare a total results array
+        # we store the results in this array
         results       = []
         results_total = 0
 
@@ -106,10 +110,8 @@ module ElasticsearchRecord
         point_in_time(keep_alive: keep_alive) do |pit_id|
           current_pit_hash = { pit: { id: pit_id, keep_alive: keep_alive } }
 
+          # resolve new data until we got all we need
           loop do
-            # we need to justify the +batch_size+ if the query will reach over the limit
-            batch_size = maximum_results - results_total if (results_total + batch_size) > maximum_results
-
             # change pit settings & limit (spawn is required, since a +resolve+ will make the relation immutable)
             current_response = relation.spawn.configure!(current_pit_hash).limit!(batch_size).resolve('Pit').response
 
@@ -117,21 +119,50 @@ module ElasticsearchRecord
             current_results        = current_response['hits']['hits'].map { |result| result['_source'] }
             current_results_length = current_results.length
 
-            # add current results to return array
-            results       |= current_results
-            results_total += current_results_length
+            # check if we reached the required offset
+            if results_offset < current_results_length
+              # check for parts
+              # (maybe a offset 6300 was provided but the batch size is 1000 - so we need to skip a part ...)
+              results_from = results_offset > 0 ? results_offset : 0
+              results_to   = (results_total + current_results_length - results_from) > results_limit ? results_limit - results_total + results_from - 1 : -1
 
-            # BREAK conditions
+              ranged_results = current_results[results_from..results_to]
+
+              if block_given?
+                yield ranged_results
+              else
+                results |= ranged_results
+              end
+
+              # add to total
+              results_total += ranged_results.length
+            end
+
+            # -------- BREAK conditions --------
+
+            # we reached our maximum value
+            break if results_total >= results_limit
+
+            # we ran out of data
             break if current_results_length < batch_size
-            break if results_total >= maximum_results
-            # break if current_pit_hash[:search_after] == current_response['hits']['hits'][-1]['sort'] # additional security - required?
+
+            # additional security - required?
+            # break if current_pit_hash[:search_after] == current_response['hits']['hits'][-1]['sort']
+
+            # -------- NEXT LOOP changes --------
+
+            # reduce the offset
+            results_offset -= current_results_length
 
             # assign new pit
             current_pit_hash = { search_after: current_response['hits']['hits'][-1]['sort'], pit: { id: current_response['pit_id'], keep_alive: keep_alive } }
+
+            # we need to justify the +batch_size+ if the query will reach over the limit
+            batch_size       = results_limit - results_total if results_offset < batch_size && (results_total + batch_size) > results_limit
           end
         end
 
-        # return results
+        # return results array
         results
       end
 
@@ -140,30 +171,30 @@ module ElasticsearchRecord
       # returns the RAW response for the current query
       # @return [Array]
       def response
-        spawn.hits_only!.resolve.response
+        spawn.hits_only!.resolve('Response').response
       end
 
       # returns the RAW aggregations for the current query
       # @return [Hash]
       def aggregations
-        spawn.aggs_only!.resolve.aggregations
+        spawn.aggs_only!.resolve('Aggregations').aggregations
       end
 
       # returns the RAW hits for the current query
       # @return [Array]
       def hits
-        spawn.hits_only!.resolve.hits
+        spawn.hits_only!.resolve('Hits').hits
       end
 
       # returns the results for the current query
       # @return [Array]
       def results
-        spawn.hits_only!.resolve.results
+        spawn.hits_only!.resolve('Results').results
       end
 
       # returns the total value
       def total
-        loaded? ? @total : spawn.total_only!.resolve.total
+        loaded? ? @total : spawn.total_only!.resolve('Total').total
       end
 
       # sets query as "hits"-only query (drops the aggs from the query)

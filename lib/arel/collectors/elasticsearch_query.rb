@@ -101,6 +101,8 @@ module Arel # :nodoc: all
             vkey = value.keys.first
             claim(vkey, value[vkey])
           end
+        elsif value.nil?
+          @body.delete(key)
         else
           @body[key] = value
         end
