@@ -23,7 +23,7 @@ module ActiveRecord
         # @param [String] index_name
         # @return [Hash]
         def settings(index_name)
-          api(:indices, :get_settings, { index: index_name }, 'SCHEMA').dig(index_name, 'settings','index')
+          api(:indices, :get_settings, { index: index_name }, 'SCHEMA').dig(index_name, 'settings', 'index')
         end
 
         # Returns the list of a table's column names, data types, and default values.
@@ -38,12 +38,14 @@ module ActiveRecord
           # since the received mappings do not have the "primary" +_id+-column we manually need to add this here
           # The BASE_STRUCTURE will also include some meta keys like '_score', '_type', ...
           ActiveRecord::ConnectionAdapters::ElasticsearchAdapter::BASE_STRUCTURE + structure['properties'].map { |key, prop|
-            # mappings can have +fields+ - we also want them for 'query-conditions'
-            # that can be resolved through +.column_names+
-            fields = prop.delete('fields') || []
+            # resolve (nested) fields and properties
+            fields, properties = resolve_fields_and_properties(key, prop, true)
 
-            # we need to merge the name & possible nested fields (which are also searchable)
-            prop.merge('name' => key, 'fields' => fields.map { |fkey, _field| "#{key}.#{fkey}" })
+            # fallback for possible empty type
+            type = prop['type'].presence || (properties.present? ? 'object' : 'nested')
+
+            # return a new hash
+            prop.merge('name' => key, 'type' => type, 'fields' => fields, 'properties' => properties)
           }
         end
 
@@ -54,18 +56,16 @@ module ActiveRecord
         # @param [Hash] field
         # @return [ActiveRecord::ConnectionAdapters::Column]
         def new_column_from_field(_table_name, field)
-          # fallback for possible empty type
-          field_type = field['type'].presence || (field['properties'].present? ? 'nested' : 'object')
-
           ActiveRecord::ConnectionAdapters::Elasticsearch::Column.new(
             field["name"],
             field["null_value"],
-            fetch_type_metadata(field_type),
+            fetch_type_metadata(field["type"]),
             field['null'].nil? ? true : field['null'],
             nil,
-            comment: field['meta'] ? field['meta'].map { |k, v| "#{k}: #{v}" }.join(' | ') : nil,
-            virtual: field['virtual'],
-            fields:  field['fields']
+            comment:    field['meta'] ? field['meta'].map { |k, v| "#{k}: #{v}" }.join(' | ') : nil,
+            virtual:    field['virtual'],
+            fields:     field['fields'],
+            properties: field['properties']
           )
         end
 
@@ -127,6 +127,59 @@ module ActiveRecord
         # @return [Integer]
         def max_result_window
           10000
+        end
+
+        private
+
+        # returns a multidimensional array with fields & properties from the provided +prop+.
+        # Nested fields & properties will be also detected.
+        # .
+        #   resolve_fields_and_properties('user', {...})
+        #   # > [
+        #     # fields
+        #     [0] [
+        #         [0] {
+        #             "name" => "user.name.analyzed",
+        #             "type" => "text"
+        #         }
+        #     ],
+        #     # properties
+        #     [1] [
+        #         [0] {
+        #             "name" => "user.id",
+        #             "type" => "integer"
+        #         },
+        #         [1] {
+        #             "name" => "user.name",
+        #             "type" => "keyword"
+        #         }
+        #     ]
+        # ]
+        #
+        # @param [String] key
+        # @param [Hash] prop
+        # @param [Boolean] root - provide true, if this is a top property entry (default: false)
+        # @return [[Array, Array]]
+        def resolve_fields_and_properties(key, prop, root = false)
+          # mappings can have +fields+ - we also want them for 'query-conditions'
+          fields = (prop['fields'] || {}).map { |field_key, field_def|
+            { 'name' => "#{key}.#{field_key}", 'type' => field_def['type'] }
+          }
+
+          # initial empty array
+          properties = []
+
+          if prop['properties'].present?
+            prop['properties'].each do |nested_key, nested_prop|
+              nested_fields, nested_properties = resolve_fields_and_properties("#{key}.#{nested_key}", nested_prop)
+              fields                           |= nested_fields
+              properties                       |= nested_properties
+            end
+          elsif !root # don't add the root property as sub-property
+            properties << { 'name' => key, 'type' => prop['type'] }
+          end
+
+          [fields, properties]
         end
       end
     end

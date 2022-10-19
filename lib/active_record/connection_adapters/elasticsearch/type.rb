@@ -2,6 +2,7 @@
 
 require 'active_record/connection_adapters/elasticsearch/type/format_string'
 require 'active_record/connection_adapters/elasticsearch/type/multicast_value'
+require 'active_record/connection_adapters/elasticsearch/type/nested'
 require 'active_record/connection_adapters/elasticsearch/type/object'
 require 'active_record/connection_adapters/elasticsearch/type/range'
 

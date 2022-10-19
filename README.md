@@ -1,8 +1,10 @@
 # ElasticsearchRecord
 
+[![Gem Version](https://badge.fury.io/rb/elasticsearch_record.svg)](https://badge.fury.io/rb/elasticsearch_record)
+
 ActiveRecord functionality for Elasticsearch indexes & documents.
 
-_ElasticsearchRecord is a ActiveRecord-fork and tries to provide the same functionality for Elasticsearch._
+_ElasticsearchRecord is a ActiveRecord-fork and provides similar functionality for Elasticsearch._
 
 -----
 
@@ -118,7 +120,7 @@ Different to the default where-method you can now use it in different ways.
 
 Using it by default with a Hash, the method decides itself to either add a filter, or must_not query.
 
-_Hint: If not overwritten through ```kind(...)``` a default kind **:bool** will be used._
+_Hint: If not provided through ```#kind```-method a default kind **:bool** will be used._
 ```ruby
 # use it by default
 Search.where(name: 'A nice object')

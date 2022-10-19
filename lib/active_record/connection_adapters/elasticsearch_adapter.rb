@@ -88,11 +88,11 @@ module ActiveRecord # :nodoc:
           m.register_type 'date', Type::DateTime.new
 
           # force a hash
-          m.register_type 'object', ActiveRecord::ConnectionAdapters::Elasticsearch::Type::Object.new(cast: :to_h, force: true)
+          m.register_type 'object', ActiveRecord::ConnectionAdapters::Elasticsearch::Type::Object.new
           m.alias_type 'flattened', "object"
 
           # array of objects
-          m.register_type 'nested', ActiveRecord::ConnectionAdapters::Elasticsearch::Type::Object.new(cast: :to_h)
+          m.register_type 'nested', ActiveRecord::ConnectionAdapters::Elasticsearch::Type::Nested.new
 
           ip_type = ActiveRecord::ConnectionAdapters::Elasticsearch::Type::FormatString.new(format: /^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$/)
 

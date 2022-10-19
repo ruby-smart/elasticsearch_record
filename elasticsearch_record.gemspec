@@ -9,7 +9,7 @@ Gem::Specification.new do |spec|
   spec.email       = ["info@ruby-smart.org"]
   spec.summary     = "ActiveRecord functionality for Elasticsearch indexes & documents."
   spec.description = <<DESC
-ElasticsearchRecord is a ActiveRecord-fork and tries to provide the same functionality for Elasticsearch.
+ElasticsearchRecord is a ActiveRecord-fork and provides similar functionality for Elasticsearch.
 DESC
 
   spec.homepage              = "https://github.com/ruby-smart/elasticsearch_record"

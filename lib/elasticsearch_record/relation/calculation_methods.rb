@@ -3,10 +3,10 @@ module ElasticsearchRecord
     module CalculationMethods
       # Count the records.
       #
-      #   Person.count
+      #   Person.all.count
       #   => the total count of all people
       #
-      #   Person.count(:age)
+      #   Person.all.count(:age)
       #   => returns the total count of all people whose age is present in database
       def count(column_name = nil)
         # fallback to default
@@ -46,7 +46,7 @@ module ElasticsearchRecord
       # percentiles over numeric values extracted from the aggregated documents.
       # Returns a hash with empty values (but keys still exists) if there is no row.
       #
-      #   Person.percentiles(:year)
+      #   Person.all.percentiles(:year)
       #   > {
       #      "1.0" => 2016.0,
       #      "5.0" => 2016.0,
@@ -68,7 +68,7 @@ module ElasticsearchRecord
       # For example, if a value is greater than or equal to 95% of the observed values it is
       # said to be at the 95th percentile rank.
       #
-      #   Person.percentile_ranks(:year, [500,600])
+      #   Person.all.percentile_ranks(:year, [500,600])
       #   > {
       #      "1.0" => 2016.0,
       #      "5.0" => 2016.0,
@@ -86,7 +86,7 @@ module ElasticsearchRecord
 
       # Calculates the cardinality on a given column. Returns +0+ if there's no row.
       #
-      #   Person.cardinality(:age)
+      #   Person.all.cardinality(:age)
       #   > 12
       #
       # @param [Symbol, String] column_name
@@ -96,7 +96,7 @@ module ElasticsearchRecord
 
       # Calculates the average value on a given column. Returns +nil+ if there's no row. See #calculate for examples with options.
       #
-      #   Person.average(:age) # => 35.8
+      #   Person.all.average(:age) # => 35.8
       #
       # @param [Symbol, String] column_name
       def average(column_name)
@@ -106,7 +106,7 @@ module ElasticsearchRecord
       # Calculates the minimum value on a given column. The value is returned
       # with the same data type of the column, or +nil+ if there's no row.
       #
-      #   Person.minimum(:age)
+      #   Person.all.minimum(:age)
       #   > 7
       #
       # @param [Symbol, String] column_name
@@ -118,7 +118,7 @@ module ElasticsearchRecord
       # with the same data type of the column, or +nil+ if there's no row. See
       # #calculate for examples with options.
       #
-      #   Person.maximum(:age) # => 93
+      #   Person.all.maximum(:age) # => 93
       #
       # @param [Symbol, String] column_name
       def maximum(column_name)
@@ -129,7 +129,7 @@ module ElasticsearchRecord
       # with the same data type of the column, +0+ if there's no row. See
       # #calculate for examples with options.
       #
-      #   Person.sum(:age) # => 4562
+      #   Person.all.sum(:age) # => 4562
       #
       # @param [Symbol, String] column_name (optional)
       def sum(column_name)

@@ -11,7 +11,7 @@ module ElasticsearchRecord
 
       def sql_for(binds, connection)
         # dup original array
-        claims = @values.dup
+        claims = @values.deep_dup
 
         # substitute binds
         claims.each do |claim|

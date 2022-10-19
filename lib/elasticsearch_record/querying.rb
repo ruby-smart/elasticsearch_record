@@ -16,6 +16,13 @@ module ElasticsearchRecord
       ].freeze # :nodoc:
       delegate(*ES_QUERYING_METHODS, to: :all)
 
+      # finds a single record by provided id.
+      # This method is overwritten to support the primary key column (+_id+).
+      # @param [Object] id
+      def find_by_id(id)
+        has_attribute?('id') ? super(id) : public_send(:find_by__id, id)
+      end
+
       # finds records by sql, query-arguments or query-object.
       #
       # PLEASE NOTE: This method is used by different other methods:

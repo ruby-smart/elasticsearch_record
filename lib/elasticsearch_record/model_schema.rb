@@ -20,12 +20,13 @@ module ElasticsearchRecord
         @source_column_names ||= columns.reject(&:virtual).map(&:name) - ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.base_structure_keys
       end
 
-      # returns an array with columns names, that are searchable (also includes nested )
+      # returns an array with columns names, that are searchable (also includes nested fields & properties )
       def searchable_column_names
         @searchable_column_names ||= columns.reject(&:virtual).reduce([]) { |m, column|
           m << column.name
-          m += column.fields if column.fields?
-          m
+          m += column.field_names
+          m += column.property_names
+          m.uniq
         }
       end
 

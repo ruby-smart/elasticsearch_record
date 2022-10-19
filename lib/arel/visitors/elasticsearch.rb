@@ -410,8 +410,8 @@ module Arel # :nodoc: all
           key = visit(o.expr)
           dir = visit(o.direction)
 
-          # we support a special key: _rand to create a simple random method ...
-          if key == '_rand'
+          # we support a special key: __rand__ to create a simple random method ...
+          if key == '__rand__'
             assign({
                      "_script" => {
                        "script" => "Math.random()",

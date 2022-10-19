@@ -25,7 +25,7 @@ module ActiveRecord
 
           def _deserialize(value)
             # check for the special +object+ type which is forced to be casted
-            return _deserialize_by_nested_type(value) if nested_type.type == :object && nested_type.forced?
+            return _deserialize_by_nested_type(value) if nested_type.type == :object
 
             if value.is_a?(Array)
               value.map { |val| _deserialize_by_nested_type(val) }

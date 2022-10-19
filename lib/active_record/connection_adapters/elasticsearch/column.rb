@@ -5,11 +5,12 @@ module ActiveRecord
     module Elasticsearch
       class Column < ConnectionAdapters::Column # :nodoc:
 
-        attr_reader :virtual, :fields
+        attr_reader :virtual, :fields, :properties
 
         def initialize(name, default, sql_type_metadata = nil, null = true, default_function = nil, **kwargs)
-          @virtual = kwargs.delete(:virtual)
-          @fields  = kwargs.delete(:fields)
+          @virtual    = kwargs.delete(:virtual)
+          @fields     = kwargs.delete(:fields)
+          @properties = kwargs.delete(:properties)
           super(name, default, sql_type_metadata, null, default_function, **kwargs)
         end
 
@@ -25,6 +26,29 @@ module ActiveRecord
         # @return [Boolean]
         def fields?
           fields.present?
+        end
+
+        # returns true if this column has nested properties
+        # To receive the nested names just call +#properties+ on this object.
+        # @return [Boolean]
+        def properties?
+          properties.present?
+        end
+
+        # returns a array of field names
+        # @return [Array]
+        def field_names
+          return [] unless fields?
+
+          fields.map { |field| field['name'] }
+        end
+
+        # returns a array of property names
+        # @return [Array]
+        def property_names
+          return [] unless properties?
+
+          properties.map { |property| property['name'] }
         end
       end
     end

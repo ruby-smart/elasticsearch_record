@@ -1,5 +1,16 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.0.1] - 2022-10-19
+* [add] ```ActiveRecord::ConnectionAdapters::Elasticsearch::Type::Nested``` class to cast nested values
+* [add] **properties** to column definition (so they are also searchable by _Relation_ conditions)
+* [add] exception for _Relation_ #pit_results if batch size is too large
+* [add] a default _#find_by_id_-method to proved a 'fallback' functionality for the primary '_id' column
+* [fix] nested properties are not cast for column-type "object"
+* [fix] ```ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaStatements``` fields and property detection
+* [fix] ```ElasticsearchRecord::StatementCache::PartialQuery``` reference manipulation of cached hash _(missing .deep_dup )_
+* [ref] ```ActiveRecord::ConnectionAdapters::Elasticsearch::Type::Object``` class to only cast object values
+* [ref] ```Arel::Visitors::Elasticsearch#visit_Sort``` to detect a random sort with correct keyword: "**\_\_rand\_\_**"
+
 ## [1.0.0] - 2022-10-18
 * [add] patch for ```ActiveRecord::Relation::Merger``` - to support AR-relations
 * [add] ```ElasticsearchRecord::Relation#pit_results``` _offset_ & _yield_ support

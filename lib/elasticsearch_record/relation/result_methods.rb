@@ -89,6 +89,8 @@ module ElasticsearchRecord
       # @param [String] keep_alive - how long to keep alive (for each single request) - default: '1m'
       # @param [Integer] batch_size - how many results per query (default: 1000 - this means at least 10 queries before reaching the +max_result_window+)
       def pit_results(keep_alive: '1m', batch_size: 1000)
+        raise ArgumentError, "Batch size cannot be above the 'max_result_window' (#{klass.connection.max_result_window}) !" if batch_size > klass.connection.max_result_window
+
         # check if a limit or offset values was provided
         results_limit  = limit_value ? limit_value : Float::INFINITY
         results_offset = offset_value ? offset_value : 0
@@ -116,7 +118,7 @@ module ElasticsearchRecord
             current_response = relation.spawn.configure!(current_pit_hash).limit!(batch_size).resolve('Pit').response
 
             # resolve only data from hits->hits[{_source}]
-            current_results        = current_response['hits']['hits'].map { |result| result['_source'] }
+            current_results        = current_response['hits']['hits'].map { |result| result['_source'].merge('_id' => result['_id']) }
             current_results_length = current_results.length
 
             # check if we reached the required offset

@@ -2,14 +2,15 @@ module ActiveRecord
   module ConnectionAdapters
     module Elasticsearch
       module Type # :nodoc:
-        class Object < ActiveRecord::Type::Value
+        class Nested < ActiveRecord::Type::Value
+
           def type
-            :object
+            :nested
           end
 
           private
 
-          # cast value by provided cast_method
+          # cast value
           def cast_value(value)
             value.to_h
           end
