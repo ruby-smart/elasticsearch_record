@@ -2,9 +2,9 @@
 
 [![Gem Version](https://badge.fury.io/rb/elasticsearch_record.svg)](https://badge.fury.io/rb/elasticsearch_record)
 
-ActiveRecord functionality for Elasticsearch indexes & documents.
+ActiveRecord adapter for Elasticsearch
 
-_ElasticsearchRecord is a ActiveRecord-fork and provides similar functionality for Elasticsearch._
+_ElasticsearchRecord is a ActiveRecord adapter and provides similar functionality for Elasticsearch._
 
 -----
 
