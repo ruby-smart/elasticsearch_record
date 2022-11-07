@@ -27,6 +27,7 @@ module ElasticsearchRecord
     autoload :Querying
     autoload :Query
     autoload :Result
+    autoload :SchemaMigration
     autoload :StatementCache
   end
 
@@ -47,6 +48,12 @@ module ElasticsearchRecord
     autoload :ResultMethods
     autoload :ValueMethods
   end
+
+  module Tasks
+    extend ActiveSupport::Autoload
+
+    autoload :ElasticsearchDatabaseTasks, 'elasticsearch_record/tasks/elasticsearch_database_tasks'
+  end
 end
 
 ActiveSupport.on_load(:active_record) do
@@ -57,4 +64,6 @@ ActiveSupport.on_load(:active_record) do
   require 'elasticsearch_record/patches/arel/select_statement_patch'
   require 'elasticsearch_record/patches/arel/update_manager_patch'
   require 'elasticsearch_record/patches/arel/update_statement_patch'
+
+  ActiveRecord::Tasks::DatabaseTasks.register_task(/elasticsearch/, "ElasticsearchRecord::Tasks::ElasticsearchDatabaseTasks")
 end

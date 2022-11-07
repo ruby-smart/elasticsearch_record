@@ -263,7 +263,8 @@ module Arel # :nodoc: all
         # empty / nil columns - instead the nil columns do not exist!!!
         # This is a big mess, because those missing columns are +not+ editable or savable in any way after we initialize the record...
         # To prevent NOT-accessible attributes, we need to provide the "full-column-definition" to the query.
-        claim(:columns, o.source.left.instance_variable_get(:@klass).source_column_names)
+        resource_klass = o.source.left.instance_variable_get(:@klass)
+        claim(:columns, resource_klass.source_column_names) if resource_klass.respond_to?(:source_column_names)
 
         # sets the query
         resolve(o, :visit_Query) if o.queries.present? || o.wheres.present?

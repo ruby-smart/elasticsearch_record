@@ -1,5 +1,10 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.0.2] - 2022-11-07
+* [add] ```ActiveRecord::ConnectionAdapters::ElasticsearchAdapter#migrations_paths``` with 'db/migrate_elasticsearch'
+* [fix] to prevent executing 'primary' migrations to elasticsearch (SchemaDumper may still throw error comments)
+* [add] temporary workarounds for scheme & migrations until we support it (so bin/rails db:migrate - tasks will now run again)
+
 ## [1.0.1] - 2022-10-19
 * [add] ```ActiveRecord::ConnectionAdapters::Elasticsearch::Type::Nested``` class to cast nested values
 * [add] **properties** to column definition (so they are also searchable by _Relation_ conditions)

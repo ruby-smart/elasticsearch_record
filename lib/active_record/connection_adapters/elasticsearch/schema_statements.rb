@@ -4,6 +4,23 @@ module ActiveRecord
   module ConnectionAdapters
     module Elasticsearch
       module SchemaStatements # :nodoc:
+
+        # temporary workaround
+        # toDo: fixme
+        def create_table(*args)
+          $stdout.puts "\n>>> 'create_table' elasticsearch is not supported - the following message is insignificant!"
+        end
+
+        # temporary workaround
+        # toDo: fixme
+        def assume_migrated_upto_version(version)
+          $stdout.puts "\n>>> 'assume_migrated_upto_version' elasticsearch is not supported - the following message is insignificant!"
+        end
+
+
+
+
+
         # Returns the relation names usable to back Active Record models.
         # For Elasticsearch this means all indices - which also includes system +dot+ '.' indices.
         # @see ActiveRecord::ConnectionAdapters::SchemaStatements#data_sources

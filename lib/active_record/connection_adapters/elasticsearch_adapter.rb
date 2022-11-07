@@ -131,6 +131,22 @@ module ActiveRecord # :nodoc:
         @prepared_statements = false
       end
 
+      def migrations_paths # :nodoc:
+        @config[:migrations_paths] || ['db/migrate_elasticsearch']
+      end
+
+      # temporary workaround
+      # toDo: fixme
+      def use_metadata_table? # :nodoc:
+        false
+      end
+
+      # temporary workaround
+      # toDo: fixme
+      def schema_migration # :nodoc:
+        @schema_migration ||= ElasticsearchRecord::SchemaMigration
+      end
+
       private
 
       def type_map

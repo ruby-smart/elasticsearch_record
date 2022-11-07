@@ -7,9 +7,9 @@ Gem::Specification.new do |spec|
   spec.version     = ElasticsearchRecord.version
   spec.authors     = ["Tobias Gonsior"]
   spec.email       = ["info@ruby-smart.org"]
-  spec.summary     = "ActiveRecord functionality for Elasticsearch indexes & documents."
+  spec.summary     = "ActiveRecord adapter for Elasticsearch"
   spec.description = <<DESC
-ElasticsearchRecord is a ActiveRecord-fork and provides similar functionality for Elasticsearch.
+ElasticsearchRecord is a ActiveRecord adapter and provides similar functionality for Elasticsearch.
 DESC
 
   spec.homepage              = "https://github.com/ruby-smart/elasticsearch_record"
