@@ -19,6 +19,7 @@ DESC
   spec.metadata["allowed_push_host"] = "https://rubygems.org"
   spec.metadata["homepage_uri"]      = spec.homepage
   spec.metadata["source_code_uri"]   = "https://github.com/ruby-smart/elasticsearch_record"
+  spec.metadata['documentation_uri'] = 'https://rubydoc.info/gems/elasticsearch_record'
   spec.metadata["changelog_uri"]     = "#{spec.metadata["source_code_uri"]}/blob/main/docs/CHANGELOG.md"
 
   # Specify which files should be added to the gem when it is released.
@@ -34,7 +35,7 @@ DESC
   spec.add_dependency 'activerecord', '~> 7.0.0'
   spec.add_dependency 'elasticsearch', '~> 8.4'
 
+  #spec.add_development_dependency 'coveralls_reborn', '~> 0.25'
   spec.add_development_dependency 'rspec', '~> 3.0'
-  spec.add_development_dependency 'simplecov', '~> 0.21'
   spec.add_development_dependency 'rake', "~> 13.0"
 end

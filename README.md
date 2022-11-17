@@ -1,6 +1,10 @@
 # ElasticsearchRecord
 
+[![GitHub](https://img.shields.io/badge/github-ruby--smart/elasticsearch_record-blue.svg)](http://github.com/ruby-smart/elasticsearch_record)
+[![Documentation](https://img.shields.io/badge/docs-rdoc.info-blue.svg)](http://rubydoc.info/gems/elasticsearch_record)
+
 [![Gem Version](https://badge.fury.io/rb/elasticsearch_record.svg)](https://badge.fury.io/rb/elasticsearch_record)
+[![License](https://img.shields.io/github/license/ruby-smart/elasticsearch_record)](docs/LICENSE.txt)
 
 ActiveRecord adapter for Elasticsearch
 
@@ -174,6 +178,7 @@ MyEsIndex.find_by_id("xyzAbc34")
 
 ### Useful result methods
 - aggregations
+- buckets
 - hits
 - results
 - total
@@ -200,19 +205,19 @@ MyEsIndex.find_by_id("xyzAbc34")
 
 ## Docs
 
-[CHANGELOG](./docs/CHANGELOG.md)
+[CHANGELOG](docs/CHANGELOG.md)
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at [elasticsearch_record](https://github.com/ruby-smart/elasticsearch_record).
-This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [code of conduct](./docs/CODE_OF_CONDUCT.md).
+Bug reports and pull requests are welcome on [GitHub](https://github.com/ruby-smart/elasticsearch_record).
+This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [code of conduct](docs/CODE_OF_CONDUCT.md).
 
 ## License
 
 The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
 
-A copy of the [LICENSE](./docs/LICENSE.txt) can be found @ the docs.
+A copy of the [LICENSE](docs/LICENSE.txt) can be found @ the docs.
 
 ## Code of Conduct
 
-Everyone interacting in the project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [CODE OF CONDUCT](./docs/CODE_OF_CONDUCT.md).
+Everyone interacting in the project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [CODE OF CONDUCT](docs/CODE_OF_CONDUCT.md).

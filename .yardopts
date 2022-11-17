@@ -1,0 +1,4 @@
+--embed-mixins
+--markup=markdown
+--files docs/*.*
+--plugin relative_markdown_links

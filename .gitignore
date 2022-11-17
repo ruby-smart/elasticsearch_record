@@ -1,11 +1,25 @@
+# defaults
 /.bundle/
+/tmp/
+Gemfile.lock
+
+# testing
+.rspec_status
+/spec/reports/
+
+# documentation & coverage
 /.yardoc
 /_yardoc/
 /coverage/
 /doc/
-/pkg/
-/spec/reports/
-/tmp/
+/docs/yard
+/.coveralls.yml
 
-# rspec failure tracking
-.rspec_status
+# builds
+/pkg/
+/*.gem
+
+# IDE related files
+/.idea
+/.ruby-version
+/.bundle-version
