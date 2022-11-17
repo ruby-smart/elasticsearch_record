@@ -7,7 +7,7 @@ module ActiveRecord
 
         # temporary workaround
         # toDo: fixme
-        def create_table(*args)
+        def create_table(*_args)
           $stdout.puts "\n>>> 'create_table' elasticsearch is not supported - the following message is insignificant!"
         end
 
@@ -17,10 +17,6 @@ module ActiveRecord
           $stdout.puts "\n>>> 'assume_migrated_upto_version' elasticsearch is not supported - the following message is insignificant!"
         end
 
-
-
-
-
         # Returns the relation names usable to back Active Record models.
         # For Elasticsearch this means all indices - which also includes system +dot+ '.' indices.
         # @see ActiveRecord::ConnectionAdapters::SchemaStatements#data_sources
@@ -29,18 +25,37 @@ module ActiveRecord
           api(:indices, :get_settings, { index: :_all }, 'SCHEMA').keys
         end
 
-        # returns a hash of all mappings by provided index_name
-        # @param [String] index_name
+        # returns a hash of all mappings by provided table_name (index)
+        # @param [String] table_name
         # @return [Hash]
-        def mappings(index_name)
-          api(:indices, :get_mapping, { index: index_name }, 'SCHEMA').dig(index_name, 'mappings')
+        def table_mappings(table_name)
+          api(:indices, :get_mapping, { index: table_name }, 'SCHEMA').dig(table_name, 'mappings')
         end
 
-        # returns a hash of all settings by provided index_name
-        # @param [String] index_name
+        # returns a hash of all settings by provided table_name
+        # @param [String] table_name
         # @return [Hash]
-        def settings(index_name)
-          api(:indices, :get_settings, { index: index_name }, 'SCHEMA').dig(index_name, 'settings', 'index')
+        def table_settings(table_name)
+          api(:indices, :get_settings, { index: table_name }, 'SCHEMA').dig(table_name, 'settings', 'index')
+        end
+
+        # returns a hash of all aliases by provided index_name
+        # @param [String] table_name
+        # @return [Hash]
+        def table_aliases(table_name)
+          api(:indices, :get_alias, { index: table_name }, 'SCHEMA').dig(table_name, 'aliases')
+        end
+
+        # returns a hash of the full definition of the provided index_name.
+        # (includes settings, mappings & aliases)
+        # @param [String] table_name
+        # @return [Hash]
+        def table_schema(table_name)
+          {
+            settings: table_settings(table_name),
+            mappings: table_mappings(table_name),
+            aliases:  table_aliases(table_name)
+          }.reject { |_key, value| value.blank? }
         end
 
         # Returns the list of a table's column names, data types, and default values.
@@ -49,12 +64,12 @@ module ActiveRecord
         # @param [String] table_name
         # @return [Array<Hash>]
         def column_definitions(table_name)
-          structure = mappings(table_name)
-          raise(ActiveRecord::StatementInvalid, "Could not find elasticsearch index '#{table_name}'") if structure.blank? || structure['properties'].blank?
+          mappings = table_mappings(table_name)
+          raise(ActiveRecord::StatementInvalid, "Could not find elasticsearch index '#{table_name}'") if mappings.blank? || mappings['properties'].blank?
 
           # since the received mappings do not have the "primary" +_id+-column we manually need to add this here
           # The BASE_STRUCTURE will also include some meta keys like '_score', '_type', ...
-          ActiveRecord::ConnectionAdapters::ElasticsearchAdapter::BASE_STRUCTURE + structure['properties'].map { |key, prop|
+          ActiveRecord::ConnectionAdapters::ElasticsearchAdapter::BASE_STRUCTURE + mappings['properties'].map { |key, prop|
             # resolve (nested) fields and properties
             fields, properties = resolve_fields_and_properties(key, prop, true)
 
@@ -197,6 +212,20 @@ module ActiveRecord
           end
 
           [fields, properties]
+        end
+
+        # overwrite original methods to provide a elasticsearch version
+        def schema_creation
+          ::ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaCreation.new(self)
+        end
+
+        # overwrite original methods to provide a elasticsearch version
+        def create_table_definition(name, **options)
+          ::ActiveRecord::ConnectionAdapters::Elasticsearch::TableDefinition.new(self, name, **options)
+        end
+
+        def extract_table_options!(options)
+          options.extract!(:settings, :mappings, :aliases)
         end
       end
     end

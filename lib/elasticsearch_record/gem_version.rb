@@ -13,5 +13,9 @@ module ElasticsearchRecord
     PRE   = nil
 
     STRING = [MAJOR, MINOR, TINY, PRE].compact.join(".")
+
+    def self.to_s
+      STRING
+    end
   end
 end

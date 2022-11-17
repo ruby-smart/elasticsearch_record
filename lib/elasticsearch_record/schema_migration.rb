@@ -1,9 +1,10 @@
 # frozen_string_literal: true
+
 require 'active_record/schema_migration'
 
 module ElasticsearchRecord
   # temporary workaround
-  # toDo: fixme
+  # toDo: fixme - or REMOVE
   class SchemaMigration < ActiveRecord::SchemaMigration # :nodoc:
     class << self
       def create_table

@@ -5,9 +5,13 @@ require 'active_record/connection_adapters'
 # new
 require 'active_record/connection_adapters/elasticsearch/column'
 require 'active_record/connection_adapters/elasticsearch/database_statements'
+require 'active_record/connection_adapters/elasticsearch/query_statements'
 require 'active_record/connection_adapters/elasticsearch/quoting'
+require 'active_record/connection_adapters/elasticsearch/schema_creation'
+require 'active_record/connection_adapters/elasticsearch/schema_definitions'
 require 'active_record/connection_adapters/elasticsearch/schema_statements'
 require 'active_record/connection_adapters/elasticsearch/type'
+require 'active_record/connection_adapters/elasticsearch/unsupported_implementation'
 
 require 'arel/visitors/elasticsearch'
 require 'arel/collectors/elasticsearch_query'
@@ -49,6 +53,7 @@ module ActiveRecord # :nodoc:
       include Elasticsearch::Quoting
       include Elasticsearch::SchemaStatements
       include Elasticsearch::DatabaseStatements
+      include Elasticsearch::QueryStatements
 
       class << self
         def base_structure_keys
@@ -135,6 +140,31 @@ module ActiveRecord # :nodoc:
         @config[:migrations_paths] || ['db/migrate_elasticsearch']
       end
 
+      # Does this adapter support explain?
+      # toDo: fixme
+      def supports_explain?
+        false
+      end
+
+      # Does this adapter support creating indexes in the same statement as
+      # creating the table?
+      # toDo: fixme
+      def supports_indexes_in_create?
+        false
+      end
+
+      # Does this adapter support metadata comments on database objects (tables, columns, indexes)?
+      # toDo: fixme
+      def supports_comments?
+        false
+      end
+
+      # Can comments for tables, columns, and indexes be specified in create/alter table statements?
+      # toDo: fixme
+      def supports_comments_in_create?
+        false
+      end
+
       # temporary workaround
       # toDo: fixme
       def use_metadata_table? # :nodoc:
@@ -145,6 +175,39 @@ module ActiveRecord # :nodoc:
       # toDo: fixme
       def schema_migration # :nodoc:
         @schema_migration ||= ElasticsearchRecord::SchemaMigration
+      end
+
+      # calls the +elasticsearch-api+ endpoints by provided namespace and action.
+      # if a block was provided it'll yield the response.body and returns the blocks result.
+      # otherwise it will return the response itself...
+      # @param [Symbol] namespace - the API namespace (e.g. indices, nodes, sql, ...)
+      # @param [Symbol] action - the API action to call in tha namespace
+      # @param [Hash] arguments - action arguments
+      # @param [String (frozen)] name - the logging name
+      # @param [Boolean] async - send async (default: false) - currently not supported
+      # @return [Elasticsearch::API::Response, Object]
+      def api(namespace, action, arguments = {}, name = 'API', async: false)
+        raise ::StandardError, 'ASYNC api calls are not supported' if async
+
+        # resolve the API target
+        target = namespace == :core ? @connection : @connection.__send__(namespace)
+
+        log("#{namespace}.#{action}", arguments, name, async: async) do
+          response = ActiveSupport::Dependencies.interlock.permit_concurrent_loads do
+            target.__send__(action, arguments)
+          end
+
+          if response.is_a?(::Elasticsearch::API::Response)
+            # reverse information for the LogSubscriber - shows the 'query-time' in the logs
+            # this works, since we use a referenced hash ...
+            arguments[:_qt] = response['took']
+
+            # raise timeouts
+            raise(ActiveRecord::StatementTimeout, "Elasticsearch api request failed due a timeout") if response['timed_out']
+          end
+
+          response
+        end
       end
 
       private
@@ -181,10 +244,10 @@ module ActiveRecord # :nodoc:
       # returns a new collector for the Arel visitor.
       # @return [Arel::Collectors::ElasticsearchQuery]
       def collector
-        # IMPORTANT: since prepared statements doesn't make sense for elasticsearch,
-        # we don't have to check for +prepared_statements+ here.
+        # IMPORTANT: prepared statements doesn't make sense for elasticsearch,
+        # so we don't have to check for +prepared_statements+ here.
         # Also, bindings are (currently) not supported.
-        # So, we just need a query collector...
+        # So, we just need a single, simple query collector...
         Arel::Collectors::ElasticsearchQuery.new
       end
 

@@ -30,7 +30,17 @@ module ElasticsearchRecord
       super
     end
 
+    module PrependClassMethods
+      # returns the table_name.
+      # This method is prepend to provide automated compatibility to other gems.
+      def index_name
+        table_name
+      end
+    end
+
     module ClassMethods
+      prepend ElasticsearchRecord::Core::PrependClassMethods
+
       # used to create a cacheable statement.
       # This is a 1:1 copy, except that we use our own class +ElasticsearchRecord::StatementCache+
       # see @ ActiveRecord::Core::ClassMethods#cached_find_by_statement

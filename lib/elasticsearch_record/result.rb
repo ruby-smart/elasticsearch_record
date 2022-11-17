@@ -66,6 +66,29 @@ module ElasticsearchRecord
       response.key?('aggregations') ? response['aggregations'].with_indifferent_access : {}
     end
 
+    # returns the (nested) bucket values (and aggregated values) from the response aggregations.
+    # @return [ActiveSupport::HashWithIndifferentAccess]
+    def buckets
+      # aggregations are already a hash with key => data, but to prevent reference manipulation on the hash
+      # we have to create a new one here...
+      aggregations.reduce({}) { |buckets, (key, agg)|
+        # check if this agg has a bucket
+        if agg.key?(:buckets)
+          buckets[key] = agg[:buckets].reduce({}) { |m, b|
+            # buckets can be a Hash or Array (of Hashes)
+            bucket_key, bucket = b.is_a?(Hash) ? [b[:key], b] : b
+            m[bucket_key]      = bucket.except(:key, :doc_count).transform_values { |val| val[:value] }
+
+            m
+          }
+        elsif agg.key?(:value)
+          buckets[key] = agg[:value]
+        end
+
+        buckets
+      }.with_indifferent_access
+    end
+
     # Returns true if this result set includes the column named +name+.
     # used by ActiveRecord
     def includes_column?(name)

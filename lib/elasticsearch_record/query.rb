@@ -5,31 +5,40 @@ module ElasticsearchRecord
     STATUS_FAILED = :failed
 
     # TYPE CONSTANTS
-    TYPE_UNDEFINED       = :undefined
-    TYPE_COUNT           = :count
-    TYPE_SEARCH          = :search
-    TYPE_MSEARCH         = :msearch
-    TYPE_SQL             = :sql
+    TYPE_UNDEFINED = :undefined
+
+    # - QUERY TYPES
+    TYPE_COUNT   = :count
+    TYPE_SEARCH  = :search
+    TYPE_MSEARCH = :msearch
+    TYPE_SQL     = :sql
+
+    # - DOCUMENT TYPES
     TYPE_CREATE          = :create
     TYPE_UPDATE          = :update
     TYPE_UPDATE_BY_QUERY = :update_by_query
     TYPE_DELETE          = :delete
     TYPE_DELETE_BY_QUERY = :delete_by_query
 
+    # - INDEX TYPES
+    TYPE_INDEX_CREATE = :index_create
+
     # includes valid types only
-    TYPES = [TYPE_COUNT, TYPE_SEARCH, TYPE_MSEARCH, TYPE_SQL, TYPE_CREATE, TYPE_UPDATE, TYPE_UPDATE_BY_QUERY, TYPE_DELETE, TYPE_DELETE_BY_QUERY].freeze
+    TYPES = [TYPE_COUNT, TYPE_SEARCH, TYPE_MSEARCH, TYPE_SQL, TYPE_CREATE, TYPE_UPDATE,
+             TYPE_UPDATE_BY_QUERY, TYPE_DELETE, TYPE_DELETE_BY_QUERY, TYPE_INDEX_CREATE].freeze
 
     # includes reading types only
     READ_TYPES = [TYPE_COUNT, TYPE_SEARCH, TYPE_MSEARCH, TYPE_SQL].freeze
 
-    # defines a query to be executed if the query fails - +(none)+ queries
+    # defines a body to be executed if the query fails - +(none)+ queries
     # acts like the SQL-query "where('1=0')"
     FAILED_SEARCH_BODY = { size: 0, query: { bool: { filter: [{ term: { _id: '_' } }] } } }.freeze
 
     # defines special api gates to be used per type.
     # if not defined it simply uses +[:core,self.type]+
     GATES = {
-      TYPE_SQL => [:sql, :query]
+      TYPE_SQL          => [:sql, :query],
+      TYPE_INDEX_CREATE => [:indices, :create],
     }
 
     # defines the index the query should be executed on

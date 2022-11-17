@@ -182,6 +182,12 @@ module ElasticsearchRecord
         spawn.aggs_only!.resolve('Aggregations').aggregations
       end
 
+      # returns the response aggregations and resolve the buckets as key->value hash.
+      # @return [ActiveSupport::HashWithIndifferentAccess, Hash]
+      def buckets
+        spawn.aggs_only!.resolve('Buckets').buckets
+      end
+
       # returns the RAW hits for the current query
       # @return [Array]
       def hits
