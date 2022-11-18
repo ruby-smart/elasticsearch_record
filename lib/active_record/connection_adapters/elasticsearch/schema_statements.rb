@@ -224,8 +224,9 @@ module ActiveRecord
           ::ActiveRecord::ConnectionAdapters::Elasticsearch::TableDefinition.new(self, name, **options)
         end
 
+        # overwrite original methods to provide a elasticsearch version
         def extract_table_options!(options)
-          options.extract!(:settings, :mappings, :aliases)
+          ::ActiveRecord::ConnectionAdapters::Elasticsearch::TableDefinition.extract_table_options!(options)
         end
       end
     end

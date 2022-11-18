@@ -2,7 +2,8 @@
 
 require 'active_record/connection_adapters'
 
-# new
+require 'active_record/connection_adapters/elasticsearch/unsupported_implementation'
+
 require 'active_record/connection_adapters/elasticsearch/column'
 require 'active_record/connection_adapters/elasticsearch/database_statements'
 require 'active_record/connection_adapters/elasticsearch/query_statements'
@@ -11,7 +12,6 @@ require 'active_record/connection_adapters/elasticsearch/schema_creation'
 require 'active_record/connection_adapters/elasticsearch/schema_definitions'
 require 'active_record/connection_adapters/elasticsearch/schema_statements'
 require 'active_record/connection_adapters/elasticsearch/type'
-require 'active_record/connection_adapters/elasticsearch/unsupported_implementation'
 
 require 'arel/visitors/elasticsearch'
 require 'arel/collectors/elasticsearch_query'

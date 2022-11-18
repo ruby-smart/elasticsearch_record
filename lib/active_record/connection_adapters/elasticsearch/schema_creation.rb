@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'active_record/connection_adapters/abstract/schema_creation'
-
 module ActiveRecord
   module ConnectionAdapters
     module Elasticsearch

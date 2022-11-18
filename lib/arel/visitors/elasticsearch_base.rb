@@ -19,7 +19,7 @@ module Arel # :nodoc: all
       class_methods do
         def simple_dispatch_cache
           @simple_dispatch_cache ||= Hash.new do |hash, klass|
-            hash[klass] = "visit_#{(klass.name.demodulize || '')}"
+            hash[klass] = "visit_#{(klass.name.demodulize || 'unknown')}"
           end
         end
       end
