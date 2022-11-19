@@ -48,10 +48,8 @@ module Arel # :nodoc: all
       end
 
       def visit_TableAliases(o)
-        assign(:mappings, {}) do
-          assign(:properties, {}) do
-            resolve(o.mappings, :visit_TableAliasDefinition)
-          end
+        assign(:aliases, {}) do
+          resolve(o.aliases, :visit_TableAliasDefinition)
         end
       end
 
@@ -60,7 +58,7 @@ module Arel # :nodoc: all
       end
 
       def visit_TableMappingDefinition(o)
-        assign(o.name, o.attributes)
+        assign(o.name, o.attributes.merge({type: o.type}))
       end
 
       def visit_TableAliasDefinition(o)

@@ -53,7 +53,7 @@ module ElasticsearchRecord
       private
 
       def name_color(name)
-        if name.blank? || name.match(/^\p{Lu}+$/) # uppercase letters only : API, DROP, CREATE, ...
+        if name.blank? || name.match(/^[\p{Lu}\ ]+$/) # uppercase letters only : API, DROP, CREATE, ...
           MAGENTA
         else
           CYAN

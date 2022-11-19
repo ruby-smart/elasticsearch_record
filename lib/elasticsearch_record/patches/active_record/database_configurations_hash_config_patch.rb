@@ -22,4 +22,5 @@ module ElasticsearchRecord
 end
 
 # include once only!
-::ActiveRecord::DatabaseConfigurations::HashConfig.include(ElasticsearchRecord::Patches::ActiveRecord::DatabaseConfigurationsHashConfigPatch) unless ::ActiveRecord::DatabaseConfigurations::HashConfig.included_modules.include?(ElasticsearchRecord::Patches::ActiveRecord::DatabaseConfigurationsHashConfigPatch)
+# toDo: fixme or remove
+#::ActiveRecord::DatabaseConfigurations::HashConfig.include(ElasticsearchRecord::Patches::ActiveRecord::DatabaseConfigurationsHashConfigPatch) unless ::ActiveRecord::DatabaseConfigurations::HashConfig.included_modules.include?(ElasticsearchRecord::Patches::ActiveRecord::DatabaseConfigurationsHashConfigPatch)

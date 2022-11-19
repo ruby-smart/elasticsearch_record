@@ -89,7 +89,7 @@ module ElasticsearchRecord
       # @param [String] keep_alive - how long to keep alive (for each single request) - default: '1m'
       # @param [Integer] batch_size - how many results per query (default: 1000 - this means at least 10 queries before reaching the +max_result_window+)
       def pit_results(keep_alive: '1m', batch_size: 1000)
-        raise ArgumentError, "Batch size cannot be above the 'max_result_window' (#{klass.connection.max_result_window}) !" if batch_size > klass.connection.max_result_window
+        raise ArgumentError, "Batch size cannot be above the 'max_result_window' (#{klass.max_result_window}) !" if batch_size > klass.max_result_window
 
         # check if a limit or offset values was provided
         results_limit  = limit_value ? limit_value : Float::INFINITY

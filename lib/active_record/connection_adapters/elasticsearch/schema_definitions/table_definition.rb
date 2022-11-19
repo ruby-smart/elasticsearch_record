@@ -18,13 +18,13 @@ module ActiveRecord
         attr_reader :opts
 
         def self.extract_table_options!(options)
-          options.extract!(:settings, :mappings, :aliases, :force, :strict, :drop_invalid)
+          options.extract!(:settings, :mappings, :aliases, :force, :strict)
         end
 
         def initialize(conn, name, settings: nil, mappings: nil, aliases: nil, **opts)
           @conn = conn
           @name = name
-          @opts = extract_opts!(opts)
+          @opts = opts
 
           @settings = HashWithIndifferentAccess.new
           @mappings = HashWithIndifferentAccess.new
@@ -66,14 +66,16 @@ module ActiveRecord
         ######################
 
         # adds a new mapping
-        def mapping(name, type, force: false, **attributes)
-          raise ArgumentError, "you can't define an already defined mapping '#{name}'." if @mappings.key?(name) && !force?(force)
+        def mapping(name, type, force: false, **attributes, &block)
+          raise ArgumentError, "you cannot define an already defined mapping '#{name}'!" if @mappings.key?(name) && !force?(force)
 
-          # create new mapping
-          mapping         = new_mapping_definition(name, type, attributes)
+          # build new mapping
+          mapping = new_mapping_definition(name, type, attributes)
+          block.call(mapping) if block_given?
 
-          # add the mapping if it should not be validated or is valid
-          @mappings[name] = mapping if !drop_invalid? || mapping.valid?
+          raise ArgumentError, "you cannot define an invalid mapping '#{name}'!" if strict? && !mapping.valid?
+
+          @mappings[name] = mapping
 
           self
         end
@@ -88,14 +90,16 @@ module ActiveRecord
         # provide backwards compatibility to columns
         alias remove_column remove_mapping
 
-        def setting(name, value, force: false, **)
-          raise ArgumentError, "you can't define an already defined setting '#{name}'." if @settings.key?(name) && !force?(force)
+        def setting(name, value, force: false, **, &block)
+          raise ArgumentError, "you cannot define an already defined setting '#{name}'!" if @settings.key?(name) && !force?(force)
 
           # create new setting
-          setting         = new_setting_definition(name, value)
+          setting = new_setting_definition(name, value)
+          block.call(setting) if block_given?
 
-          # add the setting if it should not be validated or is valid
-          @settings[name] = setting if !drop_invalid? || setting.valid?
+          raise ArgumentError, "you cannot define an invalid setting '#{name}'!" if strict? && !setting.valid?
+
+          @settings[name] = setting
 
           self
         end
@@ -104,14 +108,18 @@ module ActiveRecord
           @settings.delete name
         end
 
-        def alias(name, force: false, **attributes)
-          raise ArgumentError, "you can't define an already defined alias '#{name}'." if @aliases.key?(name) && !force?(force)
+        # we can use +alias+ here, since the instance method is not a reserved keyword!
+
+        def alias(name, force: false, **attributes, &block)
+          raise ArgumentError, "you cannot define an already defined alias '#{name}'." if @aliases.key?(name) && !force?(force)
 
           # create new alias
-          talias         = new_alias_definition(name, attributes)
+          tbl_alias = new_alias_definition(name, attributes)
+          block.call(tbl_alias) if block_given?
 
-          # add the _alias if it should not be validated or is valid
-          @aliases[name] = talias if !drop_invalid? || talias.valid?
+          raise ArgumentError, "you cannot define an invalid alias '#{tbl_alias}'!" if strict? && !tbl_alias.valid?
+
+          @aliases[name] = tbl_alias
 
           self
         end
@@ -123,8 +131,7 @@ module ActiveRecord
         # Adds a reference.
         #
         #  t.references(:user)
-        #  t.belongs_to(:supplier, foreign_key: true)
-        #  t.belongs_to(:supplier, foreign_key: true, type: :integer)
+        #  t.belongs_to(:supplier)
         #
         # See {connection.add_reference}[rdoc-ref:SchemaStatements#add_reference] for details of the options you can use.
         def references(*args, **options)
@@ -136,46 +143,39 @@ module ActiveRecord
         alias :belongs_to :references
 
         def new_mapping_definition(name, type, attributes)
-          TableMappingDefinition.new(name, type, attributes, **opts)
+          TableMappingDefinition.new(name, type, attributes)
         end
 
         def new_alias_definition(name, attributes)
-          TableAliasDefinition.new(name, attributes, **opts)
+          TableAliasDefinition.new(name, attributes)
         end
 
         def new_setting_definition(name, value)
-          TableSettingDefinition.new(name, value, **opts)
+          TableSettingDefinition.new(name, value)
         end
 
         private
-
-        def extract_opts!(options)
-          options.extract!(:force, :strict, :drop_invalid)
-        end
 
         def force?(fallback)
           opts[:force] || fallback
         end
 
         def strict?
-          opts[:strict]
-        end
-
-        def drop_invalid?
-          opts[:drop_invalid]
+          opts.fetch(:strict, true)
         end
 
         def transform_mappings!(mappings)
-          # transform
-          mappings = mappings.with_indifferent_access
-
-          mappings[:properties].each do |name, attributes|
+          mappings.with_indifferent_access[:properties].each do |name, attributes|
             self.mapping(name, attributes.delete(:type), **attributes)
           end
         end
 
         def transform_settings!(settings)
-          settings.each do |name, value|
+          # exclude settings, that are provided through the API but are not part of the index-settings
+          settings
+            .with_indifferent_access
+            .except(*ActiveRecord::ConnectionAdapters::Elasticsearch::TableSettingDefinition::INVALID_NAMES)
+            .each do |name, value|
             self.setting(name, value)
           end
         end

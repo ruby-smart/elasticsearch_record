@@ -10,6 +10,7 @@ require 'active_record/connection_adapters/elasticsearch/query_statements'
 require 'active_record/connection_adapters/elasticsearch/quoting'
 require 'active_record/connection_adapters/elasticsearch/schema_creation'
 require 'active_record/connection_adapters/elasticsearch/schema_definitions'
+require 'active_record/connection_adapters/elasticsearch/schema_dumper'
 require 'active_record/connection_adapters/elasticsearch/schema_statements'
 require 'active_record/connection_adapters/elasticsearch/type'
 
@@ -44,10 +45,10 @@ module ActiveRecord # :nodoc:
 
       # defines the Elasticsearch 'base' structure, which is always included but cannot be resolved through mappings ...
       BASE_STRUCTURE = [
-        { 'name' => '_id', 'type' => 'string', 'null' => false, 'primary' => true },
-        { 'name' => '_index', 'type' => 'string', 'null' => false, 'virtual' => true },
+        { 'name' => '_id', 'type' => 'keyword', 'null' => false, 'primary' => true },
+        { 'name' => '_index', 'type' => 'keyword', 'null' => false, 'virtual' => true },
         { 'name' => '_score', 'type' => 'float', 'null' => false, 'virtual' => true },
-        { 'name' => '_type', 'type' => 'string', 'null' => false, 'virtual' => true }
+        { 'name' => '_type', 'type' => 'keyword', 'null' => false, 'virtual' => true }
       ].freeze
 
       include Elasticsearch::Quoting
@@ -128,6 +129,17 @@ module ActiveRecord # :nodoc:
       # reinitialize the constant with new types
       TYPE_MAP = ActiveRecord::Type::HashLookupTypeMap.new.tap { |m| initialize_type_map(m) }
 
+      # define native types - which will be used for schema-dumping
+      NATIVE_DATABASE_TYPES = {
+        string:   { name: 'keyword' },
+        blob:     { name: 'binary' },
+        datetime: { name: 'date' },
+        bigint:   { name: 'long' },
+        json:     { name: 'object' }
+      }.merge(
+        TYPE_MAP.keys.map { |key| [key.to_sym, { name: key }] }.to_h
+      )
+
       def initialize(*args)
         super(*args)
 
@@ -175,6 +187,10 @@ module ActiveRecord # :nodoc:
       # toDo: fixme
       def schema_migration # :nodoc:
         @schema_migration ||= ElasticsearchRecord::SchemaMigration
+      end
+
+      def native_database_types # :nodoc:
+        NATIVE_DATABASE_TYPES
       end
 
       # calls the +elasticsearch-api+ endpoints by provided namespace and action.

@@ -13,6 +13,11 @@ module ElasticsearchRecord
         index_base_name || super(model_name)
       end
 
+      # returns the configured +max_result_window+ (default: 10000)
+      def max_result_window
+        @max_result_window ||= connection.max_result_window(table_name)
+      end
+
       # returns an array with columns names, that are not virtual (and not a base structure).
       # so this is a array of real document (+_source+) attributes of the index.
       # @return [Array<String>]

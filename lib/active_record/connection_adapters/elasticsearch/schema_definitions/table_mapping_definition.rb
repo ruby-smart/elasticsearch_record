@@ -13,18 +13,22 @@ module ActiveRecord
 
         attr_accessor :name
         attr_accessor :type
-        attr_writer :attributes
+        attr_accessor :attributes
 
-        def initialize(name, type, attributes, strict: false, **)
-          @name       = name.to_sym
-          @type       = type.to_sym
-          @attributes = attributes
+        def initialize(name, type, attributes)
+          @name = name.to_sym
+          # IMPORTANT: must be set before setting the type!
+          @attributes = attributes.symbolize_keys
 
-          invalid! if strict && !valid?
+          # fallback for possible empty type
+          type  ||= (properties.present? ? :object : :nested)
+          @type = type
         end
 
-        def attributes
-          @attributes.merge(type: type)
+        def valid?
+          validate! if @_valid.nil?
+
+          @_valid
         end
 
         ATTRIBUTES.each do |param_name|
@@ -43,17 +47,17 @@ module ActiveRecord
         alias_method :default=, :null_value=
         alias_method :default, :null_value
 
-        def valid?
-          validate! if @_valid.nil?
+        def comment
+          meta && meta['comment']
+        end
 
-          @_valid
+        def comment=(value)
+          meta            = self.meta.presence || {}
+          meta['comment'] = value
+          self.meta       = meta
         end
 
         private
-
-        def invalid!
-          raise ArgumentError, "you can't define invalid attributes '#{(attributes.keys - ATTRIBUTES).join(', ')}' for TableMapping!"
-        end
 
         def validate!
           @_valid = (attributes.keys - ATTRIBUTES).blank?

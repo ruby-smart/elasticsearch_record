@@ -17,6 +17,11 @@ module ActiveRecord
           $stdout.puts "\n>>> 'assume_migrated_upto_version' elasticsearch is not supported - the following message is insignificant!"
         end
 
+        # ALWAYS returns an empty array, since elasticsearch does not support individual indexes...
+        def indexes(_table_name)
+          []
+        end
+
         # Returns the relation names usable to back Active Record models.
         # For Elasticsearch this means all indices - which also includes system +dot+ '.' indices.
         # @see ActiveRecord::ConnectionAdapters::SchemaStatements#data_sources
@@ -65,7 +70,11 @@ module ActiveRecord
         # @return [Array<Hash>]
         def column_definitions(table_name)
           mappings = table_mappings(table_name)
-          raise(ActiveRecord::StatementInvalid, "Could not find elasticsearch index '#{table_name}'") if mappings.blank? || mappings['properties'].blank?
+
+          # prevent exceptions on missing mappings, to provide the possibility to create them
+          # otherwise loading the table (index) will always fail!
+          mappings = {'properties' => {}} if mappings.blank? || mappings['properties'].blank?
+          # raise(ActiveRecord::StatementInvalid, "Could not find valid mappings for '#{table_name}'") if mappings.blank? || mappings['properties'].blank?
 
           # since the received mappings do not have the "primary" +_id+-column we manually need to add this here
           # The BASE_STRUCTURE will also include some meta keys like '_score', '_type', ...
@@ -92,7 +101,7 @@ module ActiveRecord
             field["name"],
             field["null_value"],
             fetch_type_metadata(field["type"]),
-            field['null'].nil? ? true : field['null'],
+            field['null'].nil? ? true : field['null'], # HINT: +null+ is not supported by elasticsearch, but we have to check this for the +BASE_STRUCTURE+.
             nil,
             comment:    field['meta'] ? field['meta'].map { |k, v| "#{k}: #{v}" }.join(' | ') : nil,
             virtual:    field['virtual'],
@@ -154,11 +163,21 @@ module ActiveRecord
           data_source_exists?(table_name)
         end
 
-        # returns the maximum allowed size for queries.
+        # overwrite original methods to provide a elasticsearch version
+        def create_schema_dumper(options)
+          ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaDumper.create(self, options)
+        end
+
+        # overwrite original methods to provide a elasticsearch version
+        def create_table_definition(name, **options)
+          ::ActiveRecord::ConnectionAdapters::Elasticsearch::TableDefinition.new(self, name, **options)
+        end
+
+        # returns the maximum allowed size for queries for the provided +table_name+.
         # The query will raise an ActiveRecord::StatementInvalid if the requested limit is above this value.
         # @return [Integer]
-        def max_result_window
-          10000
+        def max_result_window(table_name)
+          table_settings(table_name).dig('max_result_window').presence || 10000
         end
 
         private
@@ -217,11 +236,6 @@ module ActiveRecord
         # overwrite original methods to provide a elasticsearch version
         def schema_creation
           ::ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaCreation.new(self)
-        end
-
-        # overwrite original methods to provide a elasticsearch version
-        def create_table_definition(name, **options)
-          ::ActiveRecord::ConnectionAdapters::Elasticsearch::TableDefinition.new(self, name, **options)
         end
 
         # overwrite original methods to provide a elasticsearch version

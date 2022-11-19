@@ -87,14 +87,14 @@ module ActiveRecord
         #   Set to an existing index, to copy it's schema.
         # @param [String] table_name
         # @param [Boolean] force - force a drop on the existing table (default: false)
-        # @param [nil, String] copy - copy schema from existing table
+        # @param [nil, String] copy_from - copy schema from existing table
         # @param [Hash] options
         # @return [Boolean] acknowledged status
-        def create_table(table_name, force: false, copy: nil, **options)
-          options.merge!(table_schema(copy)) if copy
+        def create_table(table_name, force: false, copy_from: nil, **options)
+          options.merge!(table_schema(copy_from)) if copy_from
 
           # drop_invalid: automatically drops invalid settings, mappings & aliases
-          td = create_table_definition(table_name, drop_invalid: true, **extract_table_options!(options))
+          td = create_table_definition(table_name, **extract_table_options!(options))
 
           yield td if block_given?
 

@@ -11,23 +11,9 @@ module ActiveRecord
         attr_accessor :name
         attr_accessor :attributes
 
-        def initialize(name, attributes, strict: false, **)
+        def initialize(name, attributes)
           @name       = name.to_sym
-          @attributes = attributes
-
-          invalid! if strict && !valid?
-        end
-
-        ATTRIBUTES.each do |attr|
-          class_eval <<-CODE, __FILE__, __LINE__ + 1
-          def #{attr}
-            @attributes[:#{attr}]
-          end
-
-          def #{attr}=(value)
-            @attributes[:#{attr}] = value
-          end
-          CODE
+          @attributes = attributes.symbolize_keys
         end
 
         def valid?
@@ -36,11 +22,19 @@ module ActiveRecord
           @_valid
         end
 
-        private
+        ATTRIBUTES.each do |param_name|
+          class_eval <<-CODE, __FILE__, __LINE__ + 1
+          def #{param_name}
+            @attributes[:#{param_name}]
+          end
 
-        def invalid!
-          raise ArgumentError, "you can't define invalid attributes '#{(attributes.keys - ATTRIBUTES).join(', ')}' for TableAlias!"
+          def #{param_name}=(value)
+            @attributes[:#{param_name}] = value
+          end
+          CODE
         end
+
+        private
 
         def validate!
           @_valid = (attributes.keys - ATTRIBUTES).blank?
