@@ -3,7 +3,7 @@
 module ElasticsearchRecord # :nodoc:
   module Relation
     class QueryClauseTree
-      delegate :any?, :empty?, :key?, :each, to: :predicates
+      delegate :any?, :empty?, :key?, :keys, :each, to: :predicates
 
       def self.empty
         @empty ||= new({}).freeze
@@ -39,6 +39,12 @@ module ElasticsearchRecord # :nodoc:
         QueryClauseTree.new(dups)
       end
 
+      def [](key)
+        return nil unless key?(key)
+
+        dupredicates[key]
+      end
+
       def +(other)
         dups = dupredicates
 
@@ -52,6 +58,17 @@ module ElasticsearchRecord # :nodoc:
       end
 
       def -(other)
+        # check for provided :tree
+        if other.key == :tree
+          scope = self
+
+          (scope.keys & other.keys).each do |key|
+            scope -= other[key]
+          end
+
+          return scope
+        end
+
         dups = dupredicates
 
         if key?(other.key)
@@ -77,6 +94,26 @@ module ElasticsearchRecord # :nodoc:
       def ==(other)
         other.is_a?(::ElasticsearchRecord::Relation::QueryClauseTree) &&
           predicates == other.predicates
+      end
+
+      def or(other)
+        left = self - other
+        common = self - left
+        right = other - common
+
+        if left.empty? || right.empty?
+          common
+        else
+          key = other.keys[0]
+
+          left = left[key]
+          right = right[key]
+
+          or_clause = Arel::Nodes::Or.new(left, right)
+
+          common.predicates[key] = ElasticsearchRecord::Relation::QueryClause.new(key, [Arel::Nodes::Grouping.new(or_clause)])
+          common
+        end
       end
 
       protected

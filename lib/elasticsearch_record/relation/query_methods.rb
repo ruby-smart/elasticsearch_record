@@ -223,6 +223,12 @@ module ElasticsearchRecord
         self
       end
 
+      def or!(other)
+        self.query_clause = self.query_clause.or(other.query_clause)
+
+        super(other)
+      end
+
       def unscope!(*args)
         # :nodoc:
         self.unscope_values += args

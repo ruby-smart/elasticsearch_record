@@ -272,18 +272,17 @@ module Arel # :nodoc: all
       alias :visit_Arel_Nodes_Ascending :visit_Sort
       alias :visit_Arel_Nodes_Descending :visit_Sort
 
-
       # DIRECT ASSIGNMENT
       def visit_Arel_Nodes_Equality(o)
         right = visit(o.right)
 
-        return failed! if unboundable?(right)
+        return failed! if unboundable?(right) || invalid?(right)
 
         key = visit(o.left)
 
         if right.nil?
           # transforms nil to exists
-          assign(:must_not, [{ exists: { field:  key } }])
+          assign(:must_not, [{ exists: { field: key } }])
         else
           assign(:filter, [{ term: { key => right } }])
         end
@@ -293,22 +292,35 @@ module Arel # :nodoc: all
       def visit_Arel_Nodes_NotEqual(o)
         right = visit(o.right)
 
-        return failed! if unboundable?(right)
+        return failed! if unboundable?(right) || invalid?(right)
 
         key = visit(o.left)
 
         if right.nil?
           # transforms nil to exists
-          assign(:filter, [{ exists: { field:  key } }])
+          assign(:filter, [{ exists: { field: key } }])
         else
           assign(:must_not, [{ term: { key => right } }])
         end
       end
 
-      # DIRECT FAIL
+      # SUB-ASSIGNMENT (e.g. used for AND / OR conditions)
       def visit_Arel_Nodes_Grouping(o)
-        # grouping is NOT supported and will force to fail the query
-        failed!
+        if o.expr.is_a? Nodes::Grouping
+          visit(o.expr)
+        else
+          # seems strange, but has a special behaviour:
+          # nil tells the assignment to use it's value (Hash) for direct assignment instead of the key ...
+          assign(nil, {}) do
+            assign(:bool, {}) do
+              value = visit(o.expr)
+              return failed! if unboundable?(value) || invalid?(value)
+
+              # fallback, if nothing was assigned but returned
+              assign(value) unless value.blank?
+            end
+          end
+        end
       end
 
       # DIRECT ASSIGNMENT
@@ -338,6 +350,24 @@ module Arel # :nodoc: all
 
       def visit_Arel_Nodes_And(o)
         collect(o.children)
+      end
+
+      def visit_Arel_Nodes_Or(o)
+        # If the bool query includes at least one should clause and no must or filter clauses, the default value is 1.
+        # Otherwise, the default value is 0.
+        assign(:should, []) do
+          stack = [o.right, o.left]
+
+          while o = stack.pop
+            if o.is_a?(Arel::Nodes::Or)
+              stack.push o.right, o.left
+            elsif o.is_a?(ElasticsearchRecord::Relation::QueryClause)
+              assign(visit(o.ast[1]))
+            else
+              visit o
+            end
+          end
+        end
       end
 
       def visit_Arel_Nodes_JoinSource(o)
@@ -394,7 +424,6 @@ module Arel # :nodoc: all
 
         o.value
       end
-
 
       alias :visit_ActiveModel_Attribute :visit_Struct_BindValue
       alias :visit_ActiveRecord_Relation_QueryAttribute :visit_Struct_BindValue

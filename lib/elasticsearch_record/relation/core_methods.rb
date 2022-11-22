@@ -41,6 +41,8 @@ module ElasticsearchRecord
       # As a default the method returns an array of (resolved) responses in the order of the provided +values+-array.
       # This can be transformed into a hash of keys (provided items) and values (responses) by providing the +transpose+ flag.
       #
+      # WARNING: if the current relation is a +NullRelation+ (**#none** was assigned), the method directly returns nil!
+      #
       # @example
       #   # msearch on the current relation
       #   msearch
@@ -56,12 +58,22 @@ module ElasticsearchRecord
       #   msearch([2020, 2019, 2018], resolve: :aggregations, transpose: true).each{ |query, year| query.where!(year: year).aggregate!(:total, { sum: { field: :count }}) }
       #   # > {2020 => {...aggs...}, 2019 => {...aggs...}, 2018 => {...aggs...}}
       #
+      # @example
+      #   # msearch with none (NullRelation)
+      #   scope = spawn.none
+      #   scope.msearch([2020, 2019, 2018]).each{ |query, year| ... }
+      #   # > nil
+      #
       # @param [nil, Array] items - items to be yielded and used to provide individual queries (yields: |spawn, value| )
       # @param [Hash] opts - additional options to refine the results
       # @option opts[Symbol] :resolve - optionally resolve specific results from each result (:took, :total , :hits , :aggregations , :length , :results, :each)
       # @option opts[Boolean] :transpose - transposes the provided values & results as Hash (default: false)
-      # @return [Array, Hash]
+      # @option opts[Boolean] :keep_null_relation - by provided true-value, a NullRelation will not be ignored - so items will be yielded & query will be executed (default: false)
+      # @return [Array, Hash, nil]
       def msearch(items = nil, opts = {})
+        # prevent query on +NullRelation+!
+        return nil if null_relation? && !opts[:keep_null_relation]
+
         # check if values are provided, if not we use the arel from the current relation-scope
         arels = if items.nil?
                   [arel]

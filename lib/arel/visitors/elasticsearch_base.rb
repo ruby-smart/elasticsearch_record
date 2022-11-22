@@ -137,6 +137,9 @@ module Arel # :nodoc: all
                 nested_args[0].each do |nested_arg|
                   value << nested_arg
                 end
+              elsif nested_args[0].nil?
+                # handle special case: nil delegates to the value = nested_args[1]
+                value << nested_args[1]
               else
                 value << nested_args[0]
               end
@@ -149,12 +152,22 @@ module Arel # :nodoc: all
                 value[nested_args[0]] += nested_args[1]
               elsif nested_args[1].nil?
                 value.delete(nested_args[0])
+              elsif nested_args[0].nil? && nested_args[1].is_a?(Hash)
+                # handle special case: nil delegates to the value = nested_args[1]
+                value.merge!(nested_args[1])
               else
                 value[nested_args[0]] = nested_args[1]
               end
             when String
               if nested_args[0].is_a?(Array)
                 value = value + nested_args[0].map(&:to_s).join
+              elsif nested_args[0].nil?
+                # handle special case: nil delegates to the value = nested_args[1]
+                if nested_args[1].is_a?(Array)
+                  value = value + nested_args[1].map(&:to_s).join
+                else
+                  value = value + nested_args[1].to_s
+                end
               else
                 value = value + nested_args[0].to_s
               end
@@ -165,6 +178,8 @@ module Arel # :nodoc: all
 
           # clear nested args
           @nested_args = old_nested_args
+        elsif args.compact.blank?
+          return
         end
 
         # for nested assignments we only want the assignable args - no +claim+ on the query!
@@ -183,6 +198,9 @@ module Arel # :nodoc: all
       # @param [Array] args - either <key>,<value> or <Hash{<key> => <value>, ...}> or <Array>
       def claim(action, *args)
         self.collector << [action, args]
+
+        # IMPORTANT: always return nil, to prevent unwanted assignments
+        nil
       end
 
       ###########
@@ -191,6 +209,10 @@ module Arel # :nodoc: all
 
       def unboundable?(value)
         value.respond_to?(:unboundable?) && value.unboundable?
+      end
+
+      def invalid?(value)
+        value == '1=0'
       end
 
       def quote(value)

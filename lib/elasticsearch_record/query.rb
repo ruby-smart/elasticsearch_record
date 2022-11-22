@@ -61,7 +61,7 @@ module ElasticsearchRecord
 
     # defines the query body - in most cases this is a hash
     # @!attribute Hash
-    attr_reader :body
+    # attr_reader :body
 
     # defines the query arguments to be passed to the API
     # @!attribute Hash
@@ -111,14 +111,20 @@ module ElasticsearchRecord
       !READ_TYPES.include?(self.type)
     end
 
+    # returns the query body - depends on the +status+!
+    # failed queried will return the +FAILED_SEARCH_BODY+
+    # @return [Hash, nil]
+    def body
+      return FAILED_SEARCH_BODY if self.status == STATUS_FAILED
+
+      @body
+    end
+
     # builds the final query arguments.
     # Depends on the query status, index, body & refresh attributes.
     # Also used possible PRE-defined arguments to be merged with those mentioned attributes.
     # @return [Hash]
     def query_arguments
-      # check for failed status
-      return { index: self.index, body: FAILED_SEARCH_BODY } if self.status == STATUS_FAILED
-
       args           = @arguments.deep_dup
 
       # set index, if present
