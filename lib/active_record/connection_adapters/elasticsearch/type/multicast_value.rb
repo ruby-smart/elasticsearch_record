@@ -4,6 +4,8 @@ module ActiveRecord
       module Type # :nodoc:
         class MulticastValue < ActiveRecord::Type::Value
 
+          delegate :user_input_in_time_zone, to: :nested_type
+
           attr_reader :nested_type
 
           def initialize(nested_type: nil, **)

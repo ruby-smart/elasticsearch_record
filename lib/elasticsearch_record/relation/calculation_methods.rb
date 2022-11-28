@@ -12,6 +12,9 @@ module ElasticsearchRecord
         # fallback to default
         return super() if block_given?
 
+        # check for already failed query
+        return 0 if null_relation?
+
         # reset column_name, if +:all+ was provided ...
         column_name = nil if column_name == :all
 

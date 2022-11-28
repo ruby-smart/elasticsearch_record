@@ -83,6 +83,8 @@ module ElasticsearchRecord
           }
         elsif agg.key?(:value)
           buckets[key] = agg[:value]
+        elsif agg.key?(:values)
+          buckets[key] = agg[:values]
         end
 
         buckets
@@ -142,9 +144,10 @@ module ElasticsearchRecord
       n ? computed_results.last(n) : computed_results.last
     end
 
-    # used by ActiveRecord
-    def result # :nodoc:
-      self
+    # returns the response result string
+    # @return [String]
+    def result
+      response['result'] || ''
     end
 
     # used by ActiveRecord
@@ -199,6 +202,7 @@ module ElasticsearchRecord
       return self.response['total'] if self.response.key?('total')
       return self.response['hits']['total']['value'] if self.response.key?('hits')
       return self.response['aggregations'].count if self.response.key?('aggregations')
+      return self.response['_shards']['total'] if self.response.key?('_shards')
 
       0
     end

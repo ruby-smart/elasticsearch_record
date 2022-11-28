@@ -73,7 +73,7 @@ module ActiveRecord
           mapping = new_mapping_definition(name, type, attributes)
           block.call(mapping) if block_given?
 
-          raise ArgumentError, "you cannot define an invalid mapping '#{name}'!" if strict? && !mapping.valid?
+          raise ArgumentError, "you cannot define an invalid mapping '#{name}' (#{mapping.validation_errors.join(', ')})!" if strict? && !mapping.valid?
 
           @mappings[name] = mapping
 
@@ -97,7 +97,7 @@ module ActiveRecord
           setting = new_setting_definition(name, value)
           block.call(setting) if block_given?
 
-          raise ArgumentError, "you cannot define an invalid setting '#{name}'!" if strict? && !setting.valid?
+          raise ArgumentError, "you cannot define an invalid setting '#{name}' (#{setting.validation_errors.join(', ')})!" if strict? && !setting.valid?
 
           @settings[name] = setting
 
@@ -117,7 +117,7 @@ module ActiveRecord
           tbl_alias = new_alias_definition(name, attributes)
           block.call(tbl_alias) if block_given?
 
-          raise ArgumentError, "you cannot define an invalid alias '#{tbl_alias}'!" if strict? && !tbl_alias.valid?
+          raise ArgumentError, "you cannot define an invalid alias '#{tbl_alias}' (#{tbl_alias.validation_errors.join(', ')})!" if strict? && !tbl_alias.valid?
 
           @aliases[name] = tbl_alias
 
@@ -152,6 +152,15 @@ module ActiveRecord
 
         def new_setting_definition(name, value)
           TableSettingDefinition.new(name, value)
+        end
+
+        # Appends <tt>:datetime</tt> columns <tt>:created_at</tt> and
+        # <tt>:updated_at</tt> to the table. See {connection.add_timestamps}[rdoc-ref:SchemaStatements#add_timestamps]
+        #
+        #   t.timestamps
+        def timestamps(**options)
+          column(:created_at, :datetime, **options)
+          column(:updated_at, :datetime, **options)
         end
 
         private

@@ -4,7 +4,7 @@ module ElasticsearchRecord
     STATUS_VALID  = :valid
     STATUS_FAILED = :failed
 
-    # TYPE CONSTANTS
+    # - UNDEFINED TYPE
     TYPE_UNDEFINED = :undefined
 
     # - QUERY TYPES
@@ -24,22 +24,30 @@ module ElasticsearchRecord
     TYPE_INDEX_CREATE = :index_create
 
     # includes valid types only
-    TYPES = [TYPE_COUNT, TYPE_SEARCH, TYPE_MSEARCH, TYPE_SQL, TYPE_CREATE, TYPE_UPDATE,
-             TYPE_UPDATE_BY_QUERY, TYPE_DELETE, TYPE_DELETE_BY_QUERY, TYPE_INDEX_CREATE].freeze
+    TYPES = [
+      TYPE_COUNT, TYPE_SEARCH, TYPE_MSEARCH, TYPE_SQL,
+      TYPE_CREATE, TYPE_UPDATE, TYPE_UPDATE_BY_QUERY, TYPE_DELETE, TYPE_DELETE_BY_QUERY,
+      TYPE_INDEX_CREATE
+    ].freeze
 
     # includes reading types only
-    READ_TYPES = [TYPE_COUNT, TYPE_SEARCH, TYPE_MSEARCH, TYPE_SQL].freeze
+    READ_TYPES = [
+      TYPE_COUNT, TYPE_SEARCH, TYPE_MSEARCH, TYPE_SQL
+    ].freeze
 
-    # defines a body to be executed if the query fails - +(none)+ queries
+    # defines a body to be executed if the query fails - +(none)+
     # acts like the SQL-query "where('1=0')"
-    FAILED_SEARCH_BODY = { size: 0, query: { bool: { filter: [{ term: { _id: '_' } }] } } }.freeze
+    FAILED_BODIES = {
+      TYPE_SEARCH => { size: 0, query: { bool: { filter: [{ term: { _id: '_' } }] } } },
+      TYPE_COUNT  => { query: { bool: { filter: [{ term: { _id: '_' } }] } } }
+    }.freeze
 
     # defines special api gates to be used per type.
-    # if not defined it simply uses +[:core,self.type]+
+    # if no special type is defined, it simply uses +[:core,self.type]+
     GATES = {
       TYPE_SQL          => [:sql, :query],
       TYPE_INDEX_CREATE => [:indices, :create],
-    }
+    }.freeze
 
     # defines the index the query should be executed on
     # @!attribute String
@@ -112,10 +120,10 @@ module ElasticsearchRecord
     end
 
     # returns the query body - depends on the +status+!
-    # failed queried will return the +FAILED_SEARCH_BODY+
+    # failed queried will return the related +FAILED_BODIES+ or +{}+ as fallback
     # @return [Hash, nil]
     def body
-      return FAILED_SEARCH_BODY if self.status == STATUS_FAILED
+      return (FAILED_BODIES[self.type].presence || {}) if self.status == STATUS_FAILED
 
       @body
     end

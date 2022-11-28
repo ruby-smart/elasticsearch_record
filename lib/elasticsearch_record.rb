@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# VERSION
 require_relative 'elasticsearch_record/version'
+require_relative "elasticsearch_record/errors"
 
 require 'active_record'
 

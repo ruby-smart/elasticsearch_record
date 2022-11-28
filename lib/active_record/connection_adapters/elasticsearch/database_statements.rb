@@ -83,17 +83,22 @@ module ActiveRecord
         # [<tt>:force</tt>]
         #   Set to +true+ to drop an existing table
         #   Defaults to false.
-        # [<tt>:copy</tt>]
+        # [<tt>:copy_from</tt>]
         #   Set to an existing index, to copy it's schema.
+        # [<tt>:if_not_exists</tt>]
+        #   Set to +true+ to skip creation if table already exists.
+        #   Defaults to false.
         # @param [String] table_name
         # @param [Boolean] force - force a drop on the existing table (default: false)
         # @param [nil, String] copy_from - copy schema from existing table
         # @param [Hash] options
         # @return [Boolean] acknowledged status
-        def create_table(table_name, force: false, copy_from: nil, **options)
+        def create_table(table_name, force: false, copy_from: nil, if_not_exists: false, **options)
+          return if if_not_exists && table_exists?(table_name)
+
           options.merge!(table_schema(copy_from)) if copy_from
 
-          # drop_invalid: automatically drops invalid settings, mappings & aliases
+          # automatically drops invalid settings, mappings & aliases
           td = create_table_definition(table_name, **extract_table_options!(options))
 
           yield td if block_given?

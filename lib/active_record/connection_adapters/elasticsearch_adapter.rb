@@ -45,10 +45,10 @@ module ActiveRecord # :nodoc:
 
       # defines the Elasticsearch 'base' structure, which is always included but cannot be resolved through mappings ...
       BASE_STRUCTURE = [
-        { 'name' => '_id', 'type' => 'keyword', 'null' => false, 'primary' => true },
-        { 'name' => '_index', 'type' => 'keyword', 'null' => false, 'virtual' => true },
-        { 'name' => '_score', 'type' => 'float', 'null' => false, 'virtual' => true },
-        { 'name' => '_type', 'type' => 'keyword', 'null' => false, 'virtual' => true }
+        { 'name' => '_id', 'type' => 'keyword', 'virtual' => true, 'meta' => { 'primary_key' => 'true' } },
+        { 'name' => '_index', 'type' => 'keyword', 'virtual' => true },
+        { 'name' => '_score', 'type' => 'float', 'virtual' => true },
+        { 'name' => '_type', 'type' => 'keyword', 'virtual' => true }
       ].freeze
 
       include Elasticsearch::Quoting
@@ -64,8 +64,10 @@ module ActiveRecord # :nodoc:
         def new_client(config)
           # IMPORTANT: remove +adapter+ from config - otherwise we mess up with Faraday::AdapterRegistry
           client = ::Elasticsearch::Client.new(config.except(:adapter))
-          client.ping
+          client.ping unless config[:ping] == false
           client
+        rescue ::Elastic::Transport::Transport::Errors::Unauthorized
+          raise ActiveRecord::DatabaseConnectionError.username_error(config[:username])
         rescue ::Elastic::Transport::Transport::ServerError => error
           raise ::ActiveRecord::ConnectionNotEstablished, error.message
         end
@@ -165,14 +167,16 @@ module ActiveRecord # :nodoc:
         false
       end
 
-      # Does this adapter support metadata comments on database objects (tables, columns, indexes)?
-      # toDo: fixme
+      # Does this adapter support metadata comments on database objects (tables)?
+      # PLEASE NOTE: Elasticsearch does only support comments on mappings as 'meta' information.
+      # This method only relies to create comments on tables (indices) and is therefore not supported.
+      # see @ ActiveRecord::ConnectionAdapters::SchemaStatements#create_table
       def supports_comments?
         false
       end
 
       # Can comments for tables, columns, and indexes be specified in create/alter table statements?
-      # toDo: fixme
+      # see @ ActiveRecord::ConnectionAdapters::ElasticsearchAdapter#supports_comments?
       def supports_comments_in_create?
         false
       end
@@ -185,9 +189,9 @@ module ActiveRecord # :nodoc:
 
       # temporary workaround
       # toDo: fixme
-      def schema_migration # :nodoc:
-        @schema_migration ||= ElasticsearchRecord::SchemaMigration
-      end
+      # def schema_migration # :nodoc:
+      #   @schema_migration ||= ElasticsearchRecord::SchemaMigration
+      # end
 
       def native_database_types # :nodoc:
         NATIVE_DATABASE_TYPES
@@ -235,7 +239,22 @@ module ActiveRecord # :nodoc:
       # catch Elasticsearch Transport-errors to be treated as +StatementInvalid+ (the original message is still readable ...)
       def translate_exception(exception, message:, sql:, binds:)
         case exception
-        when Elastic::Transport::Transport::ServerError
+        when ::Elastic::Transport::Transport::Errors::ClientClosedRequest
+          ::ActiveRecord::QueryCanceled.new(message, sql: sql, binds: binds)
+        when ::Elastic::Transport::Transport::Errors::RequestTimeout
+          ::ActiveRecord::StatementTimeout.new(message, sql: sql, binds: binds)
+        when ::Elastic::Transport::Transport::Errors::Conflict
+          ::ActiveRecord::RecordNotUnique.new(message, sql: sql, binds: binds)
+        when ::Elastic::Transport::Transport::Errors::BadRequest
+          if exception.message.match?(/resource_already_exists_exception/)
+            ::ActiveRecord::DatabaseAlreadyExists.new(message, sql: sql, binds: binds)
+          else
+            ::ActiveRecord::StatementInvalid.new(message, sql: sql, binds: binds)
+          end
+        when ::Elastic::Transport::Transport::Errors::Unauthorized
+          ::ActiveRecord::DatabaseConnectionError.username_error(@config[:username])
+          # must be last 'Elastic' error
+        when ::Elastic::Transport::Transport::ServerError
           ::ActiveRecord::StatementInvalid.new(message, sql: sql, binds: binds)
         else
           # just forward the exception ...

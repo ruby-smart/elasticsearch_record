@@ -10,8 +10,10 @@ module ElasticsearchRecord
         # values is not a "key=>values"-Hash, but a +ActiveModel::Attribute+ - so we need to resolve the casted values here
         values = values.transform_values(&:value)
 
-        # if a primary_key (+_id+) was provided, we need to extract this and allocate this to the arguments
-        arguments = if (id = values.delete(self.primary_key)).present?
+        # if a primary_key (e.g. +_id+) was provided, we need to extract this and allocate this to the arguments
+        arguments = if self.primary_key == '_id' && (id = values.delete(self.primary_key)).present?
+                      { id: id }
+                    elsif (id = values[self.primary_key]).present?
                       { id: id }
                     else
                       {}
@@ -25,13 +27,8 @@ module ElasticsearchRecord
           arguments: arguments,
           refresh:   true)
 
-        # execute query and build a RAW response
-        response = connection.exec_query(query, "#{self} Create").response
-
-        raise RecordNotSaved unless response['result'] == 'created'
-
-        # return the new id
-        response['_id']
+        # execute query and return inserted id
+        connection.insert(query, "#{self} Create")
       end
 
       # updates a persistent entry in the Elasticsearch index
@@ -45,16 +42,11 @@ module ElasticsearchRecord
           index:     table_name,
           type:      ElasticsearchRecord::Query::TYPE_UPDATE,
           body:      { doc: values },
-          arguments: { id: constraints['_id'] },
+          arguments: { id: constraints[self.primary_key] },
           refresh:   true)
 
-        # execute query and build a RAW response
-        response = connection.exec_query(query, "#{self} Update").response
-
-        raise RecordNotSaved unless response['result'] == 'updated'
-
-        # return affected rows
-        response['_shards']['total']
+        # execute query and return total updates
+        connection.update(query, "#{self} Update")
       end
 
       # removes a persistent entry from the Elasticsearch index
@@ -67,13 +59,8 @@ module ElasticsearchRecord
           arguments: { id: constraints[self.primary_key] },
           refresh:   true)
 
-        # execute query and build a RAW response
-        response = connection.exec_query(query, "#{self} Destroy").response
-
-        raise RecordNotDestroyed unless response['result'] == 'deleted'
-
-        # return affected rows
-        response['_shards']['total']
+        # execute query and return total deletes
+        connection.delete(query, "#{self} Delete")
       end
     end
   end

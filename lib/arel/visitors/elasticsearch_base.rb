@@ -130,7 +130,7 @@ module Arel # :nodoc: all
 
           # assign nested args
           @nested_args.each do |nested_args|
-            # ARRAY assignment
+            # parent node +args+ is split into +key+ (0) & +value+ (1)
             case value
             when Array
               if nested_args[0].is_a?(Array)
@@ -171,6 +171,8 @@ module Arel # :nodoc: all
               else
                 value = value + nested_args[0].to_s
               end
+              # reassign value to args, since string is not a referenced object
+              args[1] = value
             else
               value = nested_args[0] unless nested_args.blank?
             end

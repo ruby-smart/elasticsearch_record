@@ -18,6 +18,10 @@ module ActiveRecord
         # Note: depending on your database connector, the result returned by this
         # method may be manually memory managed. Consider using the exec_query
         # wrapper instead.
+        # @param [ElasticsearchRecord::Query] query
+        # @param [String (frozen)] name
+        # @param [Boolean] async
+        # @return [ElasticsearchRecord::Result]
         def execute(query, name = nil, async: false)
           # validate the query
           raise ActiveRecord::StatementInvalid, 'Unable to execute! Provided query is not a "ElasticsearchRecord::Query".' unless query.is_a?(ElasticsearchRecord::Query)
@@ -46,17 +50,15 @@ module ActiveRecord
         # Executes insert +query+ statement in the context of this connection using
         # +binds+ as the bind substitutes. +name+ is logged along with
         # the executed +query+ arguments.
+        # @return [ElasticsearchRecord::Result]
         def exec_insert(query, name = nil, binds = [], _pk = nil, _sequence_name = nil)
-          exec_query(query, name, binds)
-        end
+          result = exec_query(query, name, binds)
 
-        # Executes delete +query+ statement in the context of this connection using
-        # +binds+ as the bind substitutes. +name+ is logged along with
-        # the executed +query+ arguments.
-        # expects a integer as return.
-        # @return [Integer]
-        def exec_delete(query, name = nil, binds = [])
-          exec_query(query, name, binds).total
+          # fetch additional Elasticsearch response result
+          # raise ::ElasticsearchRecord::ResponseResultError.new('created', result.result) unless result.result == 'created'
+
+          # return the result object
+          result
         end
 
         # Executes update +query+ statement in the context of this connection using
@@ -65,7 +67,26 @@ module ActiveRecord
         # expects a integer as return.
         # @return [Integer]
         def exec_update(query, name = nil, binds = [])
-          exec_query(query, name, binds).total
+          result = exec_query(query, name, binds)
+
+          # fetch additional Elasticsearch response result
+          # raise ::ElasticsearchRecord::ResponseResultError.new('updated', result.result) unless result.result == 'updated'
+
+          result.total
+        end
+
+        # Executes delete +query+ statement in the context of this connection using
+        # +binds+ as the bind substitutes. +name+ is logged along with
+        # the executed +query+ arguments.
+        # expects a integer as return.
+        # @return [Integer]
+        def exec_delete(query, name = nil, binds = [])
+          result = exec_query(query, name, binds)
+
+          # fetch additional Elasticsearch response result
+          # raise ::ElasticsearchRecord::ResponseResultError.new('deleted', result.result) unless result.result == 'deleted'
+
+          result.total
         end
 
         # executes a msearch for provided arels
@@ -93,9 +114,16 @@ module ActiveRecord
             index:     query.index,
             type:      ElasticsearchRecord::Query::TYPE_COUNT,
             body:      query.body,
+            status:    query.status,
             arguments: query.arguments)
 
           exec_query(query, name, async: async).response['count']
+        end
+
+        # returns the last inserted id from the result.
+        # called through +#insert+
+        def last_inserted_id(result)
+          result.response['_id']
         end
       end
     end

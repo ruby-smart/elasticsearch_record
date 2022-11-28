@@ -7,11 +7,11 @@ module ActiveRecord
 
         attr_reader :virtual, :fields, :properties
 
-        def initialize(name, default, sql_type_metadata = nil, null = true, default_function = nil, **kwargs)
+        def initialize(name, default, sql_type_metadata = nil, **kwargs)
           @virtual    = kwargs.delete(:virtual)
           @fields     = kwargs.delete(:fields)
           @properties = kwargs.delete(:properties)
-          super(name, default, sql_type_metadata, null, default_function, **kwargs)
+          super(name, default, sql_type_metadata, true, nil, **kwargs)
         end
 
         # returns true if this column is virtual.

@@ -13,24 +13,27 @@ module ActiveRecord
             self.table_name = table
 
             schema     = @connection.table_schema(table)
-            definition = @connection.create_table_definition(table, drop_invalid: true, **schema)
+            definition = @connection.create_table_definition(table, **schema)
 
             # resolve string printer
             tbl = StringIO.new
 
             tbl.print "  create_table #{remove_prefix_and_suffix(table).inspect}"
-            tbl.puts ", force: true do |t|"
+            tbl.print ", force: true do |t|"
 
             # ALIASES
             if (aliases = definition.aliases).present?
+              tbl.puts
+
               aliases.each do |tbl_alias|
                 tbl.puts "    t.alias #{tbl_alias.name.inspect}, #{format_attribute(tbl_alias.attributes)}"
               end
-              tbl.puts
             end
 
             # MAPPINGS
             if (mappings = definition.mappings).present?
+              tbl.puts
+
               mappings.each do |mapping|
                 tbl.print "    t.mapping #{mapping.name.inspect}, :#{mapping.type}"
 
@@ -49,11 +52,12 @@ module ActiveRecord
                 end
                 tbl.puts
               end
-              tbl.puts
             end
 
             # SETTINGS
             if (settings = definition.settings).present?
+              tbl.puts
+
               settings.each do |setting|
                 tbl.print "    t.setting #{setting.name.inspect}"
 
@@ -70,7 +74,6 @@ module ActiveRecord
                 end
                 tbl.puts
               end
-              tbl.puts
             end
 
             tbl.puts "  end"

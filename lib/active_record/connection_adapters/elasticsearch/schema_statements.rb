@@ -11,11 +11,11 @@ module ActiveRecord
           $stdout.puts "\n>>> 'create_table' elasticsearch is not supported - the following message is insignificant!"
         end
 
-        # temporary workaround
-        # toDo: fixme
-        def assume_migrated_upto_version(version)
-          $stdout.puts "\n>>> 'assume_migrated_upto_version' elasticsearch is not supported - the following message is insignificant!"
-        end
+        # # temporary workaround
+        # # toDo: fixme
+        # def assume_migrated_upto_version(version)
+        #   $stdout.puts "\n>>> 'assume_migrated_upto_version' elasticsearch is not supported - the following message is insignificant!"
+        # end
 
         # ALWAYS returns an empty array, since elasticsearch does not support individual indexes...
         def indexes(_table_name)
@@ -60,7 +60,7 @@ module ActiveRecord
             settings: table_settings(table_name),
             mappings: table_mappings(table_name),
             aliases:  table_aliases(table_name)
-          }.reject { |_key, value| value.blank? }
+          }.compact_blank
         end
 
         # Returns the list of a table's column names, data types, and default values.
@@ -73,7 +73,7 @@ module ActiveRecord
 
           # prevent exceptions on missing mappings, to provide the possibility to create them
           # otherwise loading the table (index) will always fail!
-          mappings = {'properties' => {}} if mappings.blank? || mappings['properties'].blank?
+          mappings = { 'properties' => {} } if mappings.blank? || mappings['properties'].blank?
           # raise(ActiveRecord::StatementInvalid, "Could not find valid mappings for '#{table_name}'") if mappings.blank? || mappings['properties'].blank?
 
           # since the received mappings do not have the "primary" +_id+-column we manually need to add this here
@@ -101,9 +101,7 @@ module ActiveRecord
             field["name"],
             field["null_value"],
             fetch_type_metadata(field["type"]),
-            field['null'].nil? ? true : field['null'], # HINT: +null+ is not supported by elasticsearch, but we have to check this for the +BASE_STRUCTURE+.
-            nil,
-            comment:    field['meta'] ? field['meta'].map { |k, v| "#{k}: #{v}" }.join(' | ') : nil,
+            comment:    ((field['meta'] && field['meta']['comment']) ? field['meta']['comment'] : nil),
             virtual:    field['virtual'],
             fields:     field['fields'],
             properties: field['properties']
@@ -122,14 +120,15 @@ module ActiveRecord
         # Returns a array of tables primary keys.
         # PLEASE NOTE: Elasticsearch does not have a concept of primary key.
         # The only thing that uniquely identifies a document is the index together with the +_id+.
-        # To not break the "ConnectionAdapters" concept we simulate this through the BASE_STRUCTURE.
-        # We know, we can just return '_id' here ...
+        # To not break the "ConnectionAdapters" concept we simulate this through the +meta+ attribute.
         # @see ActiveRecord::ConnectionAdapters::AbstractMysqlAdapter#primary_keys
-        # @param [String] _table_name
-        def primary_keys(_table_name)
-          ActiveRecord::ConnectionAdapters::ElasticsearchAdapter::BASE_STRUCTURE
-            .select { |f| f["primary"] }
-            .map { |f| f["name"] }
+        # @param [String] table_name
+        def primary_keys(table_name)
+          column_definitions(table_name)
+          # ActiveRecord::ConnectionAdapters::ElasticsearchAdapter::BASE_STRUCTURE
+            .select { |f| f['meta'] && f['meta']['primary_key'] == 'true' }
+            # only take the last found primary key (if no custom primary_key was provided this will return +_id+ )
+            .map { |f| f["name"] }[-1..-1]
         end
 
         # Checks to see if the data source +name+ exists on the database.

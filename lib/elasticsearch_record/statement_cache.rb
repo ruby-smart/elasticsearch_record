@@ -37,7 +37,8 @@ module ElasticsearchRecord
           if ActiveModel::Attribute === value
             value = value.value_for_database
           end
-          connection.quote(value)
+          value
+          # connection.quote(value)
         elsif thing.is_a?(Hash)
           thing.transform_values { |val|
             deep_substitute_binds(val, binds, connection)

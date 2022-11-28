@@ -1,9 +1,13 @@
 # frozen_string_literal: true
 
+require 'active_record/connection_adapters/elasticsearch/schema_definitions/validation_methods'
+
 module ActiveRecord
   module ConnectionAdapters
     module Elasticsearch
       class TableSettingDefinition
+        include ValidationMethods
+
         # exclude settings, that are provided through the API but are not part of the index-settings
         INVALID_NAMES = [:provided_name, :creation_date, :uuid, :version].freeze
 
@@ -30,14 +34,9 @@ module ActiveRecord
           DYNAMIC_NAMES.include?(name)
         end
 
-        def valid?
-          validate! if @_valid.nil?
-
-          @_valid
-        end
-
         private
 
+        # validate this mapping through the +#validate?+ method.
         def validate!
           # @_valid = NAMES.include?(name)
           @_valid = true

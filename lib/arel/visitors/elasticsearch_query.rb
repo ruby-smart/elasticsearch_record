@@ -43,7 +43,7 @@ module Arel # :nodoc: all
         assign(:script, {}) do
           assign(:inline, "") do
             updates = collect(o.values)
-            assign(updates.join('; ')) if updates
+            assign(updates.join('; ')) if updates.present?
           end
         end
 
@@ -86,12 +86,20 @@ module Arel # :nodoc: all
 
       # INSERT
       def visit_Arel_Nodes_InsertStatement(o)
+
         # switch between updating a single Record or multiple by query
         if o.relation.is_a?(::Arel::Table)
-          raise NotImplementedError, "if you've made it this far, something went wrong ..."
-        end
+          # prepare query
+          claim(:type, ::ElasticsearchRecord::Query::TYPE_CREATE)
 
-        raise NotImplementedError
+          # sets the index
+          resolve(o.relation)
+
+          # sets create arguments
+          resolve(o, :visit_Create)
+        else
+          raise NotImplementedError
+        end
       end
 
       ##############################
@@ -184,6 +192,17 @@ module Arel # :nodoc: all
           assign(:_source, fields)
           # also overwrite the columns in the query
           claim(:columns, fields)
+        end
+      end
+
+      # CUSTOM node by elasticsearch_record
+      def visit_Create(o)
+        # sets values
+        if o.values
+          values = collect(o.values) # visit_Arel_Nodes_ValuesList
+          claim(:body, values) if values.present?
+        else
+          failed!
         end
       end
 
@@ -304,23 +323,10 @@ module Arel # :nodoc: all
         end
       end
 
-      # SUB-ASSIGNMENT (e.g. used for AND / OR conditions)
+      # DIRECT FAIL
       def visit_Arel_Nodes_Grouping(o)
-        if o.expr.is_a? Nodes::Grouping
-          visit(o.expr)
-        else
-          # seems strange, but has a special behaviour:
-          # nil tells the assignment to use it's value (Hash) for direct assignment instead of the key ...
-          assign(nil, {}) do
-            assign(:bool, {}) do
-              value = visit(o.expr)
-              return failed! if unboundable?(value) || invalid?(value)
-
-              # fallback, if nothing was assigned but returned
-              assign(value) unless value.blank?
-            end
-          end
-        end
+        # grouping is NOT supported and will force to fail the query
+        failed!
       end
 
       # DIRECT ASSIGNMENT
@@ -352,36 +358,38 @@ module Arel # :nodoc: all
         collect(o.children)
       end
 
-      def visit_Arel_Nodes_Or(o)
-        # If the bool query includes at least one should clause and no must or filter clauses, the default value is 1.
-        # Otherwise, the default value is 0.
-        assign(:should, []) do
-          stack = [o.right, o.left]
-
-          while o = stack.pop
-            if o.is_a?(Arel::Nodes::Or)
-              stack.push o.right, o.left
-            elsif o.is_a?(ElasticsearchRecord::Relation::QueryClause)
-              assign(visit(o.ast[1]))
-            else
-              visit o
-            end
-          end
-        end
-      end
+      # # toDo: doesn't work properly - maybe restructure OR-assignments
+      # def visit_Arel_Nodes_Or(o)
+      #   # If the bool query includes at least one should clause and no must or filter clauses, the default value is 1.
+      #   # Otherwise, the default value is 0.
+      #   assign(:should, []) do
+      #     assign(nil, {}) do
+      #
+      #     stack = [o.right, o.left]
+      #
+      #     while o = stack.pop
+      #       if o.is_a?(Arel::Nodes::Or)
+      #         stack.push o.right, o.left
+      #       elsif o.is_a?(ElasticsearchRecord::Relation::QueryClause)
+      #         assign(visit(o.ast[1]))
+      #       else
+      #         visit o
+      #       end
+      #     end
+      #   end
+      #   end
+      # end
 
       def visit_Arel_Nodes_JoinSource(o)
-        sources = []
-        sources << visit(o.left) if o.left
-        sources += collect(o.right) if o.right
-
-        claim(:index, sources.join(', '))
+        visit(o.left) if o.left
+        raise ActiveRecord::StatementInvalid, "table joins are not supported (#{o.right})" if o.right.any?
       end
 
       def visit_Arel_Table(o)
         raise ActiveRecord::StatementInvalid, "table alias are not supported (#{o.table_alias})" if o.table_alias
 
-        o.name
+        # set's the index name to be queried
+        claim(:index, o.name)
       end
 
       def visit_Struct_Raw(o)
@@ -393,6 +401,19 @@ module Arel # :nodoc: all
       alias :visit_NilClass :visit_Struct_Raw
       alias :visit_String :visit_Struct_Raw
       alias :visit_Arel_Nodes_SqlLiteral :visit_Struct_Raw
+
+
+      # used by insert / update statements.
+      # does not claim / assign any values!
+      # returns a Hash of key => value pairs
+      def visit_Arel_Nodes_ValuesList(o)
+        o.rows.reduce({}) do |m, row|
+          row.each do |attr|
+            m[visit(attr.name)] = visit(attr.value)
+          end
+          m
+        end
+      end
 
       def visit_Struct_Value(o)
         o.value

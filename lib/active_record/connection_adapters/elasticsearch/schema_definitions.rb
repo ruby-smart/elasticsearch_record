@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'active_record/connection_adapters/elasticsearch/schema_definitions/column_methods'
+require 'active_record/connection_adapters/elasticsearch/schema_definitions/validation_methods'
 require 'active_record/connection_adapters/elasticsearch/schema_definitions/table'
 require 'active_record/connection_adapters/elasticsearch/schema_definitions/table_alias_definition'
 require 'active_record/connection_adapters/elasticsearch/schema_definitions/table_definition'
