@@ -13,6 +13,12 @@ module ActiveRecord
                                 :half_float, :scaled_float, :unsigned_long, :date, :object, :flattened, :nested,
                                 :integer_range, :float_range, :long_range, :double_range, :date_range, :ip_range,
                                 :ip, :version, :text
+
+          # Appends a primary key definition to the table definition.
+          # Can be called multiple times, but this is probably not a good idea.
+          def primary_key(name, type = :primary_key, **options)
+            column(name, type, **options.merge(primary_key: true))
+          end
         end
 
         class_methods do

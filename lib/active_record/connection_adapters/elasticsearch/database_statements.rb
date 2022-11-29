@@ -3,113 +3,162 @@
 module ActiveRecord
   module ConnectionAdapters
     module Elasticsearch
+      # extend adapter with query-related statements
+      #
+      # *ORIGINAL* methods untouched:
+      # - to_sql
+      # - to_sql_and_binds
+      # - insert
+      # - create
+      # - update
+      # - delete
+      # - arel_from_relation
+      #
+      # *SUPPORTED* but not used:
+      # - select
+      # - select_all
+      # - select_one
+      # - select_value
+      # - select_values
+      #
+      # *UNSUPPORTED* methods that will be +ignored+:
+      # - build_fixture_sql
+      # - build_fixture_statements
+      # - build_truncate_statement
+      # - build_truncate_statements
+      #
+      # *UNSUPPORTED* methods that will +fail+:
+      # - insert_fixture
+      # - insert_fixtures_set
+      # - execute_batch
+      # - select_prepared
+      # - combine_multi_statements
+      #
       module DatabaseStatements
+        extend ActiveSupport::Concern
 
-        # upcoming:
-        # - clone (option -> close, or read-only (#lock / unlock) )
-        # - refresh
+        included do
+          define_unsupported_method :insert_fixture, :insert_fixtures_set, :execute_batch, :select_prepared,
+                                    :combine_multi_statements
 
-        # Opens a closed index.
-        # @param [String] table_name
-        # @return [Boolean] acknowledged status
-        def open_table(table_name)
-          schema_cache.clear_data_source_cache!(table_name.to_s)
-          api(:indices, :open, {index: table_name }, 'OPEN TABLE').dig('acknowledged')
-        end
-
-        # Opens closed indices.
-        # @param [Array] table_names
-        # @return [Array] acknowledged status for each provided table
-        def open_tables(*table_names)
-          table_names -= [schema_migration.table_name, InternalMetadata.table_name]
-          return if table_names.empty?
-
-          table_names.map { |table_name| open_table(table_name) }
-        end
-
-        # Closes an index.
-        # @param [String] table_name
-        # @return [Boolean] acknowledged status
-        def close_table(table_name)
-          schema_cache.clear_data_source_cache!(table_name.to_s)
-          api(:indices, :close, {index: table_name }, 'CLOSE TABLE').dig('acknowledged')
-        end
-
-        # Closes indices by provided names.
-        # @param [Array] table_names
-        # @return [Array] acknowledged status for each provided table
-        def close_tables(*table_names)
-          table_names -= [schema_migration.table_name, InternalMetadata.table_name]
-          return if table_names.empty?
-
-          table_names.map { |table_name| close_table(table_name) }
-        end
-
-        # truncates index by provided name.
-        # HINT: Elasticsearch does not have a +truncate+ concept:
-        # - so we have to store the current index' schema
-        # - drop the index
-        # - and create it again
-        # @param [String] table_name
-        # @return [Boolean] acknowledged status
-        def truncate_table(table_name)
-          # force: automatically drops an existing index
-          create_table(table_name, force: true, **table_schema(table_name))
-        end
-
-        # truncate indices by provided names.
-        # @param [Array] table_names
-        # @return [Array] acknowledged status for each provided table
-        def truncate_tables(*table_names)
-          table_names -= [schema_migration.table_name, InternalMetadata.table_name]
-          return if table_names.empty?
-
-          table_names.map { |table_name| truncate_table(table_name) }
-        end
-
-        # drops an index
-        # [<tt>:if_exists</tt>]
-        #   Set to +true+ to only drop the table if it exists.
-        #   Defaults to false.
-        # @param [String] table_name
-        # @param [Hash] options
-        # @return [Array] acknowledged status for provided table
-        def drop_table(table_name, **options)
-          schema_cache.clear_data_source_cache!(table_name.to_s)
-          api(:indices, :delete, {index: table_name, ignore: (options[:if_exists] ? 404 : nil) }, 'DROP TABLE').dig('acknowledged')
-        end
-
-        # creates a new index.
-        # [<tt>:force</tt>]
-        #   Set to +true+ to drop an existing table
-        #   Defaults to false.
-        # [<tt>:copy_from</tt>]
-        #   Set to an existing index, to copy it's schema.
-        # [<tt>:if_not_exists</tt>]
-        #   Set to +true+ to skip creation if table already exists.
-        #   Defaults to false.
-        # @param [String] table_name
-        # @param [Boolean] force - force a drop on the existing table (default: false)
-        # @param [nil, String] copy_from - copy schema from existing table
-        # @param [Hash] options
-        # @return [Boolean] acknowledged status
-        def create_table(table_name, force: false, copy_from: nil, if_not_exists: false, **options)
-          return if if_not_exists && table_exists?(table_name)
-
-          options.merge!(table_schema(copy_from)) if copy_from
-
-          # automatically drops invalid settings, mappings & aliases
-          td = create_table_definition(table_name, **extract_table_options!(options))
-
-          yield td if block_given?
-
-          if force
-            drop_table(table_name, if_exists: true)
-          else
-            schema_cache.clear_data_source_cache!(table_name.to_s)
+          # detects if a query is a write query.
+          # since we don't provide a simple string / hash we can now access the query-object and ask for it :)
+          # @see ActiveRecord::ConnectionAdapters::DatabaseStatements#write_query?
+          # @param [ElasticsearchRecord::Query] query
+          # @return [Boolean]
+          def write_query?(query)
+            query.write?
           end
 
-          execute(schema_creation.accept(td), 'CREATE TABLE').dig('acknowledged')
+          # Executes the query object in the context of this connection and returns the raw result
+          # from the connection adapter.
+          # @param [ElasticsearchRecord::Query] query
+          # @param [String (frozen)] name
+          # @param [Boolean] async
+          # @return [ElasticsearchRecord::Result]
+          def execute(query, name = nil, async: false)
+            # validate the query
+            raise ActiveRecord::StatementInvalid, 'Unable to execute! Provided query is not a "ElasticsearchRecord::Query".' unless query.is_a?(ElasticsearchRecord::Query)
+            raise ActiveRecord::StatementInvalid, 'Unable to execute! Provided query is invalid.' unless query.valid?
+
+            # checks for write query - raises an exception if connection is locked to readonly ...
+            check_if_write_query(query)
+
+            api(*query.gate, query.query_arguments, name, async: async)
+          end
+
+          # gets called for all queries - a +ElasticsearchRecord::Query+ must be provided.
+          # @param [ElasticsearchRecord::Query] query
+          # @param [String (frozen)] name
+          # @param [Array] binds - not supported on the top-level and therefore ignored!
+          # @param [Boolean] prepare - used by the default AbstractAdapter - but not supported and therefore never ignored!
+          # @param [Boolean] async
+          # @return [ElasticsearchRecord::Result]
+          def exec_query(query, name = "QUERY", binds = [], prepare: false, async: false)
+            build_result(
+              execute(query, name, async: async),
+              columns: query.columns
+            )
+          end
+
+          # Executes insert +query+ statement in the context of this connection using
+          # +binds+ as the bind substitutes. +name+ is logged along with
+          # the executed +query+ arguments.
+          # @return [ElasticsearchRecord::Result]
+          def exec_insert(query, name = nil, binds = [], _pk = nil, _sequence_name = nil)
+            result = exec_query(query, name, binds)
+
+            # fetch additional Elasticsearch response result
+            # raise ::ElasticsearchRecord::ResponseResultError.new('created', result.result) unless result.result == 'created'
+
+            # return the result object
+            result
+          end
+
+          # Executes update +query+ statement in the context of this connection using
+          # +binds+ as the bind substitutes. +name+ is logged along with
+          # the executed +query+ arguments.
+          # expects a integer as return.
+          # @return [Integer]
+          def exec_update(query, name = nil, binds = [])
+            result = exec_query(query, name, binds)
+
+            # fetch additional Elasticsearch response result
+            # raise ::ElasticsearchRecord::ResponseResultError.new('updated', result.result) unless result.result == 'updated'
+
+            result.total
+          end
+
+          # Executes delete +query+ statement in the context of this connection using
+          # +binds+ as the bind substitutes. +name+ is logged along with
+          # the executed +query+ arguments.
+          # expects a integer as return.
+          # @return [Integer]
+          def exec_delete(query, name = nil, binds = [])
+            result = exec_query(query, name, binds)
+
+            # fetch additional Elasticsearch response result
+            # raise ::ElasticsearchRecord::ResponseResultError.new('deleted', result.result) unless result.result == 'deleted'
+
+            result.total
+          end
+
+          # executes a msearch for provided arels
+          # @return [ElasticsearchRecord::Result]
+          def select_multiple(arels, name = "Multi", async: false)
+            # transform arels to query objects
+            queries = arels.map { |arel| to_sql(arel_from_relation(arel)) }
+
+            # build new msearch query
+            query = ElasticsearchRecord::Query.new(
+              index: queries.first&.index,
+              type:  ElasticsearchRecord::Query::TYPE_MSEARCH,
+              body:  queries.map { |q| { search: q.body } })
+
+            exec_query(query, name, async: async)
+          end
+
+          # executes a count query for provided arel
+          # @return [Integer]
+          def select_count(arel, name = "Count", async: false)
+            query = to_sql(arel_from_relation(arel))
+
+            # build new count query from existing query
+            query = ElasticsearchRecord::Query.new(
+              index:     query.index,
+              type:      ElasticsearchRecord::Query::TYPE_COUNT,
+              body:      query.body,
+              status:    query.status,
+              arguments: query.arguments)
+
+            exec_query(query, name, async: async).response['count']
+          end
+
+          # returns the last inserted id from the result.
+          # called through +#insert+
+          def last_inserted_id(result)
+            result.response['_id']
+          end
         end
       end
     end

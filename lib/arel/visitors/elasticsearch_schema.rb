@@ -6,7 +6,7 @@ module Arel # :nodoc: all
       extend ActiveSupport::Concern
 
       included do
-        delegate :quote_column_name, :quote_table_name, :quote_default_expression,
+        delegate :type_to_sql,
                  to: :connection, private: true
       end
 
@@ -16,7 +16,7 @@ module Arel # :nodoc: all
       # SCHEMA VISITS #
       #################
 
-      def visit_TableDefinition(o)
+      def visit_CreateTableDefinition(o)
         # prepare query
         claim(:type, ::ElasticsearchRecord::Query::TYPE_INDEX_CREATE)
 
@@ -32,6 +32,34 @@ module Arel # :nodoc: all
         # sets aliases
         resolve(o, :visit_TableAliases) if o.aliases.present?
       end
+
+      def visit_CompositeUpdateTableDefinition(o)
+        # set the name of the index
+        claim(:index, visit(o.name))
+
+        # prepare definition
+        visit(o.definition)
+      end
+
+      # def visit_AlterTable(o)
+      #   # set the name of the index
+      #   claim(:index, visit(o.name))
+      #
+      #   return failed! unless o.definition.present?
+      #
+      #   resolve(o.definition) # visit_AddMappingDefinition, visit_AddSettingDefinition
+      #
+      # end
+
+      def visit_AddMappingDefinition(o)
+        # prepare query
+        claim(:type, ::ElasticsearchRecord::Query::TYPE_INDEX_PUT_MAPPING)
+
+        assign(:properties, {}) do
+          resolve(o.mappings, :visit_TableMappingDefinition)
+        end
+      end
+
 
       def visit_TableSettings(o)
         assign(:settings, {}) do
@@ -58,7 +86,7 @@ module Arel # :nodoc: all
       end
 
       def visit_TableMappingDefinition(o)
-        assign(o.name, o.attributes.merge({type: o.type}))
+        assign(o.name, o.attributes.merge({type: type_to_sql(o.type)}))
       end
 
       def visit_TableAliasDefinition(o)

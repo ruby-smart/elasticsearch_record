@@ -1,12 +1,14 @@
 # frozen_string_literal: true
 
-require 'active_record/connection_adapters/elasticsearch/schema_definitions/validation_methods'
+require 'active_record/connection_adapters/elasticsearch/schema_definitions/attribute_methods'
+require 'active_model/validations'
 
 module ActiveRecord
   module ConnectionAdapters
     module Elasticsearch
       class TableMappingDefinition
-        include ValidationMethods
+        include AttributeMethods
+        include ActiveModel::Validations
 
         # available mapping properties
         # - see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-params.html
@@ -15,22 +17,18 @@ module ActiveRecord
                       :index_prefixes, :index, :meta, :normalizer, :norms, :null_value, :position_increment_gap,
                       :properties, :search_analyzer, :similarity, :subobjects, :store, :term_vector].freeze
 
+        build_attribute_methods! *ATTRIBUTES
+
+        # attributes
         attr_accessor :name
         attr_accessor :type
         attr_accessor :attributes
 
-        # build attribute related instance methods
-        ATTRIBUTES.each do |param_name|
-          class_eval <<-CODE, __FILE__, __LINE__ + 1
-          def #{param_name}
-            @attributes[:#{param_name}]
-          end
-
-          def #{param_name}=(value)
-            @attributes[:#{param_name}] = value
-          end
-          CODE
-        end
+        # validations
+        validates_presence_of :name
+        validates_presence_of :type
+        validates_inclusion_of :__attributes_keys, in: ATTRIBUTES, allow_blank: true
+        validate :_validate_meta
 
         # sets the default value (alias for null_value)
         alias_method :default=, :null_value=
@@ -43,92 +41,59 @@ module ActiveRecord
         def initialize(name, type, attributes)
           @name       = name.to_sym
           @attributes = {}
-          @type       = nil
+          __assign(attributes)
 
-          # IMPORTANT: must be set before setting the type!
-          _assign_attributes(attributes)
-          _assign_type(type)
+          @type = _resolve_type(type)
         end
 
+        # comment is handled as nested key from 'meta' attribute
         def comment
-          _nested_get(:meta, 'comment')
+          __get_nested(:meta, :comment)
         end
 
         def comment=(value)
           # important: meta-values can only be strings!
-          _nested_set(:meta, 'comment', value.to_s)
+          __set_nested(:meta, :comment, value.to_s)
         end
 
-        # backwards compatibility
         def primary_key
-          _nested_get(:meta, 'primary_key')
+          __get_nested(:meta, :primary_key) == 'true'
         end
 
         alias_method :primary_key?, :primary_key
 
+        # defines this mapping as a primary key
         def primary_key=(value)
           # important: meta-values can only be strings!
-          _nested_set(:meta, 'primary_key', value ? 'true' : nil)
-        end
-
-        # restrict meta by conditional cases.
-        # see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-field-meta.html
-        def meta=(value)
-          return invalid!("attribute 'meta' is not a hash") unless value.is_a?(Hash)
-          return invalid!("attribute 'meta' enforces at most 5 entries") if value.length > 5
-          return invalid!("attribute 'meta' has a key with more then 20 chars") if value.keys.any? { |key| key.length > 20 }
-          return invalid!("attribute 'meta' is not supported on object or nested fields") if [:object, :nested].include?(type)
-
-          # allow only strings
-          vkey = value.keys.detect { |key| !value[key].is_a?(String) }
-          return invalid!("attribute 'meta' has a key '#{vkey}' with a none string value") if vkey.present?
-
-          @attributes[:meta] = value
+          __set_nested(:meta, :primary_key, value ? 'true' : nil)
         end
 
         private
 
-        # validate this mapping through the +#validate?+ method.
-        def validate!
-          if (inv_attrs = (attributes.keys - ATTRIBUTES)).present?
-            return invalid!("invalid attributes: #{inv_attrs.join(', ')}")
-          end
+        # resolves the provided.
+        # sets possible nil type, depending on properties.
+        # transforms possible alias type
+        def _resolve_type(type)
+          raise "NOOOOO -> #{name}" if type.blank?
+          return type.to_sym if type.present?
 
-          @_valid = true
-        end
-
-        def _nested_set(attr, key, value)
-          values = self.send(attr).presence || {}
-
-          if value.nil?
-            values.delete(key)
-          else
-            values[key] = value
-          end
-          self.send("#{attr}=", values)
-        end
-
-        def _nested_get(attr, key)
-          values = self.send(attr).presence || {}
-          values[key]
-        end
-
-        def _assign_attributes(attributes)
-          attributes.each do |key, value|
-            send("#{key}=", value)
-          end
-        end
-
-        def _assign_type(type)
           # fallback for possible empty type
-          type ||= (properties.present? ? :object : :nested)
+          (properties.present? ? :object : :nested)
+        end
 
-          # check and transform possible alias types
-          if ActiveRecord::ConnectionAdapters::ElasticsearchAdapter::NATIVE_DATABASE_TYPES.key?(type)
-            type = ActiveRecord::ConnectionAdapters::ElasticsearchAdapter::NATIVE_DATABASE_TYPES[type][:name]
-          end
+        def _validate_meta
+          return true if meta.nil?
 
-          @type = type.to_sym
+          return invalid!("'meta' must be a hash", :attributes) unless meta.is_a?(Hash)
+          return invalid!("'meta' enforces at most 5 entries", :attributes) if meta.length > 5
+          return invalid!("'meta' has a key with more then 20 chars", :attributes) if meta.keys.any? { |key| key.length > 20 }
+          return invalid!("'meta' is not supported on object or nested types", :attributes) if [:object, :nested].include?(type)
+
+          # allow only strings
+          vkey = meta.keys.detect { |key| !meta[key].is_a?(String) }
+          return invalid!("'meta' has a key '#{vkey}' with a none string value", :attributes) if vkey.present?
+
+          true
         end
       end
     end

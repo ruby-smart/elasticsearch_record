@@ -14,17 +14,17 @@ module ActiveRecord
         extend ActiveSupport::Concern
 
         class_methods do
-          def define_unsupported_methods(*method_names)
+          def define_unsupported_method(*method_names)
             method_names.each do |method_name|
               module_eval <<-RUBY, __FILE__, __LINE__ + 1
                 def #{method_name}(*args)
-                  raise ActiveRecord::ConnectionAdapters::Elasticsearch::UnsupportedImplementationError, method_name
+                  raise ActiveRecord::ConnectionAdapters::Elasticsearch::UnsupportedImplementationError, '#{method_name}'
                 end
               RUBY
             end
           end
 
-          private :define_unsupported_methods
+          private :define_unsupported_method
         end
       end
     end

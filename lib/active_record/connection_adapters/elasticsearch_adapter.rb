@@ -6,13 +6,13 @@ require 'active_record/connection_adapters/elasticsearch/unsupported_implementat
 
 require 'active_record/connection_adapters/elasticsearch/column'
 require 'active_record/connection_adapters/elasticsearch/database_statements'
-require 'active_record/connection_adapters/elasticsearch/query_statements'
 require 'active_record/connection_adapters/elasticsearch/quoting'
 require 'active_record/connection_adapters/elasticsearch/schema_creation'
 require 'active_record/connection_adapters/elasticsearch/schema_definitions'
 require 'active_record/connection_adapters/elasticsearch/schema_dumper'
 require 'active_record/connection_adapters/elasticsearch/schema_statements'
 require 'active_record/connection_adapters/elasticsearch/type'
+require 'active_record/connection_adapters/elasticsearch/table_statements'
 
 require 'arel/visitors/elasticsearch'
 require 'arel/collectors/elasticsearch_query'
@@ -51,10 +51,11 @@ module ActiveRecord # :nodoc:
         { 'name' => '_type', 'type' => 'keyword', 'virtual' => true }
       ].freeze
 
+      include Elasticsearch::UnsupportedImplementation
       include Elasticsearch::Quoting
-      include Elasticsearch::SchemaStatements
       include Elasticsearch::DatabaseStatements
-      include Elasticsearch::QueryStatements
+      include Elasticsearch::SchemaStatements
+      include Elasticsearch::TableStatements
 
       class << self
         def base_structure_keys
