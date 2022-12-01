@@ -1,5 +1,23 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.1.0] - 2022-12-02
+* [add] support for schema dumps & migrations for Elasticsearch
+* [add] `buckets` query/relation result method to resolve the buckets as key->value hash from aggregations
+* [add] support for third-party gems (e.g. elasticsearch-dsl)
+* [add] custom primary_key support with 'auto_increment' adaption _(beta)_
+* [ref] instrumentation of `LogSubscriber` coloring
+* [ref] unsupported methods to show exception
+* [ref] query/relation method `#msearch` to support options 'resolve', 'transpose' & 'keep_null_relation'
+* [ref] `ActiveRecord::ConnectionAdapters::ElasticsearchAdapter#translate_exception` for better error handling
+* [ref] `ActiveRecord::ConnectionAdapters::Elasticsearch::Column` for a much easier assignment
+* [ref] gemspec, yardoc & docs
+* [fix] `ActiveRecord::ConnectionAdapters::ElasticsearchAdapter::BASE_STRUCTURE` to force primary_key column '_id' as virtual
+* [fix] `ElasticsearchRecord::Relation::QueryClauseTree` not correctly calculating & merging 'filters, musts, ... '
+* [fix] failing query not really failing in nested queries (msearch) 
+* [fix] 'null_realation' being executed in msearch
+* [fix] quoting of columns, attributes & values
+* [fix] query/relation method `#count` not preventing 'null_relation?'
+
 ## [1.0.2] - 2022-11-07
 * [add] `ActiveRecord::ConnectionAdapters::ElasticsearchAdapter#migrations_paths` with 'db/migrate_elasticsearch'
 * [fix] to prevent executing 'primary' migrations to elasticsearch (SchemaDumper may still throw error comments)
