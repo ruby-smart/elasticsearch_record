@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'active_record/connection_adapters/elasticsearch/schema_definitions/attribute_methods'
 require 'active_model/validations'
 
 module ActiveRecord

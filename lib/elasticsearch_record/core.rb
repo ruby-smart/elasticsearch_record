@@ -2,37 +2,61 @@ module ElasticsearchRecord
   module Core
     extend ActiveSupport::Concern
 
-    # in default, this reads the primary key column's value (+_id+).
-    # But since elasticsearch supports also additional "id" columns, we need to check against that.
+    included do
+      class_attribute :relay_id_attribute, instance_writer: false, default: false
+    end
+
+    # overwrite to provide a Elasticsearch version of returning a 'primary_key' attribute.
+    # Elasticsearch uses the static +_id+ column as primary_key, but also supports an additional +id+ column.
+    # To provide functionality of returning the +id+ attribute, this method must also support it.
+    # @return [Object]
     def id
-      has_attribute?('id') ? _read_attribute('id') : super
-    end
-
-    # in default, this sets the primary key column's value (+_id+).
-    # But since elasticsearch supports also additional "id" columns, we need to check against that.
-    def id=(value)
-      has_attribute?('id') ? _write_attribute('id', value) : super
-    end
-
-    # overwrite the write_attribute method to write 'id', if present?
-    # see @ ActiveRecord::AttributeMethods::Write#write_attribute
-    def write_attribute(attr_name, value)
-      return _write_attribute('id', value) if attr_name.to_s == 'id' && has_attribute?('id')
+      # check, if the model has a +id+ attribute
+      return _read_attribute('id') if relay_id_attribute? && has_attribute?('id')
 
       super
     end
 
-    # overwrite read_attribute method to read 'id', if present?
+    # overwrite to provide a Elasticsearch version of setting a 'primary_key' attribute.
+    # Elasticsearch uses the static +_id+ column as primary_key, but also supports an additional +id+ column.
+    # To provide functionality of setting the +id+ attribute, this method must also support it.
+    # @param [Object] value
+    def id=(value)
+      # check, if the model has a +id+ attribute
+      return _write_attribute('id', value) if relay_id_attribute? && has_attribute?('id')
+
+      # auxiliary update the +_id+ virtual column if we have a different primary_key
+      _write_attribute('_id', value) if @primary_key != '_id'
+
+      super
+    end
+
+    # overwrite to provide a Elasticsearch version of returning a 'primary_key' was attribute.
+    # Elasticsearch uses the static +_id+ column as primary_key, but also supports an additional +id+ column.
+    # To provide functionality of returning the +id_Was+ attribute, this method must also support it.
+    def id_was
+      relay_id_attribute? && has_attribute?('id') ? attribute_was('id') : attribute_was(@primary_key)
+    end
+
+    # overwrite the write_attribute method to write 'id', if present
+    # see @ ActiveRecord::AttributeMethods::Write#write_attribute
+    def write_attribute(attr_name, value)
+      return _write_attribute('id', value) if attr_name.to_s == 'id' && relay_id_attribute? && has_attribute?('id')
+
+      super
+    end
+
+    # overwrite read_attribute method to read 'id', if present
     # see @ ActiveRecord::AttributeMethods::Read#read_attribute
     def read_attribute(attr_name, &block)
-      return _read_attribute('id', &block) if attr_name.to_s == 'id' && has_attribute?('id')
+      return _read_attribute('id', &block) if attr_name.to_s == 'id' && relay_id_attribute? && has_attribute?('id')
 
       super
     end
 
     module PrependClassMethods
       # returns the table_name.
-      # This method is prepend to provide automated compatibility to other gems.
+      # Has to be prepended to provide automated compatibility to other gems.
       def index_name
         table_name
       end

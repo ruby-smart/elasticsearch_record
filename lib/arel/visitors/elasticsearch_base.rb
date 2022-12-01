@@ -83,13 +83,14 @@ module Arel # :nodoc: all
       # resolves the provided object 'visit' result.
       # check if the object is present.
       # does not return any values
-      # @param [Object] obj
+      # @param [Array|Object] objects
       # @param [Symbol] method (default: :visit)
       # @return [nil]
-      def resolve(obj, method = :visit)
-        return unless obj.present?
+      def resolve(objects, method = :visit)
+        return unless objects.present?
 
-        objects = obj.is_a?(Array) ? obj : [obj]
+        objects = [objects] unless objects.is_a?(Array)
+
         objects.each do |obj|
           self.__send__(method, obj)
         end
@@ -150,7 +151,7 @@ module Arel # :nodoc: all
                 value[nested_args[0]] = value[nested_args[0]].merge(nested_args[1])
               elsif value[nested_args[0]].is_a?(Array) && nested_args[1].is_a?(Array)
                 value[nested_args[0]] += nested_args[1]
-              elsif nested_args[1].nil?
+              elsif nested_args[1].nil? && nested_args[2] != :__force__
                 value.delete(nested_args[0])
               elsif nested_args[0].nil? && nested_args[1].is_a?(Hash)
                 # handle special case: nil delegates to the value = nested_args[1]

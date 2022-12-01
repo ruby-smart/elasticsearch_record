@@ -27,7 +27,6 @@ module ElasticsearchRecord
     autoload :Querying
     autoload :Query
     autoload :Result
-    autoload :SchemaMigration
     autoload :StatementCache
   end
 

@@ -48,9 +48,8 @@ module ElasticsearchRecord
       response.key?('hits') ? response['hits'].with_indifferent_access : {}
     end
 
-    # Returns the RAW values from the hits - aka. +rows+.
+    # Returns the RAW +_source+ data from each hit - aka. +rows+.
     # PLEASE NOTE: The array will only contain the RAW data from each +_source+ (meta info like '_score' is not included)
-    # The +rows+ alias use used by the ActiveRecord ConnectionAdapters and must not be removed!
     # @return [Array]
     def results
       return [] unless response['hits']
@@ -58,6 +57,7 @@ module ElasticsearchRecord
       response['hits']['hits'].map { |result| result['_source'] }
     end
 
+    # The +rows+ alias is used by the ActiveRecord ConnectionAdapters and must not be removed!
     alias_method :rows, :results
 
     # returns the response RAW aggregations hash.

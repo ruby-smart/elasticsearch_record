@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'active_record/connection_adapters/elasticsearch/schema_definitions/attribute_methods'
 require 'active_model/validations'
 
 module ActiveRecord
@@ -28,7 +27,10 @@ module ActiveRecord
         validates_presence_of :name
         validates_presence_of :type
         validates_inclusion_of :__attributes_keys, in: ATTRIBUTES, allow_blank: true
-        validate :_validate_meta
+
+        # disable validation for meta attribute - maybe future updates of Elasticsearch have other restrictions.
+        # To not be hooked on those possible changes we
+        #validate :_validate_meta
 
         # sets the default value (alias for null_value)
         alias_method :default=, :null_value=
@@ -40,8 +42,7 @@ module ActiveRecord
 
         def initialize(name, type, attributes)
           @name       = name.to_sym
-          @attributes = {}
-          __assign(attributes)
+          @attributes = attributes.symbolize_keys
 
           @type = _resolve_type(type)
         end
@@ -68,19 +69,27 @@ module ActiveRecord
           __set_nested(:meta, :primary_key, value ? 'true' : nil)
         end
 
+        def meta=(value)
+          if value.nil?
+            __remove_attribute(:meta)
+          else
+            __set_attribute(:meta, value.compact)
+          end
+        end
+
         private
 
-        # resolves the provided.
-        # sets possible nil type, depending on properties.
-        # transforms possible alias type
+        # resolves the provided type.
+        # prevents to set a nil type (sets +:object+ or +:nested+ - depends on existing properties)
+        # @return [Symbol, nil]
         def _resolve_type(type)
-          raise "NOOOOO -> #{name}" if type.blank?
           return type.to_sym if type.present?
 
           # fallback for possible empty type
           (properties.present? ? :object : :nested)
         end
 
+        # validates metadata restrictions
         def _validate_meta
           return true if meta.nil?
 

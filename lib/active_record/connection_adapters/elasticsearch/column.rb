@@ -5,13 +5,20 @@ module ActiveRecord
     module Elasticsearch
       class Column < ConnectionAdapters::Column # :nodoc:
 
-        attr_reader :virtual, :fields, :properties
+        attr_reader :virtual, :fields, :properties, :meta
 
-        def initialize(name, default, sql_type_metadata = nil, **kwargs)
-          @virtual    = kwargs.delete(:virtual)
-          @fields     = kwargs.delete(:fields)
-          @properties = kwargs.delete(:properties)
+        def initialize(name, default, sql_type_metadata = nil, virtual: false, fields: nil, properties: nil, meta: nil, **kwargs)
+          @virtual    = virtual
+          @fields     = fields.presence || []
+          @properties = properties.presence || []
+          @meta       = meta.presence || {}
+
           super(name, default, sql_type_metadata, true, nil, **kwargs)
+        end
+
+        # returns comment from meta
+        def comment
+          meta? && meta['comment']
         end
 
         # returns true if this column is virtual.
@@ -19,6 +26,13 @@ module ActiveRecord
         # @return [Boolean]
         def virtual?
           !!virtual
+        end
+
+        # returns true if this column has meta information
+        # To receive the nested meta-data just call +#meta+ on this object.
+        # @return [Boolean]
+        def meta?
+          meta.present?
         end
 
         # returns true if this column has nested fields

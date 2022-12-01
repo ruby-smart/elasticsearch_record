@@ -118,6 +118,10 @@ module ActiveRecord
 
         private
 
+        def _exec
+          execute(schema_creation.accept(self), 'CREATE TABLE').dig('acknowledged')
+        end
+
         # force empty states to prevent "Name is static for an open table" error.
         def state
           nil

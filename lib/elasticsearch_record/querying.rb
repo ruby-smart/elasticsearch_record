@@ -1,12 +1,5 @@
 # frozen_string_literal: true
 
-# require the Elasticsearch::DSL gem, if loaded
-begin
-  require 'elasticsearch/dsl'
-rescue LoadError
-  # no special things here
-end
-
 module ElasticsearchRecord
   module Querying
     extend ActiveSupport::Concern
@@ -97,10 +90,14 @@ module ElasticsearchRecord
         connection.exec_query(query, "#{name} Msearch", async: async)
       end
 
-      # executes a search by provided +RAW+ query - supports +Elasticsearch::DSL+ if gem is loaded
+      # executes a search by provided +RAW+ query - supports +Elasticsearch::DSL+ gem if loaded
       def search(*args, &block)
         begin
+          # require the Elasticsearch::DSL gem, if loaded
+          require 'elasticsearch/dsl'
           query = ::Elasticsearch::DSL::Search::Search.new(*args, &block).to_hash
+        rescue LoadError
+          query = args.extract_options!
         rescue
           query = args.extract_options!
         end

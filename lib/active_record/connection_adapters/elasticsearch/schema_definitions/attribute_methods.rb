@@ -9,6 +9,40 @@ module ActiveRecord
         included do
           attr_reader :state
 
+          def error_messages
+            errors.full_messages.join(', ')
+          end
+
+          def with_state(state)
+            @state = state
+
+            self
+          end
+
+          def state?
+            state.present?
+          end
+
+          private
+
+          def __set_attribute(key, value)
+            if value.nil?
+              __remove_attribute(key)
+            elsif value.is_a?(Array) || value.is_a?(Hash)
+              @attributes[key] = value.compact
+            else
+              @attributes[key] = value
+            end
+          end
+
+          def __get_attribute(key)
+            @attributes[key]
+          end
+
+          def __remove_attribute(key)
+            @attributes.delete(key)
+          end
+
           def __set_nested(attr, key, value)
             values = self.send(attr).presence || {}
 
@@ -25,29 +59,23 @@ module ActiveRecord
             values[key.to_s]
           end
 
+          def __attributes_keys
+            @attributes.keys
+          end
+
+          def __attributes_values
+            @attributes.values
+          end
+
           def __assign(attributes)
             attributes.each do |key, value|
               send("#{key}=", value)
             end
           end
 
-          def invalid!(message, key=:base)
+          def invalid!(message, key = :base)
             errors.add(key, message)
             false
-          end
-
-          def error_messages
-            errors.full_messages.join(', ')
-          end
-
-          def with_state(state)
-            @state = state
-
-            self
-          end
-
-          def state?
-            state.present?
           end
         end
 
@@ -59,25 +87,14 @@ module ActiveRecord
             args.each do |name|
               class_eval <<-CODE, __FILE__, __LINE__ + 1
                 def #{name}
-                  @#{opts[:key]}[:#{name}]
+                  __get_attribute(:#{name})
                 end
       
                 def #{name}=(value)
-                  @#{opts[:key]}[:#{name}] = value
+                  __set_attribute(:#{name}, value)
                 end
               CODE
             end
-
-            # general reader methods to resolve keys & values
-            class_eval <<-CODE, __FILE__, __LINE__ + 1
-              def __#{opts[:key]}_keys
-                @#{opts[:key]}.keys
-              end
-
-              def __#{opts[:key]}_values
-                @#{opts[:key]}.values
-              end
-            CODE
           end
         end
       end

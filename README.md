@@ -13,6 +13,7 @@ _ElasticsearchRecord is a ActiveRecord adapter and provides similar functionalit
 -----
 
 **PLEASE NOTE:**
+
 - This is still in **development**!
 - Specs & documentation will follow. 
 - You might experience BUGs and Exceptions...
@@ -38,19 +39,25 @@ Or install it yourself as:
 
 
 ## Features
-* CRUD: Reading and Writing Data as already used for ActiveRecord models ```create, update, delete```
-* Query-chaining through the Active Record Query Interface
-* Query interface with additional methods for ```filter, must, must_not, should```
-* Aggregation queries ```aggregate```
+* ActiveRecord's `create, read, update & delete` behaviours
+* Active Record Query Interface
+  * query-chaining
+  * scopes
+  * additional relation methods to find records with `filter, must, must_not, should`
+  * aggregated queries with Elasticsearch `aggregation` methods
+  * resolve search response `hits`, `aggregations`, `buckets`, ... instead of ActiveRecord objects
+* Third-party gem support
+  * access `elasticsearch-dsl` query builder through `model.search{ ... }`
+* Schema
+  * dump
+  * create & update of tables _(indices)_ with mappings, settings & aliases
 * Instrumentation for ElasticsearchRecord
+  * logs Elasticsearch API-calls
+  * shows Runtime in logs
 
 ## Contra - what it _(currently)_ can not
-* Query-based associations like 'has_one' through a single _(or multiple)_ queries - aka. joins
+* Joins to other indexes or databases
 * complex, combined or nested queries ```and, or, Model.arel ...```
-* Create mappings / schema through migrations _(so no create_table, update_column, ...)_
-* Schema dumps
-* Manage indexes and mappings
-
 
 ## Setup
 
@@ -107,11 +114,19 @@ end
 
 ### d) have FUN with your model:
 ```ruby
-scope = Search.filter(term: {name: 'MyImportantObject'}).limit(5)
+scope = Search
+        .where(name: 'Custom Object Name')
+        .where(token: nil)
+        .filter(terms: {type: [:x, :y]})
+        .limit(5)
+
+# take the first object
 obj = scope.take
 
+# update the objects name
 obj.update(name: "Not-So-Important")
 
+# extend scope and update all docs
 scope.where(kind: :undefined).offset(10).update_all(name: "New Name")
 
 ```
@@ -119,7 +134,6 @@ scope.where(kind: :undefined).offset(10).update_all(name: "New Name")
 ## Active Record Query Interface
 
 ### Refactored ```where``` method:
-
 Different to the default where-method you can now use it in different ways.
 
 Using it by default with a Hash, the method decides itself to either add a filter, or must_not query.
@@ -145,17 +159,42 @@ Search.where(:should, term: {name: 'Mano'})
 # > should: {term: {name: 'Mano'}}
 ```
 
-### Usage Examples
-```ruby
-# save a new record
-model = Search.new(name: "Cool object", kind: "open")
-model.save
+### Result methods:
+You can simply return RAW data without instantiating ActiveRecord objects:
 
-# find a record by id
-MyEsIndex.find_by_id("xyzAbc34")
+```ruby
+
+# returns the response RAW hits hash.
+hits = Search.where(name: 'A nice object').hits
+# > {"total"=>{"value"=>5, "relation"=>"eq"}, "max_score"=>1.0, "hits"=>[{ "_index": "search", "_type": "_doc", "_id": "abc123", "_score": 1.0, "_source": { "name": "A nice object", ...
+
+# Returns the RAW +_source+ data from each hit - aka. +rows+.
+results = Search.where(name: 'A nice object').results
+# > [{ "name": "A nice object", ...
+
+# returns the response RAW aggregations hash.
+aggs = Search.where(name: 'A nice object').aggregate(:total, {sum: {field: :amount}}).aggregations
+# > {"total"=>{"value"=>6722604.0}}
+
+# returns the (nested) bucket values (and aggregated values) from the response aggregations.
+buckets = Search.where(name: 'A nice object').aggregate(:total, {sum: {field: :amount}}).buckets
+# > {"total"=>6722604.0}
+
+# resolves RAW +_source+ data from each hit with a +point_in_time+ query (also includes _id)
+# useful if you want more then 10000 results.
+results = Search.where(name: 'A nice object').pit_results
+# > [{ "_id": "abc123", "name": "A nice object", ...
+
+# returns the total value of the query without querying again (it uses the total value from the response)
+scope = Search.where(name: 'A nice object').limit(5)
+results_count = scope.count
+# > 5
+total = scope.total
+# > 3335
+
 ```
 
-### Useful chain methods
+### Available query/relation chain methods
 - kind 
 - configure
 - aggregate
@@ -165,8 +204,12 @@ MyEsIndex.find_by_id("xyzAbc34")
 - must
 - should
 - aggregate
+- restrict 
+- hits_only!
+- aggs_only!
+- total_only!
 
-### Useful calculation methods
+### Available calculation methods
 - percentiles
 - percentile_ranks
 - cardinality
@@ -176,7 +219,7 @@ MyEsIndex.find_by_id("xyzAbc34")
 - sum
 - calculate
 
-### Useful result methods
+### Available result methods
 - aggregations
 - buckets
 - hits
@@ -193,15 +236,120 @@ MyEsIndex.find_by_id("xyzAbc34")
 
 -----
 
-### Useful model-class attributes
+### Useful model class attributes
 - index_base_name
+- relay_id_attribute
 
-### Useful model methods
+### Useful model instance methods
 - source_column_names
 - searchable_column_names
 - find_by_query
 - msearch
 
+## ActiveRecord ConnectionAdapters schema-methods
+Access these methods through the model's connection.
+```ruby
+  # returns mapping of provided table (index)
+  model.connection.table_mappings('table-name')
+```
+
+- table_mappings
+- table_settings
+- table_aliases
+- table_state
+- table_schema
+- alias_exists?
+- setting_exists?
+- mapping_exists?
+- max_result_window
+- cluster_info
+
+## Active Record Schema migration methods
+Access these methods through the model's connection or within any `Migration`.
+
+- open_table
+- open_tables
+- close_table
+- close_tables
+- truncate_table
+- truncate_tables
+- drop_table
+- create_table
+- change_table
+- add_mapping
+- change_mapping
+- change_mapping_meta
+- change_mapping_attributes
+- add_setting
+- change_setting
+- delete_setting
+- add_alias
+- change_alias
+- delete_alias
+
+```ruby
+# Example migration
+class AddTests < ActiveRecord::Migration[7.0]
+  def up
+    create_table "assignments", if_not_exists: true do |t|
+      t.string :key, primary_key: true
+      t.text :value
+      t.timestamps
+
+      t.setting :number_of_shards, "1"
+      t.setting :number_of_replicas, 0
+    end
+    
+    create_table "settings", force: true do |t|
+      t.mapping :created_at, :date
+      t.mapping :key, :keyword do |m|
+        m.primary_key = true
+      end
+      t.mapping :status, :keyword
+      t.mapping :updated_at, :date
+      t.mapping :value, :text
+
+      t.setting "index.number_of_replicas", "0"
+      t.setting "index.number_of_shards", "1"
+      t.setting "index.routing.allocation.include._tier_preference", "data_content"
+    end
+
+    add_mapping "settings", :active, :boolean do |m|
+      m.comment = "Hans"
+    end
+
+    change_table 'settings', force: true do |t|
+      t.add_setting( "index.search.idle.after", "20s")
+      t.add_setting("index.shard.check_on_startup", true)
+      t.add_alias('supersettings')
+    end
+
+    delete_alias('settings', :supersettings)
+    delete_setting('settings', 'index.search.idle.after')
+
+    change_table 'settings', force: true do |t|
+      t.integer :amount_of_newbies
+    end
+    
+    create_table "vintage", force: true do |t|
+      t.primary_key :number
+      t.string :name
+      t.timestamps
+    end
+
+    change_mapping_meta "vintage", :number, auto_increment: 'true'
+    change_mapping_meta "vintage", :number, peter: 'hans'
+
+    change_mapping_attributes "vintage", :number, fields: {raw: {type: :keyword}}
+  end
+
+  def down
+    drop_table 'assignments'
+    drop_table 'settings'
+    drop_table 'vintage'
+  end
+end
+```
 
 ## Docs
 

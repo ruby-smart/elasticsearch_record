@@ -33,7 +33,7 @@ module Arel # :nodoc: all
         resolve(o, :visit_TableAliases) if o.aliases.present?
       end
 
-      def visit_CompositeUpdateTableDefinition(o)
+      def visit_InterlacedUpdateTableDefinition(o)
         # set the name of the index
         claim(:index, visit(o.name))
 
@@ -41,25 +41,52 @@ module Arel # :nodoc: all
         visit(o.definition)
       end
 
-      # def visit_AlterTable(o)
-      #   # set the name of the index
-      #   claim(:index, visit(o.name))
-      #
-      #   return failed! unless o.definition.present?
-      #
-      #   resolve(o.definition) # visit_AddMappingDefinition, visit_AddSettingDefinition
-      #
-      # end
-
-      def visit_AddMappingDefinition(o)
+      def visit_ChangeMappingDefinition(o)
         # prepare query
-        claim(:type, ::ElasticsearchRecord::Query::TYPE_INDEX_PUT_MAPPING)
+        claim(:type, ::ElasticsearchRecord::Query::TYPE_INDEX_UPDATE_MAPPING)
 
         assign(:properties, {}) do
-          resolve(o.mappings, :visit_TableMappingDefinition)
+          resolve(o.items, :visit_TableMappingDefinition)
         end
       end
 
+      alias :visit_AddMappingDefinition :visit_ChangeMappingDefinition
+
+      def visit_ChangeSettingDefinition(o)
+        # prepare query
+        claim(:type, ::ElasticsearchRecord::Query::TYPE_INDEX_UPDATE_SETTING)
+
+        # special overcomplicated blocks to assign a hash of settings directly to the body
+        assign(:__claim__, {}) do
+          assign(:body, {}) do
+            resolve(o.items, :visit_TableSettingDefinition)
+          end
+        end
+      end
+
+      alias :visit_AddSettingDefinition :visit_ChangeSettingDefinition
+      alias :visit_DeleteSettingDefinition :visit_ChangeSettingDefinition
+
+      def visit_ChangeAliasDefinition(o)
+        # prepare query
+        claim(:type, ::ElasticsearchRecord::Query::TYPE_INDEX_UPDATE_ALIAS)
+
+        claim(:argument, :name, o.item.name)
+        claim(:body, o.item.attributes)
+      end
+
+      alias :visit_AddAliasDefinition :visit_ChangeAliasDefinition
+
+      def visit_DeleteAliasDefinition(o)
+        # prepare query
+        claim(:type, ::ElasticsearchRecord::Query::TYPE_INDEX_DELETE_ALIAS)
+
+        claim(:argument, :name, o.items.map(&:name).join(','))
+      end
+
+      ##############
+      # SUB VISITS #
+      ##############
 
       def visit_TableSettings(o)
         assign(:settings, {}) do
@@ -82,7 +109,7 @@ module Arel # :nodoc: all
       end
 
       def visit_TableSettingDefinition(o)
-        assign(o.name, o.value)
+        assign(o.name, o.value, :__force__)
       end
 
       def visit_TableMappingDefinition(o)

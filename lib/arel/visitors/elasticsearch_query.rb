@@ -396,6 +396,7 @@ module Arel # :nodoc: all
         o
       end
 
+      alias :visit_Integer :visit_Struct_Raw
       alias :visit_Symbol :visit_Struct_Raw
       alias :visit_Hash :visit_Struct_Raw
       alias :visit_NilClass :visit_Struct_Raw
@@ -419,7 +420,6 @@ module Arel # :nodoc: all
         o.value
       end
 
-      alias :visit_Integer :visit_Struct_Value
       alias :visit_ActiveModel_Attribute_WithCastValue :visit_Struct_Value
 
       def visit_Struct_Attribute(o)

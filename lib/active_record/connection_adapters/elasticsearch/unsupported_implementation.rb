@@ -18,7 +18,7 @@ module ActiveRecord
             method_names.each do |method_name|
               module_eval <<-RUBY, __FILE__, __LINE__ + 1
                 def #{method_name}(*args)
-                  raise ActiveRecord::ConnectionAdapters::Elasticsearch::UnsupportedImplementationError, '#{method_name}'
+                  raise NotImplementedError, "'##{method_name}' is originally defined by 'ActiveRecord::ConnectionAdapters' but is not supported by Elasticsearch. Choose a different solution to prevent the execution of this method!"
                 end
               RUBY
             end

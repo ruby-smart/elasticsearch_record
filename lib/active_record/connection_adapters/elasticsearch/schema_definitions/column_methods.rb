@@ -17,7 +17,7 @@ module ActiveRecord
           # Appends a primary key definition to the table definition.
           # Can be called multiple times, but this is probably not a good idea.
           def primary_key(name, type = :primary_key, **options)
-            column(name, type, **options.merge(primary_key: true))
+            mapping(name, type, **options.merge(primary_key: true))
           end
         end
 
@@ -28,7 +28,7 @@ module ActiveRecord
               module_eval <<-RUBY, __FILE__, __LINE__ + 1
               def #{column_type}(*names, **options)
                 raise ArgumentError, "Missing column name(s) for #{column_type}" if names.empty?
-                names.each { |name| column(name, :#{column_type}, **options) }
+                names.each { |name| mapping(name, :#{column_type}, **options) }
               end
               RUBY
             end

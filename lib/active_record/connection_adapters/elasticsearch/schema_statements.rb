@@ -9,6 +9,7 @@ module ActiveRecord
       # - internal_string_options_for_primary_key
       # - options_include_default?
       # - fetch_type_metadata
+      # - column_exists?
       #
       # *SUPPORTED* but not used:
       # - strip_table_name_prefix_and_suffix
@@ -90,12 +91,28 @@ module ActiveRecord
                                     :create_alter_table, :insert_fixture, :insert_fixtures_set, :bulk_change_table,
                                     :dump_schema_information
 
+          def assume_migrated_upto_version(version)
+            version = version.to_i
+            migrated = migration_context.get_all_versions
+            versions = migration_context.migrations.map(&:version)
 
-          # # temporary workaround
-          # # toDo: fixme
-          # def assume_migrated_upto_version(version)
-          #   $stdout.puts "\n>>> 'assume_migrated_upto_version' elasticsearch is not supported - the following message is insignificant!"
-          # end
+            unless migrated.include?(version)
+              # use a ActiveRecord syntax to create a new version
+              schema_migration.create(version: version)
+            end
+
+            inserting = (versions - migrated).select { |v| v < version }
+            if inserting.any?
+              if (duplicate = inserting.detect { |v| inserting.count(v) > 1 })
+                raise "Duplicate migration #{duplicate}. Please renumber your migrations to resolve the conflict."
+              end
+
+              # use a ActiveRecord syntax to create new versions
+              inserting.each {|iversion| schema_migration.create(version: iversion) }
+            end
+
+            true
+          end
 
           # Returns the relation names usable to back Active Record models.
           # For Elasticsearch this means all indices - which also includes system +dot+ '.' indices.
@@ -122,9 +139,10 @@ module ActiveRecord
 
           # returns a hash of all settings by provided table_name
           # @param [String] table_name
+          # @param [Boolean] flat_settings (default: true)
           # @return [Hash]
-          def table_settings(table_name)
-            api(:indices, :get_settings, { index: table_name, expand_wildcards: [:open, :closed] }, 'SCHEMA').dig(table_name, 'settings')
+          def table_settings(table_name, flat_settings = true)
+            api(:indices, :get_settings, { index: table_name, expand_wildcards: [:open, :closed], flat_settings: flat_settings }, 'SCHEMA').dig(table_name, 'settings')
           end
 
           # returns a hash of all aliases by provided table_name (index).
@@ -202,7 +220,7 @@ module ActiveRecord
               field["name"],
               field["null_value"],
               fetch_type_metadata(field["type"]),
-              comment:    ((field['meta'] && field['meta']['comment']) ? field['meta']['comment'] : nil),
+              meta:       field['meta'],
               virtual:    field['virtual'],
               fields:     field['fields'],
               properties: field['properties']
@@ -255,6 +273,40 @@ module ActiveRecord
             data_source_exists?(table_name)
           end
 
+          # Checks to see if a alias +alias_name+ within a table +table_name+ exists on the database.
+          #
+          #   alias_exists?(:developers, 'my-alias')
+          #
+          # @param [String] table_name
+          # @param [String, Symbol] alias_name
+          # @return [Boolean]
+          def alias_exists?(table_name, alias_name)
+            table_aliases(table_name).keys.include?(alias_name.to_s)
+          end
+
+          # Checks to see if a setting +setting_name+ within a table +table_name+ exists on the database.
+          # The provided +setting_name+ must be flat!
+          #
+          #   setting_exists?(:developers, 'index.number_of_replicas')
+          #
+          # @param [String] table_name
+          # @param [String,Symbol] setting_name
+          # @return [Boolean]
+          def setting_exists?(table_name, setting_name)
+            table_settings(table_name).keys.include?(setting_name.to_s)
+          end
+
+          # Checks to see if a mapping +mapping_name+ within a table +table_name+ exists on the database.
+          #
+          #   mapping_exists?(:developers, :status, :integer)
+          #
+          # @param [String, Symbol] table_name
+          # @param [String, Symbol] mapping_name
+          # @return [Boolean]
+          def mapping_exists?(table_name, mapping_name, type = nil)
+            column_exists?(table_name, mapping_name, type)
+          end
+
           # overwrite original methods to provide a elasticsearch version
           def create_schema_dumper(options)
             ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaDumper.create(self, options)
@@ -266,8 +318,9 @@ module ActiveRecord
           end
 
           # overwrite original methods to provide a elasticsearch version
-          def update_table_definition(name, base=self) # :nodoc:
-            ::ActiveRecord::ConnectionAdapters::Elasticsearch::UpdateTableDefinition.new(base, name)
+          def update_table_definition(name, base = self, **options)
+            # :nodoc:
+            ::ActiveRecord::ConnectionAdapters::Elasticsearch::UpdateTableDefinition.new(base, name, **options)
           end
 
           # overwrite original methods to provide a elasticsearch version
@@ -279,7 +332,7 @@ module ActiveRecord
           # The query will raise an ActiveRecord::StatementInvalid if the requested limit is above this value.
           # @return [Integer]
           def max_result_window(table_name)
-            table_settings(table_name).dig('index','max_result_window').presence || 10000
+            table_settings(table_name).dig('index', 'max_result_window').presence || 10000
           end
 
           # Returns basic information about the cluster.
@@ -301,9 +354,10 @@ module ActiveRecord
           # transforms provided schema-type to a sql-type
           # @param [String, Symbol] type
           # @param [String]
-          def type_to_sql(type, **) # :nodoc:
-            type = type.to_sym if type
-            if (native = native_database_types[type])
+          def type_to_sql(type, **)
+            return '' if type.blank?
+
+            if (native = native_database_types[type.to_sym])
               (native.is_a?(Hash) ? native[:name] : native).dup
             else
               type.to_s
@@ -365,7 +419,7 @@ module ActiveRecord
 
           # overwrite original methods to provide a elasticsearch version
           def extract_table_options!(options)
-            ::ActiveRecord::ConnectionAdapters::Elasticsearch::TableDefinition.extract_table_options!(options)
+            options.extract!(:settings, :mappings, :aliases, :force, :strict)
           end
         end
       end

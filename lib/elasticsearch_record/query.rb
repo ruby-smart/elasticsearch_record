@@ -4,31 +4,42 @@ module ElasticsearchRecord
     STATUS_VALID  = :valid
     STATUS_FAILED = :failed
 
-    # - UNDEFINED TYPE
+    # -- UNDEFINED TYPE ------------------------------------------------------------------------------------------------
     TYPE_UNDEFINED = :undefined
 
-    # - QUERY TYPES
+    # -- QUERY TYPES ---------------------------------------------------------------------------------------------------
     TYPE_COUNT   = :count
     TYPE_SEARCH  = :search
     TYPE_MSEARCH = :msearch
     TYPE_SQL     = :sql
 
-    # - DOCUMENT TYPES
+    # -- DOCUMENT TYPES ------------------------------------------------------------------------------------------------
     TYPE_CREATE          = :create
     TYPE_UPDATE          = :update
     TYPE_UPDATE_BY_QUERY = :update_by_query
     TYPE_DELETE          = :delete
     TYPE_DELETE_BY_QUERY = :delete_by_query
 
-    # - INDEX TYPES
-    TYPE_INDEX_CREATE      = :index_create
-    TYPE_INDEX_PUT_MAPPING = :index_put_mapping
+    # -- INDEX TYPES ---------------------------------------------------------------------------------------------------
+    TYPE_INDEX_CREATE = :index_create
+    # INDEX update is not implemented by Elasticsearch
+    # - this is handled through individual updates of +mappings+, +settings+ & +aliases+.
+    # INDEX delete is handled directly as API-call
+    TYPE_INDEX_UPDATE_MAPPING = :index_update_mapping
+    TYPE_INDEX_UPDATE_SETTING = :index_update_setting
+    TYPE_INDEX_UPDATE_ALIAS   = :index_update_alias
+    TYPE_INDEX_DELETE_ALIAS   = :index_delete_alias
 
     # includes valid types only
     TYPES = [
+      # -- QUERY TYPES
       TYPE_COUNT, TYPE_SEARCH, TYPE_MSEARCH, TYPE_SQL,
+      # -- DOCUMENT TYPES
       TYPE_CREATE, TYPE_UPDATE, TYPE_UPDATE_BY_QUERY, TYPE_DELETE, TYPE_DELETE_BY_QUERY,
-      TYPE_INDEX_CREATE, TYPE_INDEX_PUT_MAPPING
+
+      # -- INDEX TYPES
+      TYPE_INDEX_CREATE, TYPE_INDEX_UPDATE_MAPPING, TYPE_INDEX_UPDATE_SETTING, TYPE_INDEX_UPDATE_ALIAS,
+      TYPE_INDEX_DELETE_ALIAS
     ].freeze
 
     # includes reading types only
@@ -46,9 +57,12 @@ module ElasticsearchRecord
     # defines special api gates to be used per type.
     # if no special type is defined, it simply uses +[:core,self.type]+
     GATES = {
-      TYPE_SQL               => [:sql, :query],
-      TYPE_INDEX_CREATE      => [:indices, :create],
-      TYPE_INDEX_PUT_MAPPING => [:indices, :put_mapping]
+      TYPE_SQL                  => [:sql, :query],
+      TYPE_INDEX_CREATE         => [:indices, :create],
+      TYPE_INDEX_UPDATE_MAPPING => [:indices, :put_mapping],
+      TYPE_INDEX_UPDATE_SETTING => [:indices, :put_settings],
+      TYPE_INDEX_UPDATE_ALIAS   => [:indices, :put_alias],
+      TYPE_INDEX_DELETE_ALIAS   => [:indices, :delete_alias],
     }.freeze
 
     # defines the index the query should be executed on

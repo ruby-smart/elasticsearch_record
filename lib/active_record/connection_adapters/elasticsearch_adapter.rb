@@ -134,11 +134,12 @@ module ActiveRecord # :nodoc:
 
       # define native types - which will be used for schema-dumping
       NATIVE_DATABASE_TYPES = {
-        string:   { name: 'keyword' },
-        blob:     { name: 'binary' },
-        datetime: { name: 'date' },
-        bigint:   { name: 'long' },
-        json:     { name: 'object' }
+        primary_key: { name: 'long' },
+        string:      { name: 'keyword' },
+        blob:        { name: 'binary' },
+        datetime:    { name: 'date' },
+        bigint:      { name: 'long' },
+        json:        { name: 'object' }
       }.merge(
         TYPE_MAP.keys.map { |key| [key.to_sym, { name: key }] }.to_h
       )
@@ -151,19 +152,18 @@ module ActiveRecord # :nodoc:
         @prepared_statements = false
       end
 
-      def migrations_paths # :nodoc:
+      # overwrite method to provide a Elasticsearch path
+      def migrations_paths
         @config[:migrations_paths] || ['db/migrate_elasticsearch']
       end
 
       # Does this adapter support explain?
-      # toDo: fixme
       def supports_explain?
         false
       end
 
       # Does this adapter support creating indexes in the same statement as
       # creating the table?
-      # toDo: fixme
       def supports_indexes_in_create?
         false
       end
@@ -188,12 +188,8 @@ module ActiveRecord # :nodoc:
         false
       end
 
-      # temporary workaround
-      # toDo: fixme
-      # def schema_migration # :nodoc:
-      #   @schema_migration ||= ElasticsearchRecord::SchemaMigration
-      # end
-
+      # returns a hash of 'ActiveRecord types' -> 'Elasticsearch types' (defined @ +NATIVE_DATABASE_TYPES+)
+      # @return [Hash]
       def native_database_types # :nodoc:
         NATIVE_DATABASE_TYPES
       end
@@ -294,7 +290,6 @@ module ActiveRecord # :nodoc:
       end
 
       # Builds the result object.
-      #
       # This is an internal hook to make possible connection adapters to build
       # custom result objects with response-specific data.
       # @return [ElasticsearchRecord::Result]

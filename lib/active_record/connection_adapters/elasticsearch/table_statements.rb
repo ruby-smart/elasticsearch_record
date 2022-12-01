@@ -80,6 +80,7 @@ module ActiveRecord
             # force: automatically drops an existing index
             create_table(table_name, force: true, **table_schema(table_name))
           end
+
           alias :truncate :truncate_table
 
           # truncate indices by provided names.
@@ -104,7 +105,7 @@ module ActiveRecord
             api(:indices, :delete, { index: table_name, ignore: (options[:if_exists] ? 404 : nil) }, 'DROP TABLE').dig('acknowledged')
           end
 
-          # creates a new index.
+          # creates a new table (index).
           # [<tt>:force</tt>]
           #   Set to +true+ to drop an existing table
           #   Defaults to false.
@@ -121,31 +122,109 @@ module ActiveRecord
           def create_table(table_name, force: false, copy_from: nil, if_not_exists: false, **options)
             return if if_not_exists && table_exists?(table_name)
 
+            # copy schema from existing table
             options.merge!(table_schema(copy_from)) if copy_from
 
-            # automatically drops invalid settings, mappings & aliases
-            td = create_table_definition(table_name, **extract_table_options!(options))
+            # create new definition
+            definition = create_table_definition(table_name, **extract_table_options!(options))
 
-            yield td if block_given?
+            # yield optional block
+            if block_given?
+              definition.assign do |d|
+                yield d
+              end
+            end
 
+            # force drop existing table
             if force
               drop_table(table_name, if_exists: true)
             else
               schema_cache.clear_data_source_cache!(table_name.to_s)
             end
 
-            execute(schema_creation.accept(td), 'CREATE TABLE').dig('acknowledged')
+            # execute definition query(ies)
+            definition.exec!
           end
 
-          def change_table(table_name, **,&block)
-            update_table_definition(table_name, self).assign(&block)
+          # A block for changing mappings, settings & aliases in +table+.
+          #
+          #   # change_table() yields a ChangeTableDefinition instance
+          #   change_table(:suppliers) do |t|
+          #     t.mapping :name, :string
+          #     # Other column alterations here
+          #   end
+          def change_table(table_name, **options)
+            definition = update_table_definition(table_name, self, **options)
+
+            # yield optional block
+            if block_given?
+              definition.assign do |d|
+                yield d
+              end
+            end
+
+            # execute definition query(ies)
+            definition.exec!
           end
 
-          def add_column(table_name, column_name, type, **options)
-            update_table_definition(table_name, self)
-              .add_column(column_name, type, **options)
+          # -- mapping -------------------------------------------------------------------------------------------------
+
+          def add_mapping(table_name, name, type, **options, &block)
+            _exec_change_table_with(:add_mapping, table_name, name, type, **options, &block)
           end
-          alias :add_mapping :add_column
+
+          alias :add_column :add_mapping
+
+          def change_mapping(table_name, name, type, **options, &block)
+            _exec_change_table_with(:change_mapping, table_name, name, type, **options, &block)
+          end
+
+          alias :change_column :change_mapping
+
+          def change_mapping_meta(table_name, name, **options)
+            _exec_change_table_with(:change_mapping_meta, table_name, name, **options)
+          end
+
+          def change_mapping_attributes(table_name, name, **options,&block)
+            _exec_change_table_with(:change_mapping_attributes, table_name, name, **options, &block)
+          end
+          alias :change_mapping_attribute :change_mapping_attributes
+
+          # -- setting -------------------------------------------------------------------------------------------------
+
+          def add_setting(table_name, name, value, **options, &block)
+            _exec_change_table_with(:add_setting, table_name, name, value, **options, &block)
+          end
+
+          def change_setting(table_name, name, value, **options, &block)
+            _exec_change_table_with(:change_setting, table_name, name, value, **options, &block)
+          end
+
+          def delete_setting(table_name, name, **options, &block)
+            _exec_change_table_with(:delete_setting, table_name, name, **options, &block)
+          end
+
+          # -- alias ---------------------------------------------------------------------------------------------------
+
+          def add_alias(table_name, name, **options, &block)
+            _exec_change_table_with(:add_alias, table_name, name, **options, &block)
+          end
+
+          def change_alias(table_name, name, **options, &block)
+            _exec_change_table_with(:change_alias, table_name, name, **options, &block)
+          end
+
+          def delete_alias(table_name, name, **options, &block)
+            _exec_change_table_with(:delete_alias, table_name, name, **options, &block)
+          end
+
+          private
+
+          def _exec_change_table_with(method, table_name, *args, **kwargs, &block)
+            change_table(table_name) do |t|
+              t.send(method, *args, **kwargs, &block)
+            end
+          end
         end
       end
     end
