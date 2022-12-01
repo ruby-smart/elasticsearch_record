@@ -60,7 +60,6 @@ module Arel # :nodoc: all
       end
 
       # used by the +Arel::Visitors::Elasticsearch#compile+ method (and default Arel visitors)
-      # todo: maybe return arguments with :_meta information instead of self ...
       def value
         self
       end

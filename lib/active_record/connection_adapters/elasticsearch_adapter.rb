@@ -182,8 +182,7 @@ module ActiveRecord # :nodoc:
         false
       end
 
-      # temporary workaround
-      # toDo: fixme
+      # disable metadata tables
       def use_metadata_table? # :nodoc:
         false
       end
