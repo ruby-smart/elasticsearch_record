@@ -3,25 +3,35 @@
 module ElasticsearchRecord
   module Tasks
     class ElasticsearchDatabaseTasks
-      delegate :connection, :establish_connection, to: ActiveRecord::Base
+      delegate :connection, :establish_connection, to: ElasticsearchRecord::Base
 
       def initialize(db_config)
         @db_config = db_config
       end
 
       def create
-        #establish_connection(db_config)
-        $stdout.puts "\n>>> 'create' elasticsearch is not supported - the following message is insignificant!"
+        # 'create' database / cluster is not supported
+        nil
       end
 
       def drop
-        #establish_connection(db_config)
-        $stdout.puts "\n>>> 'drop' elasticsearch is not supported - the following message is insignificant!"
+        # 'drop' database / cluster is not supported
+        nil
       end
 
       def purge
         create
         drop
+      end
+
+      def structure_dump(*)
+        $stdout.puts "\n>>> 'structure_dump' elasticsearch is not supported and will be ignored!"
+        nil
+      end
+
+      def structure_load(*)
+        $stdout.puts "\n>>> 'structure_load' elasticsearch is not supported and will be ignored!"
+        nil
       end
 
       private

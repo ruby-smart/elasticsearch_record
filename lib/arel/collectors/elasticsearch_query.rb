@@ -22,6 +22,9 @@ module Arel # :nodoc: all
       # @param [Array] args - args to claim
       def claim(action, *args)
         case action
+        when :refresh
+          # change the refresh state
+          @refresh = args[0]
         when :index
           # change the index name
           @index = args[0]

@@ -3,7 +3,6 @@ module ElasticsearchRecord
     extend ActiveSupport::Concern
 
     module ClassMethods
-
       # insert a new record into the Elasticsearch index
       # NOTICE: We don't want to mess up with the Arel-builder - so we send new data directly to the API
       # @param [ActiveModel::Attribute] values
@@ -12,41 +11,20 @@ module ElasticsearchRecord
         # values is not a "key=>values"-Hash, but a +ActiveModel::Attribute+ - so the casted values gets resolved here
         values = values.transform_values(&:value)
 
-        update_auto_increment = false
+        # resolve & update a auto_increment value
+        _insert_with_auto_increment(values) do |arguments|
+          # build new query
+          query = ElasticsearchRecord::Query.new(
+            index:     table_name,
+            type:      ElasticsearchRecord::Query::TYPE_CREATE,
+            # IMPORTANT: always exclude possible provided +_id+ field
+            body:      values.except('_id'),
+            arguments: arguments,
+            refresh:   true)
 
-        # resolve possible provided primary_key value from values
-        arguments = if (id = values[self.primary_key]).present?
-                      {id: id}
-                    elsif self.columns_hash[self.primary_key]&.meta['auto_increment'] # BETA: should not be used on mass imports to the Elasticsearch-index
-                      update_auto_increment = true
-                      ids = [
-                        connection.table_mappings(self.table_name).dig('properties', self.primary_key, 'meta', 'auto_increment').to_i + 1,
-                        self.unscoped.all.maximum(self.primary_key).to_i + 1
-                      ]
-                      {id: ids.max}
-                    else
-                      {}
-                    end
-
-        # IMPORTANT: Always drop possible provided 'primary_key' column +_id+.
-        values.delete(self.primary_key)
-
-        # build new query
-        query = ElasticsearchRecord::Query.new(
-          index:     table_name,
-          type:      ElasticsearchRecord::Query::TYPE_CREATE,
-          body:      values,
-          arguments: arguments,
-          refresh:   true)
-
-        # execute query and return inserted id
-        id = connection.insert(query, "#{self} Create")
-
-        if id.present? && update_auto_increment
-          connection.change_mapping_meta(table_name, self.primary_key, auto_increment: id)
+          # execute query and return inserted id
+          connection.insert(query, "#{self} Create")
         end
-
-        id
       end
 
       # updates a persistent entry in the Elasticsearch index
@@ -79,6 +57,39 @@ module ElasticsearchRecord
 
         # execute query and return total deletes
         connection.delete(query, "#{self} Delete")
+      end
+
+      private
+
+      # WARNING: BETA!!!
+      # Resolves the +auto_increment+ status from the tables +_meta+ attributes.
+      def _insert_with_auto_increment(values)
+        # check, if the primary_key's values is provided.
+        # so, no need to resolve a +auto_increment+ value, but provide
+        if values[self.primary_key].present?
+          # resolve id from values
+          id = values[self.primary_key]
+
+          yield({id: id})
+        elsif auto_increment?
+          ids = [
+            # we try to resolve the current-auto-increment value from the tables meta
+            connection.table_metas(self.table_name).dig('auto_increment').to_i + 1,
+            # for secure reasons, we also resolve the current maximum value for the primary key
+            self.unscoped.all.maximum(self.primary_key).to_i + 1
+          ]
+
+          id = yield({ id: ids.max })
+
+          if id.present?
+            connection.change_meta(self.table_name, :auto_increment, id)
+          end
+
+          # return inserted id
+          id
+        else
+          yield({})
+        end
       end
     end
   end

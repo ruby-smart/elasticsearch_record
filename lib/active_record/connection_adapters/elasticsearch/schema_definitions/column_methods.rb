@@ -17,7 +17,7 @@ module ActiveRecord
           # Appends a primary key definition to the table definition.
           # Can be called multiple times, but this is probably not a good idea.
           def primary_key(name, type = :primary_key, **options)
-            mapping(name, type, **options.merge(primary_key: true))
+            mapping(name, type, **options.merge(primary_key: true, auto_increment: true))
           end
         end
 

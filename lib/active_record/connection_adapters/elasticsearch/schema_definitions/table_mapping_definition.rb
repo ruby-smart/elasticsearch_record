@@ -16,6 +16,9 @@ module ActiveRecord
                       :index_prefixes, :index, :meta, :normalizer, :norms, :null_value, :position_increment_gap,
                       :properties, :search_analyzer, :similarity, :subobjects, :store, :term_vector].freeze
 
+        # define virtual attributes, that must be assigned due a special logic
+        ASSIGNABLE_ATTRIBUTES = [:comment, :primary_key, :auto_increment, :meta].freeze
+
         build_attribute_methods! *ATTRIBUTES
 
         # attributes
@@ -27,10 +30,7 @@ module ActiveRecord
         validates_presence_of :name
         validates_presence_of :type
         validates_inclusion_of :__attributes_keys, in: ATTRIBUTES, allow_blank: true
-
-        # disable validation for meta attribute - maybe future updates of Elasticsearch have other restrictions.
-        # To not be hooked on those possible changes we
-        #validate :_validate_meta
+        validate :_validate_meta
 
         # sets the default value (alias for null_value)
         alias_method :default=, :null_value=
@@ -41,32 +41,62 @@ module ActiveRecord
         ####################
 
         def initialize(name, type, attributes)
-          @name       = name.to_sym
-          @attributes = attributes.symbolize_keys
+          @name = name.to_sym
+
+          attributes = attributes.symbolize_keys
+          # directly set attributes, that cannot be assigned
+          @attributes = attributes.except(*ASSIGNABLE_ATTRIBUTES)
+          # assign special attributes
+          __assign(attributes.slice(*ASSIGNABLE_ATTRIBUTES))
 
           @type = _resolve_type(type)
         end
 
-        # comment is handled as nested key from 'meta' attribute
+        # returns the +comment+ from 'meta' attribute
+        # @return [String, nil]
         def comment
           __get_nested(:meta, :comment)
         end
 
+        # sets the +comment+ as 'meta' attribute
+        # @param [String] value
         def comment=(value)
           # important: meta-values can only be strings!
           __set_nested(:meta, :comment, value.to_s)
         end
 
+        # returns true if the +primary_key+ 'attribute' was provided
+        # @return [Boolean]
         def primary_key
-          __get_nested(:meta, :primary_key) == 'true'
+          !!_lazy_attributes[:primary_key]
         end
 
         alias_method :primary_key?, :primary_key
 
-        # defines this mapping as a primary key
+        # sets the +primary_key+ as 'lazy_attribute'
+        # @param [Boolean] value
         def primary_key=(value)
-          # important: meta-values can only be strings!
-          __set_nested(:meta, :primary_key, value ? 'true' : nil)
+          _lazy_attributes[:primary_key] = value
+        end
+
+        # returns the +auto_increment+ value, if provided
+        # @return [Integer]
+        def auto_increment
+          return nil unless _lazy_attributes[:auto_increment]
+          return 0 if _lazy_attributes[:auto_increment] == true
+          _lazy_attributes[:auto_increment].to_i
+        end
+
+        # returns true if the +auto_increment+ 'attribute' was provided
+        # @return [Boolean]
+        def auto_increment?
+          !!auto_increment
+        end
+
+        # sets the +auto_increment+ as 'lazy_attribute'
+        # @param [Boolean, Integer] value
+        def auto_increment=(value)
+          _lazy_attributes[:auto_increment] = value
         end
 
         def meta=(value)
@@ -78,6 +108,11 @@ module ActiveRecord
         end
 
         private
+
+        # non persistent attributes
+        def _lazy_attributes
+          @_lazy_attributes ||= {}
+        end
 
         # resolves the provided type.
         # prevents to set a nil type (sets +:object+ or +:nested+ - depends on existing properties)
@@ -99,8 +134,8 @@ module ActiveRecord
           return invalid!("'meta' is not supported on object or nested types", :attributes) if [:object, :nested].include?(type)
 
           # allow only strings
-          vkey = meta.keys.detect { |key| !meta[key].is_a?(String) }
-          return invalid!("'meta' has a key '#{vkey}' with a none string value", :attributes) if vkey.present?
+          failed_key = meta.keys.detect { |key| !meta[key].is_a?(String) }
+          return invalid!("'meta' has a key '#{failed_key}' with a none string value", :attributes) if failed_key.present?
 
           true
         end

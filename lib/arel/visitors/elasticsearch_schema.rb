@@ -23,11 +23,35 @@ module Arel # :nodoc: all
         # set the name of the index
         claim(:index, visit(o.name))
 
+        if o.metas.present? || o.mappings.present?
+          assign(:mappings, {}) do
+            # sets metas
+            resolve(o, :visit_TableMetas) if o.metas.present?
+
+            # sets mappings
+            resolve(o, :visit_TableMappings) if o.mappings.present?
+          end
+        end
+
         # sets settings
         resolve(o, :visit_TableSettings) if o.settings.present?
 
-        # sets mappings
-        resolve(o, :visit_TableMappings) if o.mappings.present?
+        # sets aliases
+        resolve(o, :visit_TableAliases) if o.aliases.present?
+      end
+
+      def visit_CloneTableDefinition(o)
+        # prepare query
+        claim(:type, ::ElasticsearchRecord::Query::TYPE_INDEX_CLONE)
+
+        # set the name of the index
+        claim(:index, visit(o.name))
+
+        # set the name of the target
+        claim(:argument, :target, visit(o.target))
+
+        # sets settings
+        resolve(o, :visit_TableSettings) if o.settings.present?
 
         # sets aliases
         resolve(o, :visit_TableAliases) if o.aliases.present?
@@ -39,6 +63,15 @@ module Arel # :nodoc: all
 
         # prepare definition
         visit(o.definition)
+      end
+
+      def visit_ChangeMetaDefinition(o)
+        # prepare query
+        claim(:type, ::ElasticsearchRecord::Query::TYPE_INDEX_UPDATE_MAPPING)
+
+        assign(:_meta, {}) do
+          resolve(o.items, :visit_TableMetaDefinition)
+        end
       end
 
       def visit_ChangeMappingDefinition(o)
@@ -95,10 +128,14 @@ module Arel # :nodoc: all
       end
 
       def visit_TableMappings(o)
-        assign(:mappings, {}) do
-          assign(:properties, {}) do
-            resolve(o.mappings, :visit_TableMappingDefinition)
-          end
+        assign(:properties, {}) do
+          resolve(o.mappings, :visit_TableMappingDefinition)
+        end
+      end
+
+      def visit_TableMetas(o)
+        assign(:_meta, {}) do
+          resolve(o.metas, :visit_TableMetaDefinition)
         end
       end
 
@@ -112,8 +149,12 @@ module Arel # :nodoc: all
         assign(o.name, o.value, :__force__)
       end
 
+      def visit_TableMetaDefinition(o)
+        assign(o.name, o.value)
+      end
+
       def visit_TableMappingDefinition(o)
-        assign(o.name, o.attributes.merge({type: type_to_sql(o.type)}))
+        assign(o.name, o.attributes.merge({ type: type_to_sql(o.type) }))
       end
 
       def visit_TableAliasDefinition(o)

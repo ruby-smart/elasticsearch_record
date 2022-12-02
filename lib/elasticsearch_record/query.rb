@@ -22,6 +22,7 @@ module ElasticsearchRecord
 
     # -- INDEX TYPES ---------------------------------------------------------------------------------------------------
     TYPE_INDEX_CREATE = :index_create
+    TYPE_INDEX_CLONE  = :index_clone
     # INDEX update is not implemented by Elasticsearch
     # - this is handled through individual updates of +mappings+, +settings+ & +aliases+.
     # INDEX delete is handled directly as API-call
@@ -38,7 +39,8 @@ module ElasticsearchRecord
       TYPE_CREATE, TYPE_UPDATE, TYPE_UPDATE_BY_QUERY, TYPE_DELETE, TYPE_DELETE_BY_QUERY,
 
       # -- INDEX TYPES
-      TYPE_INDEX_CREATE, TYPE_INDEX_UPDATE_MAPPING, TYPE_INDEX_UPDATE_SETTING, TYPE_INDEX_UPDATE_ALIAS,
+      TYPE_INDEX_CREATE, TYPE_INDEX_CLONE,
+      TYPE_INDEX_UPDATE_MAPPING, TYPE_INDEX_UPDATE_SETTING, TYPE_INDEX_UPDATE_ALIAS,
       TYPE_INDEX_DELETE_ALIAS
     ].freeze
 
@@ -59,6 +61,7 @@ module ElasticsearchRecord
     GATES = {
       TYPE_SQL                  => [:sql, :query],
       TYPE_INDEX_CREATE         => [:indices, :create],
+      TYPE_INDEX_CLONE          => [:indices, :clone],
       TYPE_INDEX_UPDATE_MAPPING => [:indices, :put_mapping],
       TYPE_INDEX_UPDATE_SETTING => [:indices, :put_settings],
       TYPE_INDEX_UPDATE_ALIAS   => [:indices, :put_alias],

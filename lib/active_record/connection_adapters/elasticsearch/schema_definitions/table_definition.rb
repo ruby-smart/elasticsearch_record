@@ -10,16 +10,19 @@ module ActiveRecord
       class TableDefinition
         include ColumnMethods
 
-        delegate :execute, :schema_creation, :column_exists?, :mapping_exists?, :setting_exists?, :alias_exists?, :close_table, :open_table, :table_mappings, to: :conn
+        delegate :execute, :schema_creation,
+                 :column_exists?, :mapping_exists?, :meta_exists?, :setting_exists?, :alias_exists?,
+                 :close_table, :open_table, :block_table, :unblock_table,
+                 :table_mappings, :table_metas, :table_settings, to: :conn
 
         attr_reader :conn
         attr_reader :name
         attr_reader :opts
 
         def initialize(conn, name, **opts)
-          @conn = conn
-          @name = name
-          @opts = opts
+          @conn   = conn
+          @name   = name
+          @opts   = opts
           @failed = false
         end
 
@@ -33,10 +36,11 @@ module ActiveRecord
             yield self
           rescue => e
             @failed = false
+            _rescue_assign
             raise e
-          ensure
-            _after_assign
           end
+
+          _after_assign
         end
 
         def exec!
@@ -47,10 +51,11 @@ module ActiveRecord
             _exec
           rescue => e
             @failed = false
+            _rescue_exec
             raise e
-          ensure
-            _after_exec
           end
+
+          _after_exec
         end
 
         def failed?
@@ -67,6 +72,10 @@ module ActiveRecord
           true
         end
 
+        def _rescue_assign
+          true
+        end
+
         def _before_exec
           true
         end
@@ -75,11 +84,23 @@ module ActiveRecord
           true
         end
 
+        def _rescue_exec
+          true
+        end
+
         def _exec
           raise ArgumentError, "you cannot execute a TableDefinition directly - use 'CreateTableDefinition' or 'UpdateTableDefinition' instead!"
         end
 
-        def new_mapping_definition(name, type, strict: true, **attributes, &block)
+        def new_meta_definition(name, value, strict: false, **)
+          meta = TableMetaDefinition.new(name, value)
+
+          raise ArgumentError, "you cannot define an invalid meta '#{name}' (#{meta.error_messages})!" if strict?(strict) && !meta.valid?
+
+          meta
+        end
+
+        def new_mapping_definition(name, type, strict: false, **attributes, &block)
           mapping = TableMappingDefinition.new(name, type, attributes)
           block.call(mapping) if block_given?
 
@@ -90,7 +111,7 @@ module ActiveRecord
 
         alias :new_column_definition :new_mapping_definition
 
-        def new_alias_definition(name, strict: true, **attributes, &block)
+        def new_alias_definition(name, strict: false, **attributes, &block)
           # create new alias
           tbl_alias = TableAliasDefinition.new(name, attributes)
           block.call(tbl_alias) if block_given?
@@ -100,7 +121,7 @@ module ActiveRecord
           tbl_alias
         end
 
-        def new_setting_definition(name, value, strict: true, **, &block)
+        def new_setting_definition(name, value, strict: false, **, &block)
           # create new setting
           setting = TableSettingDefinition.new(name, value).with_state(state)
           block.call(setting) if block_given?
@@ -124,7 +145,41 @@ module ActiveRecord
         end
 
         def strict?(strict = nil)
-          opts.fetch(:strict, true) && strict != false
+          opts.fetch(:strict, false) || strict
+        end
+
+        def transform_mappings!(mappings)
+          # transform +_meta+ mappings
+          if mappings['_meta'].present?
+            mappings['_meta'].each do |name, value|
+              self.meta(name, value)
+            end
+          end
+
+          # transform properties (=columns)
+          if mappings['properties'].present?
+            mappings['properties'].each do |name, attributes|
+              self.mapping(name, attributes.delete('type'), **attributes)
+            end
+          end
+        end
+
+        def transform_settings!(settings)
+          # exclude settings, that are provided through the API but are not part of the index-settings
+          settings
+            .with_indifferent_access
+            .each { |name, value|
+              # don't transform ignored names
+              next if ActiveRecord::ConnectionAdapters::Elasticsearch::TableSettingDefinition.match_ignore_names?(name)
+
+              self.setting(name, value)
+            }
+        end
+
+        def transform_aliases!(aliases)
+          aliases.each do |name, attributes|
+            self.alias(name, **attributes)
+          end
         end
       end
     end

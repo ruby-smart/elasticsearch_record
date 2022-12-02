@@ -91,6 +91,7 @@ module Arel # :nodoc: all
         if o.relation.is_a?(::Arel::Table)
           # prepare query
           claim(:type, ::ElasticsearchRecord::Query::TYPE_CREATE)
+          claim(:refresh, true)
 
           # sets the index
           resolve(o.relation)

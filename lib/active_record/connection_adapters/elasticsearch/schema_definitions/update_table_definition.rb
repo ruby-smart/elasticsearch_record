@@ -14,7 +14,7 @@ module ActiveRecord
         COMPOSITE_DEFINITIONS = [
           AddMappingDefinition,
           ChangeMappingDefinition,
-
+          ChangeMetaDefinition,
           AddSettingDefinition,
           DeleteAliasDefinition
         ].freeze
@@ -29,10 +29,29 @@ module ActiveRecord
         alias :mapping :add_mapping
         alias :column :add_mapping
 
+        def change_meta(name, value, **options)
+          load_meta_definition!
+
+          define! ChangeMetaDefinition, new_meta_definition(name, value, **options)
+        end
+
+        def delete_meta(name, **options)
+          load_meta_definition!
+
+          define! ChangeMetaDefinition, new_meta_definition(name, nil, **options)
+        end
+
         def change_mapping(name, type, if_exists: false, **options, &block)
           return if if_exists && !mapping_exists?(self.name, name, type)
 
-          define! ChangeMappingDefinition, new_mapping_definition(name, type, **options, &block)
+          mapping = new_mapping_definition(name, type, **options, &block)
+          define! ChangeMappingDefinition, mapping
+
+          # check if the mapping is assigned as primary_key
+          if mapping.primary_key?
+            change_meta :primary_key, mapping.name
+            change_meta(:auto_increment, mapping.auto_increment) if mapping.auto_increment?
+          end
         end
 
         alias :change_column :change_mapping
@@ -56,6 +75,7 @@ module ActiveRecord
 
           define! ChangeMappingDefinition, new_mapping_definition(name, mapping['type'], **options, &block)
         end
+
         alias :change_mapping_attribute :change_mapping_attributes
 
         def add_setting(name, value, if_not_exists: false, **options, &block)
@@ -105,6 +125,17 @@ module ActiveRecord
 
         private
 
+        # loads existing meta definitions from table_mappings
+        def load_meta_definition!
+          return if @load_meta_definition
+          @load_meta_definition = true
+
+
+          table_metas(self.name).each do |name, value|
+            define! ChangeMetaDefinition, new_meta_definition(name, value)
+          end
+        end
+
         def define!(klass, item)
           @definitions        ||= {}
           @definitions[klass] ||= []
@@ -119,11 +150,6 @@ module ActiveRecord
           clear_state!
         end
 
-        def _after_assign
-          # run the same content as +_after_exec+, but only if the assignment failed
-          _after_exec if failed?
-        end
-
         def _after_exec
           # reopen the table again
           open_table(self.name) if _toggle_table_status?
@@ -131,6 +157,8 @@ module ActiveRecord
           # reset table state
           clear_state!
         end
+        alias :_rescue_assign :_after_exec
+        alias :_rescue_exec :_after_exec
 
         def _toggle_table_status?
           @toggle_table_status = (force? && state[:status] == 'open') if @toggle_table_status.nil?
@@ -140,9 +168,6 @@ module ActiveRecord
 
         def _exec
           return unless definitions.any?
-
-          # check, if the table should be closed before executing the queries
-          close_table(self.name) if opts[:close] == true
 
           definitions.each do |klass, items|
             # check if the provided definition klass is a composite definition
@@ -159,10 +184,10 @@ module ActiveRecord
             end
           end
 
-          open_table(self.name) if opts[:close] == true
-
-          # cleanup definitions
+          # cleanup executed definitions
           @definitions = {}
+
+          true
         end
 
         def _to_composite_log(klass)

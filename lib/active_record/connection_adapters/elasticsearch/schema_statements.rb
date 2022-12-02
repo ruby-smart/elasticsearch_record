@@ -92,7 +92,7 @@ module ActiveRecord
                                     :dump_schema_information
 
           def assume_migrated_upto_version(version)
-            version = version.to_i
+            version  = version.to_i
             migrated = migration_context.get_all_versions
             versions = migration_context.migrations.map(&:version)
 
@@ -108,7 +108,7 @@ module ActiveRecord
               end
 
               # use a ActiveRecord syntax to create new versions
-              inserting.each {|iversion| schema_migration.create(version: iversion) }
+              inserting.each { |iversion| schema_migration.create(version: iversion) }
             end
 
             true
@@ -135,6 +135,14 @@ module ActiveRecord
           # @return [Hash]
           def table_mappings(table_name)
             api(:indices, :get_mapping, { index: table_name, expand_wildcards: [:open, :closed] }, 'SCHEMA').dig(table_name, 'mappings')
+          end
+
+          # returns a hash of all meta data by provided table_name (index).
+          # HINT: +_meta+ is resolved from the table mappings
+          # @param [String] table_name
+          # @return [Hash]
+          def table_metas(table_name)
+            table_mappings(table_name).dig('_meta').presence || {}
           end
 
           # returns a hash of all settings by provided table_name
@@ -223,7 +231,8 @@ module ActiveRecord
               meta:       field['meta'],
               virtual:    field['virtual'],
               fields:     field['fields'],
-              properties: field['properties']
+              properties: field['properties'],
+              enabled:    field['enabled']
             )
           end
 
@@ -239,15 +248,18 @@ module ActiveRecord
           # Returns a array of tables primary keys.
           # PLEASE NOTE: Elasticsearch does not have a concept of primary key.
           # The only thing that uniquely identifies a document is the index together with the +_id+.
-          # To not break the "ConnectionAdapters" concept we simulate this through the +meta+ attribute.
+          # To support this concept we simulate this through the +_meta+ field (from the index).
+          #
+          # As a alternative, the primary_key can also be provided through the mappings +meta+ field.
+          #
+          # see @ https://www.elastic.co/guide/en/elasticsearch/reference/8.5/mapping-meta-field.html
           # @see ActiveRecord::ConnectionAdapters::AbstractMysqlAdapter#primary_keys
           # @param [String] table_name
           def primary_keys(table_name)
-            column_definitions(table_name)
-            # ActiveRecord::ConnectionAdapters::ElasticsearchAdapter::BASE_STRUCTURE
-              .select { |f| f['meta'] && f['meta']['primary_key'] == 'true' }
+            table_metas(table_name).dig('primary_key').presence || column_definitions(table_name).
+              select { |f| f['meta'] && f['meta']['primary_key'] == 'true' }.
               # only take the last found primary key (if no custom primary_key was provided this will return +_id+ )
-              .map { |f| f["name"] }[-1..-1]
+              map { |f| f["name"] }[-1..-1]
           end
 
           # Checks to see if the data source +name+ exists on the database.
@@ -307,6 +319,17 @@ module ActiveRecord
             column_exists?(table_name, mapping_name, type)
           end
 
+          # Checks to see if a meta +meta_name+ within a table +table_name+ exists on the database.
+          #
+          #   meta_exists?(:developers, 'class')
+          #
+          # @param [String] table_name
+          # @param [String,Symbol] meta_name
+          # @return [Boolean]
+          def meta_exists?(table_name, meta_name)
+            table_metas(table_name).keys.include?(meta_name.to_s)
+          end
+
           # overwrite original methods to provide a elasticsearch version
           def create_schema_dumper(options)
             ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaDumper.create(self, options)
@@ -318,9 +341,12 @@ module ActiveRecord
           end
 
           # overwrite original methods to provide a elasticsearch version
-          def update_table_definition(name, base = self, **options)
-            # :nodoc:
+          def update_table_definition(name, base = self, **options) # :nodoc:
             ::ActiveRecord::ConnectionAdapters::Elasticsearch::UpdateTableDefinition.new(base, name, **options)
+          end
+
+          def clone_table_definition(name, target, **options)
+            ::ActiveRecord::ConnectionAdapters::Elasticsearch::CloneTableDefinition.new(self, name, target, **options)
           end
 
           # overwrite original methods to provide a elasticsearch version

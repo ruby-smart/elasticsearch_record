@@ -9,6 +9,7 @@ module ActiveRecord
       # mapping definitions
       AddMappingDefinition    = Struct.new(:items) # composite
       ChangeMappingDefinition = Struct.new(:items) # composite
+      ChangeMetaDefinition    = Struct.new(:items) # composite
 
       # setting definitions
       AddSettingDefinition    = Struct.new(:items) # composite
@@ -30,8 +31,10 @@ require 'active_record/connection_adapters/elasticsearch/schema_definitions/colu
 
 require 'active_record/connection_adapters/elasticsearch/schema_definitions/table_alias_definition'
 require 'active_record/connection_adapters/elasticsearch/schema_definitions/table_mapping_definition'
+require 'active_record/connection_adapters/elasticsearch/schema_definitions/table_meta_definition'
 require 'active_record/connection_adapters/elasticsearch/schema_definitions/table_setting_definition'
 
 require 'active_record/connection_adapters/elasticsearch/schema_definitions/table_definition'
 require 'active_record/connection_adapters/elasticsearch/schema_definitions/create_table_definition'
 require 'active_record/connection_adapters/elasticsearch/schema_definitions/update_table_definition'
+require 'active_record/connection_adapters/elasticsearch/schema_definitions/clone_table_definition'

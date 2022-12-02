@@ -45,10 +45,11 @@ module ActiveRecord # :nodoc:
 
       # defines the Elasticsearch 'base' structure, which is always included but cannot be resolved through mappings ...
       BASE_STRUCTURE = [
-        { 'name' => '_id', 'type' => 'keyword', 'virtual' => true, 'meta' => { 'primary_key' => 'true' } },
+        { 'name' => '_id', 'type' => 'keyword', 'virtual' => true, 'enabled' => true, 'meta' => { 'primary_key' => 'true' } },
         { 'name' => '_index', 'type' => 'keyword', 'virtual' => true },
         { 'name' => '_score', 'type' => 'float', 'virtual' => true },
-        { 'name' => '_type', 'type' => 'keyword', 'virtual' => true }
+        { 'name' => '_type', 'type' => 'keyword', 'virtual' => true },
+        { 'name' => '_ignored', 'type' => 'boolean', 'virtual' => true }
       ].freeze
 
       include Elasticsearch::UnsupportedImplementation
@@ -150,6 +151,20 @@ module ActiveRecord # :nodoc:
         # prepared statements are not supported by Elasticsearch.
         # documentation for mysql prepares statements @ https://dev.mysql.com/doc/refman/8.0/en/sql-prepared-statements.html
         @prepared_statements = false
+      end
+
+      def schema_migration # :nodoc:
+        @schema_migration ||= ElasticsearchRecord::SchemaMigration
+      end
+
+      # provide a table_name_prefix from the configuration to create & restrict schema creation
+      def table_name_prefix
+        @config.fetch(:table_name_prefix, '')
+      end
+
+      # provide a table_name_suffix from the configuration to create & restrict schema creation
+      def table_name_suffix
+        @config.fetch(:table_name_suffix, '')
       end
 
       # overwrite method to provide a Elasticsearch path

@@ -5,13 +5,14 @@ module ActiveRecord
     module Elasticsearch
       class Column < ConnectionAdapters::Column # :nodoc:
 
-        attr_reader :virtual, :fields, :properties, :meta
+        attr_reader :virtual, :fields, :properties, :meta, :enabled
 
-        def initialize(name, default, sql_type_metadata = nil, virtual: false, fields: nil, properties: nil, meta: nil, **kwargs)
+        def initialize(name, default, sql_type_metadata = nil, virtual: false, fields: nil, properties: nil, meta: nil, enabled: nil, **kwargs)
           @virtual    = virtual
           @fields     = fields.presence || []
           @properties = properties.presence || []
           @meta       = meta.presence || {}
+          @enabled    = enabled.nil? ? true : enabled
 
           super(name, default, sql_type_metadata, true, nil, **kwargs)
         end
@@ -19,6 +20,12 @@ module ActiveRecord
         # returns comment from meta
         def comment
           meta? && meta['comment']
+        end
+
+        # returns true if this column is enabled (= searchable by queries)
+        # @return [Boolean]
+        def enabled?
+          !!enabled
         end
 
         # returns true if this column is virtual.

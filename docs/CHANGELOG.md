@@ -1,6 +1,25 @@
 # ElasticsearchRecord - CHANGELOG
 
-## [1.1.0] - 2022-12-02
+## [1.2.0] - 2022-12-02
+* [add] `ElasticsearchRecord::SchemaMigration` to fix connection-related differences (like table_name_prefix, table_name_suffix)
+* [add] connection (config-related) 'table_name_prefix' & 'table_name_suffix' - now will be forwarded to all related models & schema-tables
+* [add] `#block_table`, `#unblock_table`, `#clone_table`, `#table_metas`, `#meta_exists?`, `#change_meta`, `#delete_meta` methods for Elasticsearch ConnectionAdapter
+* [add] `ElasticsearchRecord::Base.auto_increment?`
+* [add] index 'meta' method to access the `_meta` mapping
+* [add] `.ElasticsearchRecord::Base.relay_id_attribute` to relay a possible existing 'id'-attribute
+* [add] new enabled attribute `enabled` - which defines 'searchable attributes & fields' and gets also read from the index-mappings
+* [ref] insert a new record with primary_key & auto_increment through a wrapper `_insert_with_auto_increment`
+* [ref] resolve `primary_keys` now from the index `_meta` mapping first (old mapping-related 'meta.primary_key:"true"' is still supported)
+* [ref] disable 'strict' mode (= validation) of settings, alias, mappings as default (this can be still used with `strict: true`)
+* [ref] silent unsupported methods 'create/drop' for `ElasticsearchRecord::Tasks::ElasticsearchDatabaseTasks`
+* [ref] primary_key & auto_increment handling of custom defined mappings - now uses the index `_meta` mapping
+* [fix] creating a record with different 'primary_key' fails with removed value (value no longer gets dropped)
+* [fix] some index-settings not being ignored through `#transform_settings!`
+* [fix] `ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaDumper` dumping environment-related tables in the same database
+* [fix] `ActiveRecord::ConnectionAdapters::Elasticsearch::TableMappingDefinition` fails with explicit assignable attributes (now uses ASSIGNABLE_ATTRIBUTES)
+* [fix] tables with provided 'table_name_prefix' or 'table_name_suffix' not being ignored by the SchemaDumper
+
+## [1.1.0] - 2022-12-01
 * [add] support for schema dumps & migrations for Elasticsearch
 * [add] `buckets` query/relation result method to resolve the buckets as key->value hash from aggregations
 * [add] support for third-party gems (e.g. elasticsearch-dsl)

@@ -240,20 +240,24 @@ total = scope.total
 - index_base_name
 - relay_id_attribute
 
-### Useful model instance methods
+### Useful model class methods
+- auto_increment?
+- max_result_window
 - source_column_names
 - searchable_column_names
 - find_by_query
 - msearch
 
-## ActiveRecord ConnectionAdapters schema-methods
+## ActiveRecord ConnectionAdapters table-methods
 Access these methods through the model's connection.
+
 ```ruby
   # returns mapping of provided table (index)
   model.connection.table_mappings('table-name')
 ```
 
 - table_mappings
+- table_metas
 - table_settings
 - table_aliases
 - table_state
@@ -261,12 +265,14 @@ Access these methods through the model's connection.
 - alias_exists?
 - setting_exists?
 - mapping_exists?
+- meta_exists?
 - max_result_window
 - cluster_info
 
 ## Active Record Schema migration methods
 Access these methods through the model's connection or within any `Migration`.
 
+**cluster actions:**
 - open_table
 - open_tables
 - close_table
@@ -274,8 +280,15 @@ Access these methods through the model's connection or within any `Migration`.
 - truncate_table
 - truncate_tables
 - drop_table
+- block_table
+- unblock_table
+- clone_table
 - create_table
 - change_table
+
+**table actions:**
+- change_meta
+- delete_meta
 - add_mapping
 - change_mapping
 - change_mapping_meta
@@ -299,11 +312,15 @@ class AddTests < ActiveRecord::Migration[7.0]
       t.setting :number_of_shards, "1"
       t.setting :number_of_replicas, 0
     end
+
+    # changes the auto-increment value
+    change_meta "assignments", :auto_increment, 3625
     
     create_table "settings", force: true do |t|
       t.mapping :created_at, :date
-      t.mapping :key, :keyword do |m|
+      t.mapping :key, :integer do |m|
         m.primary_key = true
+        m.auto_increment = 10
       end
       t.mapping :status, :keyword
       t.mapping :updated_at, :date
@@ -315,11 +332,11 @@ class AddTests < ActiveRecord::Migration[7.0]
     end
 
     add_mapping "settings", :active, :boolean do |m|
-      m.comment = "Hans"
+      m.comment = "Contains the active state"
     end
 
     change_table 'settings', force: true do |t|
-      t.add_setting( "index.search.idle.after", "20s")
+      t.add_setting("index.search.idle.after", "20s")
       t.add_setting("index.shard.check_on_startup", true)
       t.add_alias('supersettings')
     end
@@ -336,9 +353,6 @@ class AddTests < ActiveRecord::Migration[7.0]
       t.string :name
       t.timestamps
     end
-
-    change_mapping_meta "vintage", :number, auto_increment: 'true'
-    change_mapping_meta "vintage", :number, peter: 'hans'
 
     change_mapping_attributes "vintage", :number, fields: {raw: {type: :keyword}}
   end

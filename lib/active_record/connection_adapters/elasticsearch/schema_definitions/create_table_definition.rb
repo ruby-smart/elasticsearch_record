@@ -12,6 +12,7 @@ module ActiveRecord
           @settings = HashWithIndifferentAccess.new
           @mappings = HashWithIndifferentAccess.new
           @aliases  = HashWithIndifferentAccess.new
+          @metas    = HashWithIndifferentAccess.new
 
           transform_settings!(settings) if settings.present?
           transform_mappings!(mappings) if mappings.present?
@@ -28,6 +29,12 @@ module ActiveRecord
         # @return [Array]
         def mappings
           @mappings.values
+        end
+
+        # returns an array with all +TableMetaDefinition+.
+        # @return [Array]
+        def metas
+          @metas.values
         end
 
         # provide backwards compatibility to columns
@@ -48,11 +55,32 @@ module ActiveRecord
         # DEFINITION METHODS #
         ######################
 
+        # adds a new meta
+        def meta(name, value, force: false, **options)
+          raise ArgumentError, "you cannot define an already defined meta '#{name}'!" if @metas.key?(name) && !force?(force)
+
+          @metas[name] = new_meta_definition(name, value, **options)
+
+          self
+        end
+
+        def remove_meta(name)
+          @metas.delete(name)
+        end
+
         # adds a new mapping
         def mapping(name, type, force: false, **options, &block)
           raise ArgumentError, "you cannot define an already defined mapping '#{name}'!" if @mappings.key?(name) && !force?(force)
 
-          @mappings[name] = new_mapping_definition(name, type, **options, &block)
+          mapping = new_mapping_definition(name, type, **options, &block)
+          @mappings[name] = mapping
+
+
+          # check if the mapping is assigned as primary_key
+          if mapping.primary_key?
+            meta :primary_key, mapping.name
+            meta(:auto_increment, mapping.auto_increment) if mapping.auto_increment?
+          end
 
           self
         end
@@ -125,32 +153,6 @@ module ActiveRecord
         # force empty states to prevent "Name is static for an open table" error.
         def state
           nil
-        end
-
-        def transform_mappings!(mappings)
-          return unless mappings['properties'].present?
-
-          mappings['properties'].each do |name, attributes|
-            self.mapping(name, attributes.delete('type'), **attributes)
-          end
-        end
-
-        def transform_settings!(settings)
-          # exclude settings, that are provided through the API but are not part of the index-settings
-          settings
-            .with_indifferent_access
-            .each { |name, value|
-              # don't transform ignored names
-              next if ActiveRecord::ConnectionAdapters::Elasticsearch::TableSettingDefinition.match_ignore_names?(name)
-
-              self.setting(name, value)
-            }
-        end
-
-        def transform_aliases!(aliases)
-          aliases.each do |name, attributes|
-            self.alias(name, **attributes)
-          end
         end
       end
     end

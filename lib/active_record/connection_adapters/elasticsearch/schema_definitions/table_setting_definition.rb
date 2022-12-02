@@ -10,7 +10,7 @@ module ActiveRecord
         include ActiveModel::Validations
 
         # exclude settings, that are provided through the API but are not part of the index-settings API
-        IGNORE_NAMES = ['provided_name', 'creation_date', 'uuid', 'version'].freeze
+        IGNORE_NAMES = ['provided_name', 'creation_date', 'uuid', 'version','routing.allocation.initial_recovery','resize'].freeze
 
         # available setting names
         # - see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules.html#index-modules-settings
@@ -33,7 +33,8 @@ module ActiveRecord
                          'max_docvalue_fields_search', 'max_script_fields', 'max_ngram_diff', 'max_shingle_diff',
                          'max_refresh_listeners', 'analyze.max_token_count', 'highlight.max_analyzed_offset',
                          'max_terms_count', 'max_regex_length', 'query.default_field', 'routing.allocation.enable',
-                         'routing.rebalance.enable', 'gc_deletes', 'default_pipeline', 'final_pipeline', 'hidden'].freeze
+                         'routing.rebalance.enable', 'gc_deletes', 'default_pipeline', 'final_pipeline',
+                         'hidden', 'blocks'].freeze
 
         VALID_NAMES = (FINAL_NAMES + STATIC_NAMES + DYNAMIC_NAMES).freeze
 
@@ -43,6 +44,9 @@ module ActiveRecord
 
         # validations
         validates_presence_of :name
+
+        # disable validation for name - maybe future updates of Elasticsearch have other names.
+        # To not be hooked on those possible changes we disable the validation
         validate :_validate_name
         validate :_validate_final_name
         validate :_validate_static_name
@@ -78,7 +82,8 @@ module ActiveRecord
         end
 
         def static?
-          !dynamic?
+          @static = flat_names.all? { |flat_name| self.class.match_static_names?(flat_name) } if @static.nil?
+          @static
         end
 
         def dynamic?
@@ -100,7 +105,7 @@ module ActiveRecord
         end
 
         def _validate_static_name
-          return true if dynamic?
+          return true unless static?
           return true if ['missing', 'close'].include?(_table_status)
 
           invalid!("is static - this setting can only be changed on a closed index!", :name)

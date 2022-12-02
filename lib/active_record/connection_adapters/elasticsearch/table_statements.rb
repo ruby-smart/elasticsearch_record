@@ -31,13 +31,17 @@ module ActiveRecord
           # - refresh
           # - rename_table
 
-          define_unsupported_method :rename_table
+          define_unsupported_method :create_join_table, :drop_join_table, :create_alter_table,
+                                    :change_column_default, :change_column_null, :rename_column, :rename_table
 
           # Opens a closed index.
           # @param [String] table_name
           # @return [Boolean] acknowledged status
           def open_table(table_name)
-            schema_cache.clear_data_source_cache!(table_name.to_s)
+            # IMPORTANT: compute will add possible configured prefix & suffix
+            table_name = _compute_table_name(table_name)
+
+            schema_cache.clear_data_source_cache!(table_name)
             api(:indices, :open, { index: table_name }, 'OPEN TABLE').dig('acknowledged')
           end
 
@@ -55,7 +59,10 @@ module ActiveRecord
           # @param [String] table_name
           # @return [Boolean] acknowledged status
           def close_table(table_name)
-            schema_cache.clear_data_source_cache!(table_name.to_s)
+            # IMPORTANT: compute will add possible configured prefix & suffix
+            table_name = _compute_table_name(table_name)
+
+            schema_cache.clear_data_source_cache!(table_name)
             api(:indices, :close, { index: table_name }, 'CLOSE TABLE').dig('acknowledged')
           end
 
@@ -77,6 +84,9 @@ module ActiveRecord
           # @param [String] table_name
           # @return [Boolean] acknowledged status
           def truncate_table(table_name)
+            # IMPORTANT: compute will add possible configured prefix & suffix
+            table_name = _compute_table_name(table_name)
+
             # force: automatically drops an existing index
             create_table(table_name, force: true, **table_schema(table_name))
           end
@@ -98,11 +108,71 @@ module ActiveRecord
           #   Set to +true+ to only drop the table if it exists.
           #   Defaults to false.
           # @param [String] table_name
+          # @param [Boolean] if_exists
+          # @return [Array] acknowledged status
+          def drop_table(table_name, if_exists: false, **)
+            # IMPORTANT: compute will add possible configured prefix & suffix
+            table_name = _compute_table_name(table_name)
+
+            schema_cache.clear_data_source_cache!(table_name)
+            api(:indices, :delete, { index: table_name, ignore: (if_exists ? 404 : nil) }, 'DROP TABLE').dig('acknowledged')
+          end
+
+          # blocks access to the provided table (index) and +block+ name.
+          # @param [String] table_name
+          # @param [Symbol] block_name The block to add (one of :read, :write, :read_only or :metadata)
+          # @return [Boolean] acknowledged status
+          def block_table(table_name, block_name = :write)
+            # IMPORTANT: compute will add possible configured prefix & suffix
+            table_name = _compute_table_name(table_name)
+
+            api(:indices, :add_block, { index: table_name, block: block_name }, "BLOCK #{block_name.to_s.upcase} TABLE").dig('acknowledged')
+          end
+
+          # unblocks access to the provided table (index) and +block+ name.
+          # provide a nil-value to unblock all blocks, otherwise provide the blocked name.
+          # @param [String] table_name
+          # @param [Symbol] block_name The block to add (one of :read, :write, :read_only or :metadata)
+          # @return [Boolean] acknowledged status
+          def unblock_table(table_name, block_name = nil)
+            # IMPORTANT: compute will add possible configured prefix & suffix
+            table_name = _compute_table_name(table_name)
+
+            if block_name.nil?
+              change_table(table_name) do |t|
+                t.change_setting('index.blocks.read', false)
+                t.change_setting('index.blocks.write', false)
+                t.change_setting('index.blocks.read_only', false)
+                t.change_setting('index.blocks.metadata', false)
+              end
+            else
+              change_setting(table_name, "index.blocks.#{block_name}", false)
+            end
+          end
+
+          # clones an entire table to the provided +target_name+.
+          # During cloning, the table will be automatically 'write'-blocked.
+          # @param [String] table_name
+          # @param [String] target_name
           # @param [Hash] options
-          # @return [Array] acknowledged status for provided table
-          def drop_table(table_name, **options)
-            schema_cache.clear_data_source_cache!(table_name.to_s)
-            api(:indices, :delete, { index: table_name, ignore: (options[:if_exists] ? 404 : nil) }, 'DROP TABLE').dig('acknowledged')
+          # @param [Proc] block
+          def clone_table(table_name, target_name, **options, &block)
+            # IMPORTANT: compute will add possible configured prefix & suffix
+            table_name = _compute_table_name(table_name)
+            target_name = _compute_table_name(target_name)
+
+            # create new definition
+            definition = clone_table_definition(table_name, target_name, **extract_table_options!(options), &block)
+
+            # yield optional block
+            if block_given?
+              definition.assign do |d|
+                yield d
+              end
+            end
+
+            # execute definition query(ies)
+            definition.exec!
           end
 
           # creates a new table (index).
@@ -120,6 +190,9 @@ module ActiveRecord
           # @param [Hash] options
           # @return [Boolean] acknowledged status
           def create_table(table_name, force: false, copy_from: nil, if_not_exists: false, **options)
+            # IMPORTANT: compute will add possible configured prefix & suffix
+            table_name = _compute_table_name(table_name)
+
             return if if_not_exists && table_exists?(table_name)
 
             # copy schema from existing table
@@ -154,6 +227,9 @@ module ActiveRecord
           #     # Other column alterations here
           #   end
           def change_table(table_name, **options)
+            # IMPORTANT: compute will add possible configured prefix & suffix
+            table_name = _compute_table_name(table_name)
+
             definition = update_table_definition(table_name, self, **options)
 
             # yield optional block
@@ -185,10 +261,19 @@ module ActiveRecord
             _exec_change_table_with(:change_mapping_meta, table_name, name, **options)
           end
 
-          def change_mapping_attributes(table_name, name, **options,&block)
+          def change_mapping_attributes(table_name, name, **options, &block)
             _exec_change_table_with(:change_mapping_attributes, table_name, name, **options, &block)
           end
+
           alias :change_mapping_attribute :change_mapping_attributes
+
+          def change_meta(table_name, name, value, **options)
+            _exec_change_table_with(:change_meta, table_name, name, value, **options)
+          end
+
+          def delete_meta(table_name, name, **options)
+            _exec_change_table_with(:delete_meta, table_name, name, **options)
+          end
 
           # -- setting -------------------------------------------------------------------------------------------------
 
@@ -219,6 +304,15 @@ module ActiveRecord
           end
 
           private
+
+          def _compute_table_name(table_name)
+            # HINT: +"" creates a new +unfrozen+ string!
+            str = +""
+            str << table_name_prefix unless table_name.to_s.start_with?(table_name_prefix)
+            str << table_name
+            str << table_name_suffix unless table_name.to_s.end_with?(table_name_suffix)
+            str
+          end
 
           def _exec_change_table_with(method, table_name, *args, **kwargs, &block)
             change_table(table_name) do |t|
