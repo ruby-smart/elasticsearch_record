@@ -1,5 +1,8 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.2.3] - 2022-12-12
+* [fix] `change_table` 'if_exists: true' returns at the wrong state
+
 ## [1.2.2] - 2022-12-12
 * [add] `:if_exists` option for `change_table`
 * [fix] executing `_compute_table_name` irregular on some schema methods and some not - not only executes on `create_table` and `change_table`
