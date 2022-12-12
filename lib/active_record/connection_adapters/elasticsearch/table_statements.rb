@@ -38,9 +38,6 @@ module ActiveRecord
           # @param [String] table_name
           # @return [Boolean] acknowledged status
           def open_table(table_name)
-            # IMPORTANT: compute will add possible configured prefix & suffix
-            table_name = _compute_table_name(table_name)
-
             schema_cache.clear_data_source_cache!(table_name)
             api(:indices, :open, { index: table_name }, 'OPEN TABLE').dig('acknowledged')
           end
@@ -59,9 +56,6 @@ module ActiveRecord
           # @param [String] table_name
           # @return [Boolean] acknowledged status
           def close_table(table_name)
-            # IMPORTANT: compute will add possible configured prefix & suffix
-            table_name = _compute_table_name(table_name)
-
             schema_cache.clear_data_source_cache!(table_name)
             api(:indices, :close, { index: table_name }, 'CLOSE TABLE').dig('acknowledged')
           end
@@ -84,9 +78,6 @@ module ActiveRecord
           # @param [String] table_name
           # @return [Boolean] acknowledged status
           def truncate_table(table_name)
-            # IMPORTANT: compute will add possible configured prefix & suffix
-            table_name = _compute_table_name(table_name)
-
             # force: automatically drops an existing index
             create_table(table_name, force: true, **table_schema(table_name))
           end
@@ -111,9 +102,6 @@ module ActiveRecord
           # @param [Boolean] if_exists
           # @return [Array] acknowledged status
           def drop_table(table_name, if_exists: false, **)
-            # IMPORTANT: compute will add possible configured prefix & suffix
-            table_name = _compute_table_name(table_name)
-
             schema_cache.clear_data_source_cache!(table_name)
             api(:indices, :delete, { index: table_name, ignore: (if_exists ? 404 : nil) }, 'DROP TABLE').dig('acknowledged')
           end
@@ -123,9 +111,6 @@ module ActiveRecord
           # @param [Symbol] block_name The block to add (one of :read, :write, :read_only or :metadata)
           # @return [Boolean] acknowledged status
           def block_table(table_name, block_name = :write)
-            # IMPORTANT: compute will add possible configured prefix & suffix
-            table_name = _compute_table_name(table_name)
-
             api(:indices, :add_block, { index: table_name, block: block_name }, "BLOCK #{block_name.to_s.upcase} TABLE").dig('acknowledged')
           end
 
@@ -135,9 +120,6 @@ module ActiveRecord
           # @param [Symbol] block_name The block to add (one of :read, :write, :read_only or :metadata)
           # @return [Boolean] acknowledged status
           def unblock_table(table_name, block_name = nil)
-            # IMPORTANT: compute will add possible configured prefix & suffix
-            table_name = _compute_table_name(table_name)
-
             if block_name.nil?
               change_table(table_name) do |t|
                 t.change_setting('index.blocks.read', false)
@@ -157,10 +139,6 @@ module ActiveRecord
           # @param [Hash] options
           # @param [Proc] block
           def clone_table(table_name, target_name, **options, &block)
-            # IMPORTANT: compute will add possible configured prefix & suffix
-            table_name = _compute_table_name(table_name)
-            target_name = _compute_table_name(target_name)
-
             # create new definition
             definition = clone_table_definition(table_name, target_name, **extract_table_options!(options), &block)
 
@@ -191,7 +169,7 @@ module ActiveRecord
           # @return [Boolean] acknowledged status
           def create_table(table_name, force: false, copy_from: nil, if_not_exists: false, **options)
             # IMPORTANT: compute will add possible configured prefix & suffix
-            table_name = _compute_table_name(table_name)
+            table_name = compute_table_name(table_name)
 
             return if if_not_exists && table_exists?(table_name)
 
@@ -226,9 +204,11 @@ module ActiveRecord
           #     t.mapping :name, :string
           #     # Other column alterations here
           #   end
-          def change_table(table_name, **options)
+          def change_table(table_name, if_exists: false, **options)
             # IMPORTANT: compute will add possible configured prefix & suffix
-            table_name = _compute_table_name(table_name)
+            table_name = compute_table_name(table_name)
+
+            return if if_exists && table_exists?(table_name)
 
             definition = update_table_definition(table_name, self, **options)
 
@@ -303,16 +283,21 @@ module ActiveRecord
             _exec_change_table_with(:delete_alias, table_name, name, **options, &block)
           end
 
-          private
-
-          def _compute_table_name(table_name)
+          # computes a provided +table_name+ with optionally configured +table_name_prefix+ & +table_name_suffix+.
+          # @param [String] table_name
+          # @return [String]
+          def compute_table_name(table_name)
+            table_name = table_name.to_s
+            
             # HINT: +"" creates a new +unfrozen+ string!
             str = +""
-            str << table_name_prefix unless table_name.to_s.start_with?(table_name_prefix)
+            str << table_name_prefix unless table_name.start_with?(table_name_prefix)
             str << table_name
-            str << table_name_suffix unless table_name.to_s.end_with?(table_name_suffix)
+            str << table_name_suffix unless table_name.end_with?(table_name_suffix)
             str
           end
+
+          private
 
           def _exec_change_table_with(method, table_name, *args, **kwargs, &block)
             change_table(table_name) do |t|

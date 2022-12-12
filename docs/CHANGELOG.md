@@ -1,5 +1,11 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.2.2] - 2022-12-12
+* [add] `:if_exists` option for `change_table`
+* [fix] executing `_compute_table_name` irregular on some schema methods and some not - not only executes on `create_table` and `change_table`
+* [ref] private `_compute_table_name` method to public `compute_table_name`
+* [ref] drop `_compute_table_name` on methods: open_table, close_table, truncate_table, drop_table, block_table, unblock_table & clone_table
+
 ## [1.2.1] - 2022-12-12
 * [add] `ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaStatements#access_id_fielddata?` which checks the clusters setting 'indices.id_field_data.enabled' to determinate if a general sorting on the +_id+-field is possible or not.
 * [add] `ElasticsearchRecord::Relation#ordered_relation` which overwrites the original method to check against the `#access_id_fielddata?` method

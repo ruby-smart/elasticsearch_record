@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    elasticsearch_record (1.2.1)
+    elasticsearch_record (1.2.2)
       activerecord (~> 7.0.0)
       elasticsearch (~> 8.4)
 
