@@ -136,7 +136,7 @@ scope.where(kind: :undefined).offset(10).update_all(name: "New Name")
 ### Refactored ```where``` method:
 Different to the default where-method you can now use it in different ways.
 
-Using it by default with a Hash, the method decides itself to either add a filter, or must_not query.
+Using it by default with a Hash, the method decides itself to either add a filter, or must_not clause.
 
 _Hint: If not provided through ```#kind```-method a default kind **:bool** will be used._
 ```ruby
@@ -209,6 +209,8 @@ total = scope.total
 - aggs_only!
 - total_only!
 
+_see simple documentation about these methods @ [rubydoc](https://rubydoc.info/gems/elasticsearch_record/ElasticsearchRecord/Relation/QueryMethods)_
+
 ### Available calculation methods
 - percentiles
 - percentile_ranks
@@ -218,6 +220,8 @@ total = scope.total
 - maximum
 - sum
 - calculate
+
+_see simple documentation about these methods @ [rubydoc](https://rubydoc.info/gems/elasticsearch_record/ElasticsearchRecord/Relation/CalculationMethods)_
 
 ### Available result methods
 - aggregations
@@ -230,6 +234,8 @@ total = scope.total
 - composite
 - point_in_time
 - pit_results
+
+_see simple documentation about these methods @ [rubydoc](https://rubydoc.info/gems/elasticsearch_record/ElasticsearchRecord/Relation/ResultMethods)_
 
 ### Additional methods 
 - to_query

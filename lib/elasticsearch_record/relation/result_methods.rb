@@ -4,6 +4,7 @@ module ElasticsearchRecord
       # aggregate pluck provided columns.
       # returns a hash of values for each provided column
       #
+      # @example
       #   Person.agg_pluck(:name)
       #   #> {"name" => ['David', 'Jeremy', 'Jose']}
       #
@@ -32,6 +33,7 @@ module ElasticsearchRecord
       # For a single column_name a hash with the distinct key and the +doc_count+ as value is returned.
       # For multiple column_names a hash with the distinct keys (as hash) and the +doc_count+ as value is returned.
       #
+      # @example
       #   Person.composite(:name)
       #   #> {"David" => 10, "Jeremy" => 1, "Jose" => 24}
       #

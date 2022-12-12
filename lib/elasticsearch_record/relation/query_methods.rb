@@ -14,7 +14,7 @@ module ElasticsearchRecord
 
       # sets or overwrites the query kind (e.g. compound queries -> :bool, :boosting, :constant_score, ...).
       # Also other query kinds like :intervals, :match, ... are allowed.
-      # As an alternative you can also call the #query(<kind>,{argument}) method.
+      # Alternatively the +#query+-method can also be used to provide a kind with arguments.
       # @param [String, Symbol] value - the kind
       def kind(value)
         spawn.kind!(value)
@@ -59,6 +59,9 @@ module ElasticsearchRecord
         self
       end
 
+      # create or add an aggregation to the query.
+      # @example
+      #   aggregate(:total, { sum: {field: :amount})
       def aggregate(*args)
         check_if_method_has_arguments!(__callee__, args)
         spawn.aggregate!(*args)
@@ -66,7 +69,7 @@ module ElasticsearchRecord
 
       alias_method :aggs, :aggregate
 
-      def aggregate!(opts, *rest)
+      def aggregate!(opts, *rest) # :nodoc:
         case opts
         when Symbol, String
           self.aggs_clause += build_query_clause(opts, rest)
@@ -81,60 +84,71 @@ module ElasticsearchRecord
         self
       end
 
+      # add a whole query 'node' to the query.
+      # @example
+      #   query(:bool, {filter: ...})
       def query(*args)
         check_if_method_has_arguments!(__callee__, args)
         spawn.query!(*args)
       end
 
-      def query!(kind, opts, *rest)
+      def query!(kind, opts, *rest) # :nodoc:
         kind!(kind)
         self.query_clause += build_query_clause(opts.keys[0], opts.values[0], rest)
         self
       end
 
+      # adds a +filter+ clause.
+      # @example
+      #   filter({terms: ...})
       def filter(*args)
         check_if_method_has_arguments!(__callee__, args)
         spawn.filter!(*args)
       end
 
-      def filter!(opts, *rest)
-        # :nodoc:
+      def filter!(opts, *rest) # :nodoc:
         set_default_kind!
         self.query_clause += build_query_clause(:filter, opts, rest)
         self
       end
 
+      # adds a +must_not+ clause.
+      # @example
+      #   filter({terms: ...})
       def must_not(*args)
         check_if_method_has_arguments!(__callee__, args)
         spawn.must_not!(*args)
       end
 
-      def must_not!(opts, *rest)
-        # :nodoc:
+      def must_not!(opts, *rest) # :nodoc:
         set_default_kind!
         self.query_clause += build_query_clause(:must_not, opts, rest)
         self
       end
 
+      # adds a +must+ clause.
+      # @example
+      #   must({terms: ...})
       def must(*args)
         check_if_method_has_arguments!(__callee__, args)
         spawn.must!(*args)
       end
 
-      def must!(opts, *rest)
-        # :nodoc:
+      def must!(opts, *rest) # :nodoc:
         set_default_kind!
         self.query_clause += build_query_clause(:must, opts, rest)
         self
       end
 
+      # adds a +should+ clause.
+      # @example
+      #   should({terms: ...})
       def should(*args)
         check_if_method_has_arguments!(__callee__, args)
         spawn.should!(*args)
       end
 
-      def should!(opts, *rest)
-        # :nodoc:
+      def should!(opts, *rest) # :nodoc:
         set_default_kind!
         self.query_clause += build_query_clause(:should, opts, rest)
         self
@@ -142,7 +156,7 @@ module ElasticsearchRecord
 
       # creates a condition on the relation.
       # There are several possibilities to call this method.
-      #
+      # @example
       #   # create a simple 'term' condition on the query[:filter] param
       #     where({name: 'hans'})
       #     > query[:filter] << { term: { name: 'hans' } }
@@ -162,7 +176,7 @@ module ElasticsearchRecord
         super
       end
 
-      def where!(opts, *rest)
+      def where!(opts, *rest) # :nodoc:
         case opts
           # check the first provided parameter +opts+ and validate, if this is an alias for "must, must_not, should or filter"
           # if true, we expect the rest[0] to be a hash.
@@ -209,12 +223,13 @@ module ElasticsearchRecord
             )
           end
 
-          # force set default kind
+          # force set default kind, if not previously set
           set_default_kind!
 
           # builds predicates from opts (transforms this in a more unreadable way but is required for nested assignment & binds ...)
-          parts = predicate_builder.build_from_hash(opts) do |table_name|
-            lookup_table_klass_from_join_dependencies(table_name)
+          parts = opts.map do |key,value|
+            # builds and returns a new Arel Node from provided key/value pair
+            predicate_builder[key,value]
           end
 
           self.where_clause += ::ActiveRecord::Relation::WhereClause.new(parts)

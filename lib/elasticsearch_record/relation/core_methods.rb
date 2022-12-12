@@ -95,6 +95,28 @@ module ElasticsearchRecord
           responses
         end
       end
+
+      # overwrite original methods to provide a elasticsearch version:
+      # checks against the +#access_id_fielddata?+ to ensure the Elasticsearch Cluster allows access on the +_id+ field.
+      def ordered_relation
+        # resolve valid primary_key (either not the '_id' or +access_id_fielddata?+ is enabled)
+        valid_primary_key = if primary_key != '_id' || klass.connection.access_id_fielddata?
+               primary_key
+             else
+               nil
+             end
+
+        # slightly changed original methods content
+        if order_values.empty? && (implicit_order_column || valid_primary_key)
+          if implicit_order_column && valid_primary_key && implicit_order_column != valid_primary_key
+            order(table[implicit_order_column].asc, table[valid_primary_key].asc)
+          else
+            order(table[implicit_order_column || valid_primary_key].asc)
+          end
+        else
+          self
+        end
+      end
     end
   end
 end

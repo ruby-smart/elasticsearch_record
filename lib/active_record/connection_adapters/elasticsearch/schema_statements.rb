@@ -341,7 +341,7 @@ module ActiveRecord
           end
 
           # overwrite original methods to provide a elasticsearch version
-          def update_table_definition(name, base = self, **options) # :nodoc:
+          def update_table_definition(name, base = self, **options)
             ::ActiveRecord::ConnectionAdapters::Elasticsearch::UpdateTableDefinition.new(base, name, **options)
           end
 
@@ -361,11 +361,26 @@ module ActiveRecord
             table_settings(table_name).dig('index', 'max_result_window').presence || 10000
           end
 
+          # returns true if the cluster option 'id_field_data' is enabled or not configured.
+          # This is required to check if a general sorting on the +_id+-field is possible or not. 
+          # @return [Boolean]
+          def access_id_fielddata?
+            @access_id_fielddata = begin
+                                     status = self.cluster_settings['indices.id_field_data.enabled']
+                                     # for cluster version lower 7.6 this might not configured.
+                                     status = (cluster_info[:version] < "7.6") if status.nil?
+
+                                     status
+                                   end if @access_id_fielddata.nil?
+
+            @access_id_fielddata
+          end
+
           # Returns basic information about the cluster.
           # @return [Hash{Symbol->Unknown}]
           def cluster_info
             @cluster_info ||= begin
-                                response = api(:core, :info, {}, 'CLUSTER')
+                                response = api(:core, :info, {}, 'CLUSTER INFO')
 
                                 {
                                   name:           response.dig('name'),
@@ -377,9 +392,16 @@ module ActiveRecord
                               end
           end
 
+          # returns a hash of current set, none-default settings in flat
+          # @return [Hash]
+          def cluster_settings
+            settings = api(:cluster, :get_settings, { flat_settings: true }, 'CLUSTER SETTINGS')
+            settings['persistent'].merge(settings['transient'])
+          end
+
           # transforms provided schema-type to a sql-type
+          # overwrite original methods to provide a elasticsearch version
           # @param [String, Symbol] type
-          # @param [String]
           def type_to_sql(type, **)
             return '' if type.blank?
 

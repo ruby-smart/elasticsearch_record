@@ -2,3 +2,5 @@
 --markup=markdown
 --files docs/*.*
 --plugin relative_markdown_links
+--plugin activesupport-concern
+--exclude lib/elasticsearch_record/patches

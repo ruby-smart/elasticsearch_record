@@ -1,5 +1,12 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.2.1] - 2022-12-12
+* [add] `ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaStatements#access_id_fielddata?` which checks the clusters setting 'indices.id_field_data.enabled' to determinate if a general sorting on the +_id+-field is possible or not.
+* [add] `ElasticsearchRecord::Relation#ordered_relation` which overwrites the original method to check against the `#access_id_fielddata?` method
+* [fix] default order by '_id' causes an exception if clusters 'indices.id_field_data.enabled' is disabled
+* [fix] subfield where-condition `where('field.subfield', 'value')` was transformed into a nested 'join-table' hash
+* [fix] yardoc docs & generation
+
 ## [1.2.0] - 2022-12-02
 * [add] `ElasticsearchRecord::SchemaMigration` to fix connection-related differences (like table_name_prefix, table_name_suffix)
 * [add] connection (config-related) 'table_name_prefix' & 'table_name_suffix' - now will be forwarded to all related models & schema-tables
