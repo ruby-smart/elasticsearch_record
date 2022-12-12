@@ -208,7 +208,7 @@ module ActiveRecord
             # IMPORTANT: compute will add possible configured prefix & suffix
             table_name = compute_table_name(table_name)
 
-            return if if_exists && table_exists?(table_name)
+            return if if_exists && !table_exists?(table_name)
 
             definition = update_table_definition(table_name, self, **options)
 
