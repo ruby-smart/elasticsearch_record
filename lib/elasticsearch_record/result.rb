@@ -72,21 +72,7 @@ module ElasticsearchRecord
       # aggregations are already a hash with key => data, but to prevent reference manipulation on the hash
       # we have to create a new one here...
       aggregations.reduce({}) { |buckets, (key, agg)|
-        # check if this agg has a bucket
-        if agg.key?(:buckets)
-          buckets[key] = agg[:buckets].reduce({}) { |m, b|
-            # buckets can be a Hash or Array (of Hashes)
-            bucket_key, bucket = b.is_a?(Hash) ? [b[:key], b] : b
-            m[bucket_key]      = bucket.except(:key, :doc_count).transform_values { |val| val[:value] }
-
-            m
-          }
-        elsif agg.key?(:value)
-          buckets[key] = agg[:value]
-        elsif agg.key?(:values)
-          buckets[key] = agg[:values]
-        end
-
+        buckets[key] = _resolve_bucket(agg)
         buckets
       }.with_indifferent_access
     end
@@ -244,6 +230,33 @@ module ElasticsearchRecord
         response['hits']['hits'].map { |doc|
           doc.slice(*base_fields).merge(doc['_source'])
         }
+      end
+    end
+
+    # resolves bucket nodes recursively
+    # @param [Object] node
+    # @return [Object]
+    def _resolve_bucket(node)
+      # check, if node is not a hash - in this case we just return it's value
+      return node unless node.is_a?(Hash)
+
+      # check if the node has a bucket
+      if node.key?(:buckets)
+        node[:buckets].reduce({}) { |m, b|
+          # buckets can be a Hash or Array (of Hashes)
+          bucket_key, bucket = b.is_a?(Hash) ? [b[:key], b] : b
+
+          m[bucket_key] = _resolve_bucket(bucket)
+          m
+        }
+      elsif node.key?(:value)
+        node[:value]
+      elsif node.key?(:values)
+        node[:values]
+      else
+        # resolve sub-aggregations / nodes without 'meta' keys.
+        # if this results in an empty hash, the return will be nil
+        node.except(:key, :doc_count, :doc_count_error_upper_bound, :sum_other_doc_count).transform_values { |val| _resolve_bucket(val) }.presence
       end
     end
 

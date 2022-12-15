@@ -1,5 +1,9 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.2.4] - 2022-12-15
+* [fix] missing `#visit_Arel_Nodes_In` method in `Arel::Visitors::ElasticsearchQuery` to build array conditions
+* [fix] resolving buckets from relation `ElasticsearchRecord::Result#buckets` not recognizing sub-buckets
+
 ## [1.2.3] - 2022-12-12
 * [fix] `change_table` 'if_exists: true' returns at the wrong state
 

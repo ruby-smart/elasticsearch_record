@@ -355,6 +355,23 @@ module Arel # :nodoc: all
         end
       end
 
+      # DIRECT ASSIGNMENT
+      def visit_Arel_Nodes_In(o)
+        self.collector.preparable = false
+
+        attr, values = o.left, o.right
+
+        if Array === values
+          unless values.empty?
+            values.delete_if { |value| unboundable?(value) }
+          end
+
+          return failed! if values.empty?
+        end
+
+        assign(:filter, [{ terms: { visit(attr) => visit(values) } }])
+      end
+
       def visit_Arel_Nodes_And(o)
         collect(o.children)
       end
@@ -393,6 +410,7 @@ module Arel # :nodoc: all
         claim(:index, o.name)
       end
 
+      # RAW RETURN
       def visit_Struct_Raw(o)
         o
       end
