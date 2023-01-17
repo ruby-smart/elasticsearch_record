@@ -147,40 +147,6 @@ module ActiveRecord
         def strict?(strict = nil)
           opts.fetch(:strict, false) || strict
         end
-
-        def transform_mappings!(mappings)
-          # transform +_meta+ mappings
-          if mappings['_meta'].present?
-            mappings['_meta'].each do |name, value|
-              self.meta(name, value)
-            end
-          end
-
-          # transform properties (=columns)
-          if mappings['properties'].present?
-            mappings['properties'].each do |name, attributes|
-              self.mapping(name, attributes.delete('type'), **attributes)
-            end
-          end
-        end
-
-        def transform_settings!(settings)
-          # exclude settings, that are provided through the API but are not part of the index-settings
-          settings
-            .with_indifferent_access
-            .each { |name, value|
-              # don't transform ignored names
-              next if ActiveRecord::ConnectionAdapters::Elasticsearch::TableSettingDefinition.match_ignore_names?(name)
-
-              self.setting(name, value)
-            }
-        end
-
-        def transform_aliases!(aliases)
-          aliases.each do |name, attributes|
-            self.alias(name, **attributes)
-          end
-        end
       end
     end
   end

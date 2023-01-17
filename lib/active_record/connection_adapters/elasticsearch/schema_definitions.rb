@@ -14,12 +14,12 @@ module ActiveRecord
       # setting definitions
       AddSettingDefinition    = Struct.new(:items) # composite
       ChangeSettingDefinition = Struct.new(:items) # composite
-      DeleteSettingDefinition = Struct.new(:items) # composite
+      RemoveSettingDefinition = Struct.new(:items) # composite
 
       # alias definitions
       AddAliasDefinition    = Struct.new(:item) # single
       ChangeAliasDefinition = Struct.new(:item) # single
-      DeleteAliasDefinition = Struct.new(:items) # composite
+      RemoveAliasDefinition = Struct.new(:items) # composite
     end
   end
 end

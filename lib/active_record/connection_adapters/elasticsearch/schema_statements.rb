@@ -399,6 +399,12 @@ module ActiveRecord
             settings['persistent'].merge(settings['transient'])
           end
 
+          # returns the cluster health
+          # @return [Hash]
+          def cluster_health(**options)
+            api(:cluster, :health, options, 'CLUSTER HEALTH').to_h
+          end
+
           # transforms provided schema-type to a sql-type
           # overwrite original methods to provide a elasticsearch version
           # @param [String, Symbol] type
@@ -467,7 +473,7 @@ module ActiveRecord
 
           # overwrite original methods to provide a elasticsearch version
           def extract_table_options!(options)
-            options.extract!(:settings, :mappings, :aliases, :force, :strict)
+            options.extract!(:settings, :mappings, :aliases, :metas, :force, :strict)
           end
         end
       end

@@ -198,6 +198,7 @@ total = scope.total
 - kind 
 - configure
 - aggregate
+- refresh
 - query
 - filter
 - must_not
@@ -274,6 +275,8 @@ Access these methods through the model's connection.
 - meta_exists?
 - max_result_window
 - cluster_info
+- cluster_settings
+- cluster_health
 
 ## Active Record Schema migration methods
 Access these methods through the model's connection or within any `Migration`.
@@ -285,26 +288,30 @@ Access these methods through the model's connection or within any `Migration`.
 - close_tables
 - truncate_table
 - truncate_tables
+- refresh_table
+- refresh_tables
 - drop_table
 - block_table
 - unblock_table
 - clone_table
 - create_table
 - change_table
+- rename_table
 
 **table actions:**
 - change_meta
-- delete_meta
+- remove_meta
 - add_mapping
 - change_mapping
 - change_mapping_meta
 - change_mapping_attributes
+- remove_mapping
 - add_setting
 - change_setting
-- delete_setting
+- remove_setting
 - add_alias
 - change_alias
-- delete_alias
+- remove_alias
 
 ```ruby
 # Example migration
@@ -321,6 +328,11 @@ class AddTests < ActiveRecord::Migration[7.0]
 
     # changes the auto-increment value
     change_meta "assignments", :auto_increment, 3625
+    
+    # removes the mapping 'updated_at' from the 'assignments' index.
+    # the flag 'recreate' is required, since 'remove' is not supported for elasticsearch.
+    # this will recreate the whole index (data will be LOST!!!)
+    remove_mapping :assignments, :updated_at, recreate: true 
     
     create_table "settings", force: true do |t|
       t.mapping :created_at, :date
@@ -347,8 +359,8 @@ class AddTests < ActiveRecord::Migration[7.0]
       t.add_alias('supersettings')
     end
 
-    delete_alias('settings', :supersettings)
-    delete_setting('settings', 'index.search.idle.after')
+    remove_alias('settings', :supersettings)
+    remove_setting('settings', 'index.search.idle.after')
 
     change_table 'settings', force: true do |t|
       t.integer :amount_of_newbies
@@ -357,10 +369,14 @@ class AddTests < ActiveRecord::Migration[7.0]
     create_table "vintage", force: true do |t|
       t.primary_key :number
       t.string :name
+      t.string :comments
       t.timestamps
     end
 
-    change_mapping_attributes "vintage", :number, fields: {raw: {type: :keyword}}
+    change_table 'vintage', if_exists: true, recreate: true do |t|
+      t.change_mapping :number, fields: {raw: {type: :keyword}}
+      t.remove_mapping :number
+    end
   end
 
   def down

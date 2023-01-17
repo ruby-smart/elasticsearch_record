@@ -27,9 +27,12 @@ module ElasticsearchRecord
         self
       end
 
-      # sets or overwrites additional arguments for the query (not the :query-node, the whole query).
-      # You can also force a overwrite of previously defined arguments, like +size+ or +from+.
-      # This is useful to force remove of keys.
+      # sets or overwrites additional arguments for the whole query (not the current 'query-node' - the whole query).
+      # Previously defined arguments (like +size+ or +from+) can also be overwritten.
+      # Providing a +nil+ value will remove the key  - this is useful to force remove of keys.
+      #
+      # Providing the special key +:__query__+ will directly access the query object, to alter query-related values
+      # (like 'refresh, arguments, columns, ...' - see @ Arel::Collectors::ElasticsearchQuery
       #
       # @example
       #   # adds {refresh true} to the query
@@ -37,6 +40,10 @@ module ElasticsearchRecord
       #
       #   # overwrites or sets {from: 50} but removes the :sort key
       #   configure({from: 50, sort: nil})
+      #
+      #   # sets the query's 'refresh' to true
+      #   configure(:__query__, refresh: true)
+      #
       # @param [Array] args
       def configure(*args)
         spawn.configure!(*args)
@@ -48,10 +55,10 @@ module ElasticsearchRecord
 
         if args.length == 1 && args.first.is_a?(Hash)
           self.configure_value = self.configure_value.merge(args[0])
-        elsif args.length == 2 && args[0] == :__claim__
-          tmp = self.configure_value[:__claim__] || []
+        elsif args.length == 2 && args[0] == :__query__
+          tmp = self.configure_value[:__query__] || []
           tmp << args[1]
-          self.configure_value = self.configure_value.merge(:__claim__ => tmp)
+          self.configure_value = self.configure_value.merge(:__query__ => tmp)
         elsif args.length == 2
           self.configure_value = self.configure_value.merge(args[0] => args[1])
         end
@@ -69,7 +76,8 @@ module ElasticsearchRecord
 
       alias_method :aggs, :aggregate
 
-      def aggregate!(opts, *rest) # :nodoc:
+      def aggregate!(opts, *rest)
+        # :nodoc:
         case opts
         when Symbol, String
           self.aggs_clause += build_query_clause(opts, rest)
@@ -84,6 +92,16 @@ module ElasticsearchRecord
         self
       end
 
+      # sets the query's +refresh+ value.
+      # @param [Boolean] value (default: true)
+      def refresh(value = true)
+        spawn.refresh!(value)
+      end
+
+      def refresh!(value = true)
+        configure!(:__query__, refresh: value)
+      end
+
       # add a whole query 'node' to the query.
       # @example
       #   query(:bool, {filter: ...})
@@ -92,7 +110,8 @@ module ElasticsearchRecord
         spawn.query!(*args)
       end
 
-      def query!(kind, opts, *rest) # :nodoc:
+      def query!(kind, opts, *rest)
+        # :nodoc:
         kind!(kind)
         self.query_clause += build_query_clause(opts.keys[0], opts.values[0], rest)
         self
@@ -106,7 +125,8 @@ module ElasticsearchRecord
         spawn.filter!(*args)
       end
 
-      def filter!(opts, *rest) # :nodoc:
+      def filter!(opts, *rest)
+        # :nodoc:
         set_default_kind!
         self.query_clause += build_query_clause(:filter, opts, rest)
         self
@@ -120,7 +140,8 @@ module ElasticsearchRecord
         spawn.must_not!(*args)
       end
 
-      def must_not!(opts, *rest) # :nodoc:
+      def must_not!(opts, *rest)
+        # :nodoc:
         set_default_kind!
         self.query_clause += build_query_clause(:must_not, opts, rest)
         self
@@ -134,7 +155,8 @@ module ElasticsearchRecord
         spawn.must!(*args)
       end
 
-      def must!(opts, *rest) # :nodoc:
+      def must!(opts, *rest)
+        # :nodoc:
         set_default_kind!
         self.query_clause += build_query_clause(:must, opts, rest)
         self
@@ -148,7 +170,8 @@ module ElasticsearchRecord
         spawn.should!(*args)
       end
 
-      def should!(opts, *rest) # :nodoc:
+      def should!(opts, *rest)
+        # :nodoc:
         set_default_kind!
         self.query_clause += build_query_clause(:should, opts, rest)
         self
@@ -176,7 +199,8 @@ module ElasticsearchRecord
         super
       end
 
-      def where!(opts, *rest) # :nodoc:
+      def where!(opts, *rest)
+        # :nodoc:
         case opts
           # check the first provided parameter +opts+ and validate, if this is an alias for "must, must_not, should or filter"
           # if true, we expect the rest[0] to be a hash.
@@ -186,7 +210,7 @@ module ElasticsearchRecord
           when :filter, :must, :must_not, :should
             send("#{opts}!", *rest)
           else
-            raise ArgumentError, "Unsupported argument type for where: #{opts}"
+            raise ArgumentError, "Unsupported prefix type '#{opts}'. Allowed types are: :filter, :must, :must_not, :should"
           end
         when Array
           # check if this is a nested array of multiple [<kind>,<data>]
@@ -197,42 +221,8 @@ module ElasticsearchRecord
           else
             where!(*opts, *rest)
           end
-        when String
-          # fallback to ActiveRecords +#where_clause+
-          # currently NOT supported
-          super(opts, rest)
         else
-          # hash -> {name: 'hans'}
-          # protects against forwarding params directly to where ...
-          # User.where(params) <- will never work
-          # User.where(params.permit(:user)) <- ok
-          opts = sanitize_forbidden_attributes(opts)
-
-          # resolve possible aliases
-          opts = opts.transform_keys do |key|
-            key = key.to_s
-            klass.attribute_aliases[key] || key
-          end
-
-          # check if we have keys without Elasticsearch fields
-          if (invalid = (opts.keys - klass.searchable_column_names)).present?
-            raise(ActiveRecord::UnknownAttributeReference,
-                  "Unable to build query with unknown searchable attributes: #{invalid.map(&:inspect).join(", ")}. " \
-                "If you want to build a custom query you should use one of those methods: 'filter, must, must_not, should'. " \
-                "#{klass.name}.filter('#{invalid[0]}' => '...')"
-            )
-          end
-
-          # force set default kind, if not previously set
-          set_default_kind!
-
-          # builds predicates from opts (transforms this in a more unreadable way but is required for nested assignment & binds ...)
-          parts = opts.map do |key,value|
-            # builds and returns a new Arel Node from provided key/value pair
-            predicate_builder[key,value]
-          end
-
-          self.where_clause += ::ActiveRecord::Relation::WhereClause.new(parts)
+          self.where_clause += build_where_clause(opts, rest)
         end
 
         self
@@ -270,6 +260,45 @@ module ElasticsearchRecord
       end
 
       private
+
+      def build_where_clause(opts, _rest = [])
+        case opts
+        when Symbol, Array, String
+          raise ArgumentError, "Unsupported or unresolved argument class '#{opts.class}' for build_where_clause: #{opts}"
+        else
+          # hash -> {name: 'hans'}
+          # protects against forwarding params directly to where ...
+          # User.where(params) <- will never work
+          # User.where(params.permit(:user)) <- ok
+          opts = sanitize_forbidden_attributes(opts)
+
+          # resolve possible aliases
+          opts = opts.transform_keys do |key|
+            key = key.to_s
+            klass.attribute_aliases[key] || key
+          end
+
+          # check if we have keys without Elasticsearch fields
+          if (invalid = (opts.keys - klass.searchable_column_names)).present?
+            raise(ActiveRecord::UnknownAttributeReference,
+                  "Unable to build query with unknown searchable attributes: #{invalid.map(&:inspect).join(", ")}. " \
+                "If you want to build a custom query you should use one of those methods: 'filter, must, must_not, should'. " \
+                "#{klass.name}.filter('#{invalid[0]}' => '...')"
+            )
+          end
+
+          # force set default kind, if not previously set
+          set_default_kind!
+
+          # builds predicates from opts (transforms this in a more unreadable way but is required for nested assignment & binds ...)
+          parts = opts.map do |key, value|
+            # builds and returns a new Arel Node from provided key/value pair
+            predicate_builder[key, value]
+          end
+
+          ::ActiveRecord::Relation::WhereClause.new(parts)
+        end
+      end
 
       def build_query_clause(kind, data, rest = [])
         ElasticsearchRecord::Relation::QueryClause.new(kind, Array.wrap(data), rest.extract_options!)

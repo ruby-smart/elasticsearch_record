@@ -1,5 +1,26 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.3.0] - 2023-01-17
+* [add] 'metas: {}' param for `CreateTableDefinition` to provide individual meta information without providing them through 'mappings'
+* [add] 'change_'- & 'remove_'-methods for _mapping, setting & alias_  for `CreateTableDefinition`
+* [add] `ActiveRecord::ConnectionAdapters::Elasticsearch::TableMappingDefinition#meta` for easier access
+* [add] `UpdateTableDefinition#remove_mapping` to always raise an ArgumentError (now created @ `CreateTableDefinition` through change_table(x, recreate: true) )
+* [add] `_env_table_name`-syntax to `ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaDumper#table` for prefixed & suffixed tables in connections
+* [add] `#cluster_health`, `#refresh_table`, `#refresh_tables` & `#rename_table` methods to 'connection'
+* [add] `#change_table` 'recreate: false' parameter to switch between a 'change' or 'recreate' of an index
+* [add] `#refresh` method to relations to explicit set the refresh value of the generated query
+* [ref] `CloneTableDefinition` to adapt settings (number_of_shards & number_of_replicas) from source table by default
+* [ref] `CreateTableDefinition#transform_mappings!` also support simple 'key->attributes' assignment of custom provided mappings
+* [ref] 'delete_'-methods into more common 'remove_'  for `UpdateTableDefinition`
+* [ref] `UpdateTableDefinition#change_mapping` to always raise an ArgumentError (now moved to `CreateTableDefinition` through change_table(x, recreate: true) )
+* [ref] `#change_table` missing '&block'
+* [ref] 'delete_'-methods into more common 'remove_' to 'connection'
+* [ref] ':\_\_claim\_\_'-operator to ':\_\_query\_\_' within `Arel::Collectors::ElasticsearchQuery`
+* [ref] update & delete queries to preset a 'refresh: true' as default _(can be overwritten through 'relation.refresh(false)' )_
+* [rem] `#clone_table` unusable '&block'
+* [rem] `#compute_table_name`-method - must be explicit provided with `#_env_table_name(name)`
+* [fix] `#where!` & `#build_where_clause` methods to also build a valid 'where_clause' in nested 'where' & 'or'
+
 ## [1.2.4] - 2022-12-15
 * [fix] missing `#visit_Arel_Nodes_In` method in `Arel::Visitors::ElasticsearchQuery` to build array conditions
 * [fix] resolving buckets from relation `ElasticsearchRecord::Result#buckets` not recognizing sub-buckets

@@ -11,6 +11,7 @@ module ActiveRecord
           # ORIGINAL methods untouched:
           #
           # SUPPORTED but not used:
+          # -
           #
           # UNSUPPORTED methods that will be ignored:
           # - native_database_types
@@ -25,11 +26,6 @@ module ActiveRecord
           # - change_column_default
           # - change_column_null
           # - rename_column
-          #
-          # UPCOMING future methods:
-          # - clone (option -> close, or read-only (#lock / unlock) )
-          # - refresh
-          # - rename_table
 
           define_unsupported_method :create_join_table, :drop_join_table, :create_alter_table,
                                     :change_column_default, :change_column_null, :rename_column, :rename_table
@@ -68,6 +64,26 @@ module ActiveRecord
             return if table_names.empty?
 
             table_names.map { |table_name| close_table(table_name) }
+          end
+
+          # refresh an index.
+          # A refresh makes recent operations performed on one or more indices available for search.
+          # raises an exception if the index could not be found.
+          #
+          # @param [String] table_name
+          # @return [Boolean] result state (returns false if refreshing failed)
+          def refresh_table(table_name)
+            api(:indices, :refresh, { index: table_name }, 'REFRESH TABLE').dig('_shards','failed') == 0
+          end
+
+          # refresh indices by provided names.
+          # @param [Array] table_names
+          # @return [Array] result state (returns false if refreshing failed)
+          def refresh_tables(*table_names)
+            table_names -= [schema_migration.table_name, InternalMetadata.table_name]
+            return if table_names.empty?
+
+            table_names.map { |table_name| refresh_table(table_name) }
           end
 
           # truncates index by provided name.
@@ -132,15 +148,14 @@ module ActiveRecord
             end
           end
 
-          # clones an entire table to the provided +target_name+.
+          # clones an entire table (index) to the provided +target_name+.
           # During cloning, the table will be automatically 'write'-blocked.
           # @param [String] table_name
           # @param [String] target_name
           # @param [Hash] options
-          # @param [Proc] block
-          def clone_table(table_name, target_name, **options, &block)
+          def clone_table(table_name, target_name, **options)
             # create new definition
-            definition = clone_table_definition(table_name, target_name, **extract_table_options!(options), &block)
+            definition = clone_table_definition(table_name, target_name, **extract_table_options!(options))
 
             # yield optional block
             if block_given?
@@ -151,6 +166,24 @@ module ActiveRecord
 
             # execute definition query(ies)
             definition.exec!
+          end
+
+          # renames a table (index) by executing multiple steps:
+          # - clone table
+          # - wait for 'green' state
+          # - drop old table
+          # The +timeout+ option will define how long to wait for the 'green' state.
+          #
+          # @param [String] table_name
+          # @param [String] target_name
+          # @param [String (frozen)] timeout (default: '30s')
+          # @param [Hash] options - additional 'clone' options (like settings, alias, ...)
+          def rename_table(table_name, target_name, timeout: '30s', **options)
+            schema_cache.clear_data_source_cache!(table_name)
+
+            clone_table(table_name, target_name, **options)
+            cluster_health(index: target_name, wait_for_status: 'green', timeout: timeout)
+            drop_table(table_name)
           end
 
           # creates a new table (index).
@@ -168,9 +201,6 @@ module ActiveRecord
           # @param [Hash] options
           # @return [Boolean] acknowledged status
           def create_table(table_name, force: false, copy_from: nil, if_not_exists: false, **options)
-            # IMPORTANT: compute will add possible configured prefix & suffix
-            table_name = compute_table_name(table_name)
-
             return if if_not_exists && table_exists?(table_name)
 
             # copy schema from existing table
@@ -204,12 +234,14 @@ module ActiveRecord
           #     t.mapping :name, :string
           #     # Other column alterations here
           #   end
-          def change_table(table_name, if_exists: false, **options)
-            # IMPORTANT: compute will add possible configured prefix & suffix
-            table_name = compute_table_name(table_name)
-
+          def change_table(table_name, if_exists: false, recreate: false, **options, &block)
             return if if_exists && !table_exists?(table_name)
 
+            # check 'recreate' flag.
+            # If true, a 'create_table' with copy of the current will be executed
+            return create_table(table_name, force: true, copy_from: table_name, **options, &block) if recreate
+
+            # build new update definition
             definition = update_table_definition(table_name, self, **options)
 
             # yield optional block
@@ -231,11 +263,18 @@ module ActiveRecord
 
           alias :add_column :add_mapping
 
+          # will fail unless +recreate:true+ option was provided
           def change_mapping(table_name, name, type, **options, &block)
             _exec_change_table_with(:change_mapping, table_name, name, type, **options, &block)
           end
 
           alias :change_column :change_mapping
+
+          def remove_mapping(table_name, name, **options)
+            _exec_change_table_with(:remove_mapping, table_name, name, **options)
+          end
+
+          alias :remove_column :remove_mapping
 
           def change_mapping_meta(table_name, name, **options)
             _exec_change_table_with(:change_mapping_meta, table_name, name, **options)
@@ -245,14 +284,12 @@ module ActiveRecord
             _exec_change_table_with(:change_mapping_attributes, table_name, name, **options, &block)
           end
 
-          alias :change_mapping_attribute :change_mapping_attributes
-
           def change_meta(table_name, name, value, **options)
             _exec_change_table_with(:change_meta, table_name, name, value, **options)
           end
 
-          def delete_meta(table_name, name, **options)
-            _exec_change_table_with(:delete_meta, table_name, name, **options)
+          def remove_meta(table_name, name, **options)
+            _exec_change_table_with(:remove_meta, table_name, name, **options)
           end
 
           # -- setting -------------------------------------------------------------------------------------------------
@@ -265,8 +302,8 @@ module ActiveRecord
             _exec_change_table_with(:change_setting, table_name, name, value, **options, &block)
           end
 
-          def delete_setting(table_name, name, **options, &block)
-            _exec_change_table_with(:delete_setting, table_name, name, **options, &block)
+          def remove_setting(table_name, name, **options, &block)
+            _exec_change_table_with(:remove_setting, table_name, name, **options, &block)
           end
 
           # -- alias ---------------------------------------------------------------------------------------------------
@@ -279,28 +316,31 @@ module ActiveRecord
             _exec_change_table_with(:change_alias, table_name, name, **options, &block)
           end
 
-          def delete_alias(table_name, name, **options, &block)
-            _exec_change_table_with(:delete_alias, table_name, name, **options, &block)
+          def remove_alias(table_name, name, **options, &block)
+            _exec_change_table_with(:remove_alias, table_name, name, **options, &block)
           end
 
-          # computes a provided +table_name+ with optionally configured +table_name_prefix+ & +table_name_suffix+.
+          # recaps a provided +table_name+ with optionally configured +table_name_prefix+ & +table_name_suffix+.
+          # This depends on the connection config of the current environment.
+          #
           # @param [String] table_name
           # @return [String]
-          def compute_table_name(table_name)
+          def _env_table_name(table_name)
             table_name = table_name.to_s
-            
+
             # HINT: +"" creates a new +unfrozen+ string!
-            str = +""
-            str << table_name_prefix unless table_name.start_with?(table_name_prefix)
-            str << table_name
-            str << table_name_suffix unless table_name.end_with?(table_name_suffix)
-            str
+            name = +""
+            name << table_name_prefix unless table_name.start_with?(table_name_prefix)
+            name << table_name
+            name << table_name_suffix unless table_name.end_with?(table_name_suffix)
+
+            name
           end
 
           private
 
-          def _exec_change_table_with(method, table_name, *args, **kwargs, &block)
-            change_table(table_name) do |t|
+          def _exec_change_table_with(method, table_name, *args, recreate: false, **kwargs, &block)
+            change_table(table_name, recreate: recreate) do |t|
               t.send(method, *args, **kwargs, &block)
             end
           end

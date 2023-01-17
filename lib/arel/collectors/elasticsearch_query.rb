@@ -9,6 +9,9 @@ module Arel # :nodoc: all
       # required for ActiveRecord
       attr_accessor :preparable
 
+      # returns the current bind index (default: 1)
+      attr_reader :bind_index
+
       def initialize
         # force initialize a body as hash
         super(body: {})
@@ -44,7 +47,8 @@ module Arel # :nodoc: all
           # adds / sets any argument
           if args.length == 2
             @arguments[args[0]] = args[1]
-          else # should be a hash
+          else
+            # should be a hash
             @arguments.merge!(args[0])
           end
         when :body
@@ -90,10 +94,13 @@ module Arel # :nodoc: all
 
       private
 
-      # calls a assign on the body
+      # calls a assign on the body.
+      # forwards value to the +#claim+ method if key is +:__query__+.
+      # @param [Symbol] key
+      # @param [Object] value
       def assign(key, value)
         # check for special provided key, to claim through an assign
-        if key == :__claim__
+        if key == :__query__
           if value.is_a?(Array)
             value.each do |arg|
               vkey = arg.keys.first

@@ -8,15 +8,13 @@ module ActiveRecord
     module Elasticsearch
       class UpdateTableDefinition < TableDefinition
 
-        attr_reader :definitions
-
         # defines which definitions can be executed composite
         COMPOSITE_DEFINITIONS = [
           AddMappingDefinition,
           ChangeMappingDefinition,
           ChangeMetaDefinition,
           AddSettingDefinition,
-          DeleteAliasDefinition
+          RemoveAliasDefinition
         ].freeze
 
         def add_mapping(name, type, if_not_exists: false, **options, &block)
@@ -35,23 +33,14 @@ module ActiveRecord
           define! ChangeMetaDefinition, new_meta_definition(name, value, **options)
         end
 
-        def delete_meta(name, **options)
+        def remove_meta(name, **options)
           load_meta_definition!
 
           define! ChangeMetaDefinition, new_meta_definition(name, nil, **options)
         end
 
-        def change_mapping(name, type, if_exists: false, **options, &block)
-          return if if_exists && !mapping_exists?(self.name, name, type)
-
-          mapping = new_mapping_definition(name, type, **options, &block)
-          define! ChangeMappingDefinition, mapping
-
-          # check if the mapping is assigned as primary_key
-          if mapping.primary_key?
-            change_meta :primary_key, mapping.name
-            change_meta(:auto_increment, mapping.auto_increment) if mapping.auto_increment?
-          end
+        def change_mapping(name, type, **options, &block)
+          raise ArgumentError, "you cannot change the mapping '#{name}' without the 'recreate: true' flag in the '#change_table' call"
         end
 
         alias :change_column :change_mapping
@@ -67,16 +56,28 @@ module ActiveRecord
           define! ChangeMappingDefinition, new_mapping_definition(name, mapping['type'], meta: meta)
         end
 
-        def change_mapping_attributes(name, **options, &block)
-          mapping = table_mappings(self.name).dig('properties', name.to_s)
-          raise ArgumentError, "you cannot change parameters for an unknown mapping '#{name}'" if mapping.blank?
+        def change_mapping_attributes(name, if_exists: false, **options, &block)
+          return if if_exists && !mapping_exists?(self.name, name)
 
-          options = mapping.with_indifferent_access.except(:type).merge(options) if options.present?
+          # receive current mapping
+          current_mapping = table_mappings(self.name).dig('properties', name.to_s)
+          raise ArgumentError, "you cannot change an unknown mapping '#{name}'" if current_mapping.blank?
 
-          define! ChangeMappingDefinition, new_mapping_definition(name, mapping['type'], **options, &block)
+          # build new mapping
+          mapping = new_mapping_definition(name, current_mapping[:type], **options, &block)
+          define! ChangeMappingDefinition, mapping
+
+          # check if the mapping is assigned as new primary_key
+          if mapping.primary_key?
+            change_meta :primary_key, mapping.name
+            change_meta(:auto_increment, mapping.auto_increment) if mapping.auto_increment?
+          end
         end
 
-        alias :change_mapping_attribute :change_mapping_attributes
+        def remove_mapping(name)
+          raise ArgumentError, "you cannot remove the mapping '#{name}' without the 'recreate: true' flag in the '#change_table' call"
+        end
+        alias :remove_column :remove_mapping
 
         def add_setting(name, value, if_not_exists: false, **options, &block)
           return if if_not_exists && setting_exists?(self.name, name)
@@ -90,10 +91,10 @@ module ActiveRecord
           define! ChangeSettingDefinition, new_setting_definition(name, value, **options, &block)
         end
 
-        def delete_setting(name, if_exists: false, **options, &block)
+        def remove_setting(name, if_exists: false, **options, &block)
           return if if_exists && !setting_exists?(self.name, name)
 
-          define! DeleteSettingDefinition, new_setting_definition(name, nil, **options, &block)
+          define! RemoveSettingDefinition, new_setting_definition(name, nil, **options, &block)
         end
 
         def add_alias(name, if_not_exists: false, **options, &block)
@@ -108,10 +109,10 @@ module ActiveRecord
           define! ChangeAliasDefinition, new_alias_definition(name, **options, &block)
         end
 
-        def delete_alias(name, if_exists: false, **, &block)
+        def remove_alias(name, if_exists: false, **, &block)
           return if if_exists && !alias_exists?(self.name, name)
 
-          define! DeleteAliasDefinition, new_alias_definition(name, &block)
+          define! RemoveAliasDefinition, new_alias_definition(name, &block)
         end
 
         # Appends <tt>:datetime</tt> columns <tt>:created_at</tt> and
@@ -123,6 +124,11 @@ module ActiveRecord
           add_mapping(:updated_at, :datetime, if_not_exists: true, **options)
         end
 
+        # returns the definitions hash
+        def definitions
+          @definitions ||= {}
+        end
+
         private
 
         # loads existing meta definitions from table_mappings
@@ -130,16 +136,14 @@ module ActiveRecord
           return if @load_meta_definition
           @load_meta_definition = true
 
-
           table_metas(self.name).each do |name, value|
             define! ChangeMetaDefinition, new_meta_definition(name, value)
           end
         end
 
         def define!(klass, item)
-          @definitions        ||= {}
-          @definitions[klass] ||= []
-          @definitions[klass] << item
+          self.definitions[klass] ||= []
+          self.definitions[klass] << item
         end
 
         def _before_assign
@@ -157,6 +161,7 @@ module ActiveRecord
           # reset table state
           clear_state!
         end
+
         alias :_rescue_assign :_after_exec
         alias :_rescue_exec :_after_exec
 

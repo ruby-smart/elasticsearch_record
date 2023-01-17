@@ -89,8 +89,9 @@ module Arel # :nodoc: all
         # prepare query
         claim(:type, ::ElasticsearchRecord::Query::TYPE_INDEX_UPDATE_SETTING)
 
-        # special overcomplicated blocks to assign a hash of settings directly to the body
-        assign(:__claim__, {}) do
+        # special overcomplicated blocks to assign a hash of settings directly to the body...
+        # todo: refactor this in future versions
+        assign(:__query__, {}) do
           assign(:body, {}) do
             resolve(o.items, :visit_TableSettingDefinition)
           end
@@ -98,7 +99,7 @@ module Arel # :nodoc: all
       end
 
       alias :visit_AddSettingDefinition :visit_ChangeSettingDefinition
-      alias :visit_DeleteSettingDefinition :visit_ChangeSettingDefinition
+      alias :visit_RemoveSettingDefinition :visit_ChangeSettingDefinition
 
       def visit_ChangeAliasDefinition(o)
         # prepare query
@@ -110,7 +111,7 @@ module Arel # :nodoc: all
 
       alias :visit_AddAliasDefinition :visit_ChangeAliasDefinition
 
-      def visit_DeleteAliasDefinition(o)
+      def visit_RemoveAliasDefinition(o)
         # prepare query
         claim(:type, ::ElasticsearchRecord::Query::TYPE_INDEX_DELETE_ALIAS)
 

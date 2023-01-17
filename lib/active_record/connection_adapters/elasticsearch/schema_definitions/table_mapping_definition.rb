@@ -99,6 +99,12 @@ module ActiveRecord
           _lazy_attributes[:auto_increment] = value
         end
 
+        # returns the meta hash
+        # @param [Hash]
+        def meta
+          __get_attribute(:meta) || {}
+        end
+
         def meta=(value)
           if value.nil?
             __remove_attribute(:meta)

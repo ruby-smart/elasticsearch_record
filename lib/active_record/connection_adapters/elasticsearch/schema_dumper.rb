@@ -20,6 +20,11 @@ module ActiveRecord
           @options[:table_name_suffix] = @connection.table_name_suffix if @options[:table_name_suffix].blank?
         end
 
+        # returns true if the connection has table-names, that are environment related
+        def _has_env_table_names?
+          @options[:table_name_prefix].present? || @options[:table_name_suffix].present?
+        end
+
         # overwrite the method to 'fix' a possible ActiveRecord bug:
         # If a +table_name_prefix+ or +table_name_suffix+ was provided we also only want to dump those tables,
         # which matches the prefix/suffix. So possible, environment-related tables will be ignored
@@ -35,7 +40,7 @@ module ActiveRecord
           return true if @options[:table_name_prefix].present? && !table_name.start_with?(@options[:table_name_prefix].to_s)
 
           # if the table ends NOT with +suffix+ it must be ignored
-          return true if  @options[:table_name_suffix].present? && !table_name.end_with?(@options[:table_name_suffix].to_s)
+          return true if @options[:table_name_suffix].present? && !table_name.end_with?(@options[:table_name_suffix].to_s)
 
           false
         end
@@ -50,7 +55,14 @@ module ActiveRecord
             # resolve string printer
             tbl = StringIO.new
 
-            tbl.print "  create_table #{remove_prefix_and_suffix(table).inspect}"
+            tbl.print "  create_table"
+
+            if _has_env_table_names?
+              tbl.print " _env_table_name(#{remove_prefix_and_suffix(table).inspect})"
+            else
+              tbl.print " #{remove_prefix_and_suffix(table).inspect}"
+            end
+
             tbl.print ", force: true do |t|"
 
             # META

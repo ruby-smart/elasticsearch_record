@@ -13,7 +13,7 @@ module Arel # :nodoc: all
 
       # SELECT // SEARCH
       def visit_Arel_Nodes_SelectStatement(o)
-        # prepare query
+        # prepare query type
         claim(:type, ::ElasticsearchRecord::Query::TYPE_SEARCH)
 
         resolve(o.cores) # visit_Arel_Nodes_SelectCore
@@ -26,20 +26,23 @@ module Arel # :nodoc: all
         resolve(o.configure)
       end
 
-      # UPDATE
+      # UPDATE (by query - not a single record...)
       def visit_Arel_Nodes_UpdateStatement(o)
         # switch between updating a single Record or multiple by query
         if o.relation.is_a?(::Arel::Table)
           raise NotImplementedError, "if you've made it this far, something went wrong ..."
         end
 
-        # prepare query
+        # prepare query type
         claim(:type, ::ElasticsearchRecord::Query::TYPE_UPDATE_BY_QUERY)
+
+        # force refresh after update - but it can be unset again through the 'configure' ...
+        claim(:refresh, true)
 
         # sets the index
         resolve(o.relation)
 
-        # updating multiple entries need a script
+        # updating multiple entries needs a script
         assign(:script, {}) do
           assign(:inline, "") do
             updates = collect(o.values)
@@ -59,15 +62,18 @@ module Arel # :nodoc: all
         resolve(o.configure)
       end
 
-      # DELETE
+      # DELETE (by query - not a single record...)
       def visit_Arel_Nodes_DeleteStatement(o)
         # switch between updating a single Record or multiple by query
         if o.relation.is_a?(::Arel::Table)
           raise NotImplementedError, "if you've made it this far, something went wrong ..."
         end
 
-        # prepare query
+        # prepare query type
         claim(:type, ::ElasticsearchRecord::Query::TYPE_DELETE_BY_QUERY)
+
+        # force refresh after delete - but it can be unset again through the 'configure' ...
+        claim(:refresh, true)
 
         # sets the index
         resolve(o.relation)
@@ -84,13 +90,15 @@ module Arel # :nodoc: all
         resolve(o.configure)
       end
 
-      # INSERT
+      # INSERT (by query - not a single record...)
+      # this is also used by 'meta' or 'schema_migrations' tables ...
       def visit_Arel_Nodes_InsertStatement(o)
-
         # switch between updating a single Record or multiple by query
         if o.relation.is_a?(::Arel::Table)
-          # prepare query
+          # prepare query type
           claim(:type, ::ElasticsearchRecord::Query::TYPE_CREATE)
+
+          # force refresh after insert
           claim(:refresh, true)
 
           # sets the index

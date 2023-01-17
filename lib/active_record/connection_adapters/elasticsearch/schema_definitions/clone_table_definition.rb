@@ -16,6 +16,9 @@ module ActiveRecord
           @settings = HashWithIndifferentAccess.new
           @aliases  = HashWithIndifferentAccess.new
 
+          # before assigning new settings, we need to resolve some defaults
+          assign_default_clone_settings!
+
           transform_settings!(settings) if settings.present?
           transform_aliases!(aliases) if aliases.present?
         end
@@ -63,6 +66,12 @@ module ActiveRecord
         end
 
         private
+
+        def assign_default_clone_settings!
+          settings = table_settings(name)
+          setting('index.number_of_shards', (settings.dig('index.number_of_shards') || 1))
+          setting('index.number_of_replicas', (settings.dig('index.number_of_replicas') || 0))
+        end
 
         def _before_exec
           block_table(self.name, :write)

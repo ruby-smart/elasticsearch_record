@@ -104,7 +104,7 @@ module ElasticsearchRecord
         relation.offset!(nil).limit!(nil)
 
         # remove the 'index' from the query arguments (pit doesn't like that)
-        relation.configure!(:__claim__, { index: nil })
+        relation.configure!(:__query__, { index: nil })
 
         # we store the results in this array
         results       = []
