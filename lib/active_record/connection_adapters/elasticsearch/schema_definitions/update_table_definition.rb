@@ -14,6 +14,8 @@ module ActiveRecord
           ChangeMappingDefinition,
           ChangeMetaDefinition,
           AddSettingDefinition,
+          ChangeSettingDefinition,
+          RemoveSettingDefinition,
           RemoveAliasDefinition
         ].freeze
 

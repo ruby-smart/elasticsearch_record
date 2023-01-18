@@ -1,5 +1,10 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.3.1] - 2023-01-18
+* [fix] `#none!` method to correctly invalidate the query (String(s) in where-queries like '1=0' will raise now)
+* [fix] missing 'ChangeSettingDefinition' & 'RemoveSettingDefinition' @ `ActiveRecord::ConnectionAdapters::Elasticsearch::UpdateTableDefinition::COMPOSITE_DEFINITIONS` to composite in a single query
+* [fix] `#unblock_table`-method in 'connection' to now remove blocks instead of setting to 'false'
+
 ## [1.3.0] - 2023-01-17
 * [add] 'metas: {}' param for `CreateTableDefinition` to provide individual meta information without providing them through 'mappings'
 * [add] 'change_'- & 'remove_'-methods for _mapping, setting & alias_  for `CreateTableDefinition`

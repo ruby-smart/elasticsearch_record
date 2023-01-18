@@ -73,7 +73,7 @@ module ActiveRecord
           # @param [String] table_name
           # @return [Boolean] result state (returns false if refreshing failed)
           def refresh_table(table_name)
-            api(:indices, :refresh, { index: table_name }, 'REFRESH TABLE').dig('_shards','failed') == 0
+            api(:indices, :refresh, { index: table_name }, 'REFRESH TABLE').dig('_shards', 'failed') == 0
           end
 
           # refresh indices by provided names.
@@ -138,13 +138,13 @@ module ActiveRecord
           def unblock_table(table_name, block_name = nil)
             if block_name.nil?
               change_table(table_name) do |t|
-                t.change_setting('index.blocks.read', false)
-                t.change_setting('index.blocks.write', false)
-                t.change_setting('index.blocks.read_only', false)
-                t.change_setting('index.blocks.metadata', false)
+                t.change_setting('index.blocks.read', nil)
+                t.change_setting('index.blocks.write', nil)
+                t.change_setting('index.blocks.read_only', nil)
+                t.change_setting('index.blocks.metadata', nil)
               end
             else
-              change_setting(table_name, "index.blocks.#{block_name}", false)
+              change_setting(table_name, "index.blocks.#{block_name}", nil)
             end
           end
 
