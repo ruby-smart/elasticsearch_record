@@ -3,7 +3,6 @@ module ElasticsearchRecord
     extend ActiveSupport::Concern
 
     included do
-
       # Rails resolves the primary_key's value by accessing the +#id+ method.
       # Since Elasticsearch also supports an additional, independent +id+ attribute, it would only be able to access
       # this through +read_attribute(:id)+.
@@ -84,10 +83,11 @@ module ElasticsearchRecord
         cache.compute_if_absent(key) { ElasticsearchRecord::StatementCache.create(connection, &block) }
       end
 
-      # not supported atm - maybe enable in future versions to resolve migrations easier
-      # def primary_class? # :nodoc:
-      #   self == ::ElasticsearchRecord::Base
-      # end
+      # used to provide fast access to the connection API without explicit providing table-related parameters.
+      # @return [anonymous Struct]
+      def api
+        ElasticsearchRecord::ModelApi.new(self)
+      end
 
       private
 

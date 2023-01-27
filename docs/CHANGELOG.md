@@ -1,5 +1,11 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.4.0] - 2023-01-27
+* [add] `ElasticsearchRecord::ModelApi` for fast & easy access the elasticsearch index - callable through `.api` (e.g. ElasticUser.api.mappings)
+* [ref] `ElasticsearchRecord::Instrumentation::LogSubscriber` to truncate the query-string (default: 1000)
+* [ref] `ActiveRecord::ConnectionAdapters::ElasticsearchAdapter#log` with extra attribute (log: true) to prevent logging (e.g. on custom api calls)
+* [fix] `ElasticsearchRecord::Result#bucket` to prevent resolving additional meta key (key_as_string)
+
 ## [1.3.1] - 2023-01-18
 * [fix] `#none!` method to correctly invalidate the query (String(s) in where-queries like '1=0' will raise now)
 * [fix] missing 'ChangeSettingDefinition' & 'RemoveSettingDefinition' @ `ActiveRecord::ConnectionAdapters::Elasticsearch::UpdateTableDefinition::COMPOSITE_DEFINITIONS` to composite in a single query

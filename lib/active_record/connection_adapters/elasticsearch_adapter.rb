@@ -216,14 +216,15 @@ module ActiveRecord # :nodoc:
       # @param [Hash] arguments - action arguments
       # @param [String (frozen)] name - the logging name
       # @param [Boolean] async - send async (default: false) - currently not supported
+      # @param [Boolean] log - send log to instrumenter (default: true)
       # @return [Elasticsearch::API::Response, Object]
-      def api(namespace, action, arguments = {}, name = 'API', async: false)
+      def api(namespace, action, arguments = {}, name = 'API', async: false, log: true)
         raise ::StandardError, 'ASYNC api calls are not supported' if async
 
         # resolve the API target
         target = namespace == :core ? @connection : @connection.__send__(namespace)
 
-        log("#{namespace}.#{action}", arguments, name, async: async) do
+        log("#{namespace}.#{action}", arguments, name, async: async, log: log) do
           response = ActiveSupport::Dependencies.interlock.permit_concurrent_loads do
             target.__send__(action, arguments)
           end
@@ -274,16 +275,24 @@ module ActiveRecord # :nodoc:
       end
 
       # provide a custom log instrumenter for elasticsearch subscribers
-      def log(gate, arguments, name, async: false, &block)
-        @instrumenter.instrument(
-          "query.elasticsearch_record",
-          gate:      gate,
-          name:      name,
-          arguments: gate == 'core.msearch' ? arguments.deep_dup : arguments,
-          async:     async) do
-          @lock.synchronize(&block)
-        rescue => e
-          raise translate_exception_class(e, arguments, [])
+      def log(gate, arguments, name, async: false, log: true, &block)
+        if log
+          @instrumenter.instrument(
+            "query.elasticsearch_record",
+            gate:      gate,
+            name:      name,
+            arguments: gate == 'core.msearch' ? arguments.deep_dup : arguments,
+            async:     async) do
+            @lock.synchronize(&block)
+          rescue => e
+            raise translate_exception_class(e, arguments, [])
+          end
+        else
+          begin
+            @lock.synchronize(&block)
+          rescue => e
+            raise translate_exception_class(e, arguments, [])
+          end
         end
       end
 

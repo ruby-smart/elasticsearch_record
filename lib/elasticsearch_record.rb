@@ -23,6 +23,7 @@ module ElasticsearchRecord
     autoload :Base
     autoload :Core
     autoload :ModelSchema
+    autoload :ModelApi
     autoload :Persistence
     autoload :Querying
     autoload :Query

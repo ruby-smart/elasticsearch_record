@@ -5,7 +5,7 @@ module ElasticsearchRecord
     # attach to ElasticsearchRecord related events
     class LogSubscriber < ActiveSupport::LogSubscriber
 
-      IGNORE_PAYLOAD_NAMES = %w[SCHEMA EXPLAIN]
+      IGNORE_PAYLOAD_NAMES = %w[SCHEMA EXPLAIN EXCLUDE]
 
       def self.runtime=(value)
         Thread.current["elasticsearch_record_runtime"] = value
@@ -37,17 +37,18 @@ module ElasticsearchRecord
                end
         name = "CACHE #{name}" if payload[:cached]
 
-        # nice feature: displays the REAL query-time (_qt)
+        # nice feature: displays the REAL query-time from elasticsearch response (_qt)
+        # this is handled through the +::ActiveRecord::ConnectionAdapters::ElasticsearchAdapter#api+ method
         name = "#{name} (took: #{payload[:arguments][:_qt].round(1)}ms)" if payload[:arguments][:_qt]
 
         # build query
-        query = payload[:arguments].except(:_qt).inspect.gsub(/:(\w+)=>/, '\1: ').presence || '-'
+        query = payload[:arguments].except(:_qt).inspect.gsub(/:(\w+)=>/, '\1: ').truncate((payload[:truncate] || 1000), omission: color(' (pruned)', RED))
 
         # final coloring
         name  = color(name, name_color(payload[:name]), true)
         query = color(query, gate_color(payload[:gate]), true) if colorize_logging
 
-        debug "  #{name} #{query}"
+        debug "  #{name} #{query.presence || '-/-'}"
       end
 
       private

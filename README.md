@@ -55,10 +55,6 @@ Or install it yourself as:
   * logs Elasticsearch API-calls
   * shows Runtime in logs
 
-## Contra - what it _(currently)_ can not
-* Joins to other indexes or databases
-* complex, combined or nested queries ```and, or, Model.arel ...```
-
 ## Setup
 
 ### a) Update your **database.yml** and add a elasticsearch connection:
@@ -255,12 +251,51 @@ _see simple documentation about these methods @ [rubydoc](https://rubydoc.info/g
 - find_by_query
 - msearch
 
+### Useful model API methods
+Fast access to model-related methods for easier access without creating a overcomplicated method call.
+
+Access these methods through the model class method `.api`.
+```ruby
+  # returns mapping of model class
+  klass.api.mappings
+
+  # e.g. for ElasticUser model
+  ElasticUser.api.mappings
+
+  # insert new raw data
+  ElasticUser.api.insert([{name: 'Hans', age: 34}, {name: 'Peter', age: 22}])
+```
+
+* open
+* close
+* refresh
+* block
+* unblock
+* mappings
+* metas
+* settings
+* aliases
+* state
+* schema
+* exists?
+* alias_exists?
+* setting_exists?
+* mapping_exists?
+* meta_exists?
+
+Fast insert, update, delete raw data
+* index
+* insert
+* update
+* delete
+* bulk
+
 ## ActiveRecord ConnectionAdapters table-methods
-Access these methods through the model's connection.
+Access these methods through the model class method `.connection`.
 
 ```ruby
   # returns mapping of provided table (index)
-  model.connection.table_mappings('table-name')
+  klass.connection.table_mappings('table-name')
 ```
 
 - table_mappings

@@ -256,7 +256,7 @@ module ElasticsearchRecord
       else
         # resolve sub-aggregations / nodes without 'meta' keys.
         # if this results in an empty hash, the return will be nil
-        node.except(:key, :doc_count, :doc_count_error_upper_bound, :sum_other_doc_count).transform_values { |val| _resolve_bucket(val) }.presence
+        node.except(:key, :doc_count, :doc_count_error_upper_bound, :sum_other_doc_count, :key_as_string).transform_values { |val| _resolve_bucket(val) }.presence
       end
     end
 
