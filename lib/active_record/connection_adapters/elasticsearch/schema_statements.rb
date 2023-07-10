@@ -376,6 +376,14 @@ module ActiveRecord
             @access_id_fielddata
           end
 
+          # returns true if +_shard_doc+ field can be accessed through PIT-search.
+          # @return [Boolean]
+          def access_shard_doc?
+            @access_shard_doc = cluster_info[:version] >= "7.12" if @access_shard_doc.nil?
+
+            @access_shard_doc
+          end
+
           # Returns basic information about the cluster.
           # @return [Hash{Symbol->Unknown}]
           def cluster_info

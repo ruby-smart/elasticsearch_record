@@ -1,5 +1,17 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.5.0] - 2023-07-10
+* [add] additional `ElasticsearchRecord::ModelApi` methods **drop!** & **truncate!**, which have to be called with a `confirm:true` parameter
+* [add] `.ElasticsearchRecord::Base.delegate_query_nil_limit` to automatically delegate a relations `limit(nil)`-call to the **max_result_window** _(set to 10.000 as default)_
+* [add] `ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaStatements#access_shard_doc?` which checks, if the **PIT**-shard_doc order is available
+* [add] support for **_shard_doc** as a default order for `ElasticsearchRecord::Relation#pit_results`
+* [ref] `.ElasticsearchRecord::Base.relay_id_attribute` to a more coherent name: `delegate_id_attribute` 
+* [ref] `ElasticsearchRecord::Relation#ordered_relation` to optimize already ordered relations
+* [ref] gemspecs to support different versions of Elasticsearch
+* [ref] improved README
+* [fix] `ElasticsearchRecord::Relation#pit_results` infinite loop _(caused by missing order)_
+* [fix] `ElasticsearchRecord::Relation#pit_results` results generation without 'uniq' check of the array
+
 ## [1.4.0] - 2023-01-27
 * [add] `ElasticsearchRecord::ModelApi` for fast & easy access the elasticsearch index - callable through `.api` (e.g. ElasticUser.api.mappings)
 * [ref] `ElasticsearchRecord::Instrumentation::LogSubscriber` to truncate the query-string (default: 1000)

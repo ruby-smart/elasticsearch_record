@@ -91,14 +91,19 @@ module ElasticsearchRecord
       # @param [String] keep_alive - how long to keep alive (for each single request) - default: '1m'
       # @param [Integer] batch_size - how many results per query (default: 1000 - this means at least 10 queries before reaching the +max_result_window+)
       def pit_results(keep_alive: '1m', batch_size: 1000)
-        raise ArgumentError, "Batch size cannot be above the 'max_result_window' (#{klass.max_result_window}) !" if batch_size > klass.max_result_window
+        raise(ArgumentError, "Batch size cannot be above the 'max_result_window' (#{klass.max_result_window}) !") if batch_size > klass.max_result_window
 
-        # check if a limit or offset values was provided
+        # check if limit or offset values where provided
         results_limit  = limit_value ? limit_value : Float::INFINITY
         results_offset = offset_value ? offset_value : 0
 
         # search_after requires a order - we resolve a order either from provided value or by default ...
         relation = ordered_relation
+
+        # FALLBACK (without any order) for restricted access to the '_id' field.
+        # with PIT a order by '_shard_doc' can also be used
+        # see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/paginate-search-results.html
+        relation.order!(_shard_doc: :asc) if relation.order_values.empty? && klass.connection.access_shard_doc?
 
         # clear limit & offset
         relation.offset!(nil).limit!(nil)
@@ -135,7 +140,7 @@ module ElasticsearchRecord
               if block_given?
                 yield ranged_results
               else
-                results |= ranged_results
+                results += ranged_results
               end
 
               # add to total
@@ -150,8 +155,8 @@ module ElasticsearchRecord
             # we ran out of data
             break if current_results_length < batch_size
 
-            # additional security - required?
-            # break if current_pit_hash[:search_after] == current_response['hits']['hits'][-1]['sort']
+            # additional security - prevents infinite loops
+            raise(::ActiveRecord::StatementInvalid, "'pit_results' aborted due an infinite loop error (invalid or missing order)") if current_pit_hash[:search_after] == current_response['hits']['hits'][-1]['sort'] && current_pit_hash[:pit][:id] == current_response['pit_id']
 
             # -------- NEXT LOOP changes --------
 

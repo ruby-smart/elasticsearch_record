@@ -14,10 +14,8 @@ _ElasticsearchRecord is a ActiveRecord adapter and provides similar functionalit
 
 **PLEASE NOTE:**
 
-- This is still in **development**!
-- Specs & documentation will follow. 
-- You might experience BUGs and Exceptions...
-- Currently supports only ActiveRecord 7.0 + Elasticsearch 8.4 _(downgrade for rails 6.x is planned in future versions)_
+- Specs & documentation are still missing, but will follow.
+- Currently supports ActiveRecord ~> 7.0 + Elasticsearch >= 7.17
 
 -----
 
@@ -63,7 +61,7 @@ Or install it yourself as:
  
  development:
    primary:
-    # <...>
+     # <...>
 
    # elasticsearch
    elasticsearch:
@@ -71,10 +69,24 @@ Or install it yourself as:
      host: localhost:9200
      user: elastic
      password: '****'
-     log: true
+     
+     # enable ES verbose logging
+     # log: true
+     
+     # add table (index) prefix & suffix to all 'tables'
+     # table_name_prefix: 'app-'
+     # table_name_suffix: '-development'
  
  production:
-   ...
+   # <...>
+
+   # elasticsearch
+   elasticsearch:
+     # <...>
+   
+     # add table (index) prefix & suffix to all 'tables'
+     # table_name_prefix: 'app-'
+     # table_name_suffix: '-production'
  
  test:
    ...
@@ -82,15 +94,19 @@ Or install it yourself as:
  
 ```
 
-### b) Require ```elasticsearch_record/instrumentation``` in your application.rb (if you want to...):
+### b) Require `elasticsearch_record/instrumentation` in your application.rb (if you want to...):
+
 ```ruby
 # config/application.rb
+
 require_relative "boot"
 
 require "rails"
 # Pick the frameworks you want:
 
-# ...
+# <...>
+
+# add instrumentation
 require 'elasticsearch_record/instrumentation'
 
 module Application
@@ -98,14 +114,24 @@ module Application
 end
 ```
 
-### c) Create a model that inherits from ```ElasticsearchRecord::Base``` model.
+### c) Create a model that inherits from `ElasticsearchRecord::Base` model.
 ```ruby
 # app/models/application_elasticsearch_record.rb
-   
-class Search < ElasticsearchRecord::Base
-   
-end
 
+class ApplicationElasticsearchRecord < ElasticsearchRecord::Base
+  # needs to be abstract
+  self.abstract_class = true
+end
+```
+
+Example class, that inherits from **ApplicationElasticsearchRecord**
+
+```ruby
+# app/models/search.rb
+   
+class Search < ApplicationElasticsearchRecord
+  
+end
 ```
 
 ### d) have FUN with your model:
@@ -239,11 +265,80 @@ _see simple documentation about these methods @ [rubydoc](https://rubydoc.info/g
 
 -----
 
-### Useful model class attributes
-- index_base_name
-- relay_id_attribute
+## Useful model class attributes
 
-### Useful model class methods
+### index_base_name
+Rails resolves a pluralized underscore table_name from the class name by default - which will not work for some models.
+
+To support a generic +table_name_prefix+ & +table_name_suffix+ from the _database.yml_, 
+the 'index_base_name' provides a possibility to chain prefix, **base** and suffix.
+
+```ruby
+class UnusalStat < ApplicationElasticsearchRecord
+  self.index_base_name = 'unusal-stats'
+end
+
+UnusalStat.where(year: 2023).to_query
+# => {:index=>"app-unusal-stats-development", :body ...
+```
+
+### delegate_id_attribute
+Rails resolves the primary_key's value by accessing the **#id** method.
+
+Since Elasticsearch also supports an additional, independent **id** attribute,
+it would only be able to access this through `_read_attribute(:id)`.
+
+To also have the ability of accessing this attribute through the default, this flag can be enabled.
+
+```ruby
+class SearchUser < ApplicationElasticsearchRecord
+  # attributes: id, name
+end
+
+# create new user within the index
+user = SearchUser.create(id: 8, name: 'Parker')
+
+# accessing the id, does NOT return the stored id by default - this will be delegated to the primary_key '_id'.
+user.id
+# => 'b2e34xa2'
+
+# -- ENABLE delegation -------------------------------------------------------------------
+SearchUser.delegate_id_attribute = true
+
+# create new user within the index
+user = SearchUser.create(id: 9, name: 'Pam')
+
+# accessing the id accesses the stored attribute now
+user.id
+# => 9
+
+# accessing the ES index id
+user._id
+# => 'xtf31bh8x'
+```
+
+## delegate_query_nil_limit
+Elasticsearch's default value for queries without a **size** is forced to **10**.
+To provide a similar behaviour as the (my)SQL interface,
+this can be automatically set to the `max_result_window` value by calling `.limit(nil)` on the models' relation.
+
+
+```ruby
+SearchUser.where(name: 'Peter').limit(nil)
+# returns a maximum of 10 items ...
+# => [...]
+
+# -- ENABLE delegation -------------------------------------------------------------------
+SearchUser.delegate_query_nil_limit = true
+
+SearchUser.where(name: 'Peter').limit(nil)
+# returns up to 10_000 items ...
+# => [...]
+
+# hint: if you want more than 10_000 use the +#pit_results+ method!
+```
+
+## Useful model class methods
 - auto_increment?
 - max_result_window
 - source_column_names
@@ -251,26 +346,28 @@ _see simple documentation about these methods @ [rubydoc](https://rubydoc.info/g
 - find_by_query
 - msearch
 
-### Useful model API methods
-Fast access to model-related methods for easier access without creating a overcomplicated method call.
+## Useful model API methods
+Quick access to model-related methods for easier access without creating a overcomplicated method call on the models connection...
 
 Access these methods through the model class method `.api`.
 ```ruby
-  # returns mapping of model class
-  klass.api.mappings
+# returns mapping of model class
+klass.api.mappings
 
-  # e.g. for ElasticUser model
-  ElasticUser.api.mappings
+# e.g. for ElasticUser model
+SearchUser.api.mappings
 
-  # insert new raw data
-  ElasticUser.api.insert([{name: 'Hans', age: 34}, {name: 'Peter', age: 22}])
+# insert new raw data
+SearchUser.api.insert([{name: 'Hans', age: 34}, {name: 'Peter', age: 22}])
 ```
 
-* open
-* close
-* refresh
-* block
-* unblock
+* open!
+* close!
+* refresh!
+* block!
+* unblock!
+* drop!(confirm: true)
+* truncate!(confirm: true)
 * mappings
 * metas
 * settings
@@ -290,12 +387,14 @@ Fast insert, update, delete raw data
 * delete
 * bulk
 
+-----
+
 ## ActiveRecord ConnectionAdapters table-methods
 Access these methods through the model class method `.connection`.
 
 ```ruby
-  # returns mapping of provided table (index)
-  klass.connection.table_mappings('table-name')
+# returns mapping of provided table (index)
+klass.connection.table_mappings('table-name')
 ```
 
 - table_mappings
@@ -316,7 +415,7 @@ Access these methods through the model class method `.connection`.
 ## Active Record Schema migration methods
 Access these methods through the model's connection or within any `Migration`.
 
-**cluster actions:**
+### cluster actions:
 - open_table
 - open_tables
 - close_table
@@ -333,7 +432,7 @@ Access these methods through the model's connection or within any `Migration`.
 - change_table
 - rename_table
 
-**table actions:**
+### table actions:
 - change_meta
 - remove_meta
 - add_mapping
@@ -348,8 +447,10 @@ Access these methods through the model's connection or within any `Migration`.
 - change_alias
 - remove_alias
 
+
+**Example migration:**
+
 ```ruby
-# Example migration
 class AddTests < ActiveRecord::Migration[7.0]
   def up
     create_table "assignments", if_not_exists: true do |t|
@@ -420,6 +521,47 @@ class AddTests < ActiveRecord::Migration[7.0]
     drop_table 'vintage'
   end
 end
+```
+
+
+## environment-related-table-name:
+Using the `_env_table_name`-method will resolve the table (index) name within the current environment,
+even if the environments shares the same cluster ...
+
+This can be provided through the `database.yml` by using the `table_name_prefix/suffix` configuration keys.
+Within the migration the `_env_table_name`-method must be used in combination with the table (index) base name.
+
+**Example:**
+Production uses a index suffix with '-pro', development uses '-dev' - they share the same cluster, but different indexes.
+For the **settings** table:
+- settings-pro
+- settings-dev
+
+A single migration can be created to be used within each environment:
+```ruby
+# Example migration
+class AddSettings < ActiveRecord::Migration[7.0]
+  def up
+    create_table _env_table_name("settings"), force: true do |t|
+      t.mapping :created_at, :date
+      t.mapping :key, :integer do |m|
+        m.primary_key = true
+        m.auto_increment = 10
+      end
+      t.mapping :status, :keyword
+      t.mapping :updated_at, :date
+      t.mapping :value, :text
+
+      t.setting "index.number_of_replicas", "0"
+      t.setting "index.number_of_shards", "1"
+      t.setting "index.routing.allocation.include._tier_preference", "data_content"
+    end
+  end 
+  
+  def down
+    drop_table _env_table_name("settings")
+  end
+end 
 ```
 
 ## Docs

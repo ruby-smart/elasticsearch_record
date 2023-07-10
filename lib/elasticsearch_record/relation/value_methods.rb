@@ -43,6 +43,15 @@ module ElasticsearchRecord
         @values[:aggs] = value
       end
 
+      # overwrite the limit_value setter, to provide a special behaviour of auto-setting the +max_result_window+.
+      def limit=(limit)
+        if limit == '__max__' || (limit.nil? && delegate_query_nil_limit?)
+          super(max_result_window)
+        else
+          super
+        end
+      end
+
       private
 
       # alternative method to avoid redefining the const +VALID_UNSCOPING_VALUES+

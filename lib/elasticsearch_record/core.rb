@@ -5,20 +5,25 @@ module ElasticsearchRecord
     included do
       # Rails resolves the primary_key's value by accessing the +#id+ method.
       # Since Elasticsearch also supports an additional, independent +id+ attribute, it would only be able to access
-      # this through +read_attribute(:id)+.
+      # this through +_read_attribute(:id)+.
       # To also have the ability of accessing this attribute through the default, this flag can be enabled.
       # @attribute! Boolean
-      class_attribute :relay_id_attribute, instance_writer: false, default: false
+      class_attribute :delegate_id_attribute, instance_writer: false, default: false
+
+      # Elasticsearch's default value for queries without a +size+ is forced to +10+.
+      # To provide a similar behaviour as SQL, this can be automatically set to the +max_result_window+ value.
+      # @attribute! Boolean
+      class_attribute :delegate_query_nil_limit, instance_writer: false, default: false
     end
 
     # overwrite to provide a Elasticsearch version of returning a 'primary_key' attribute.
     # Elasticsearch uses the static +_id+ column as primary_key, but also supports an additional +id+ column.
     # To provide functionality of returning the +id+ attribute, this method must also support it
-    # with enabled +relay_id_attribute+.
+    # with enabled +delegate_id_attribute+.
     # @return [Object]
     def id
       # check, if the model has a +id+ attribute
-      return _read_attribute('id') if relay_id_attribute? && has_attribute?('id')
+      return _read_attribute('id') if delegate_id_attribute? && has_attribute?('id')
 
       super
     end
@@ -26,11 +31,11 @@ module ElasticsearchRecord
     # overwrite to provide a Elasticsearch version of setting a 'primary_key' attribute.
     # Elasticsearch uses the static +_id+ column as primary_key, but also supports an additional +id+ column.
     # To provide functionality of setting the +id+ attribute, this method must also support it
-    # with enabled +relay_id_attribute+.
+    # with enabled +delegate_id_attribute+.
     # @param [Object] value
     def id=(value)
       # check, if the model has a +id+ attribute
-      return _write_attribute('id', value) if relay_id_attribute? && has_attribute?('id')
+      return _write_attribute('id', value) if delegate_id_attribute? && has_attribute?('id')
 
       # auxiliary update the +_id+ virtual column if we have a different primary_key
       _write_attribute('_id', value) if @primary_key != '_id'
@@ -41,13 +46,13 @@ module ElasticsearchRecord
     # overwrite to provide a Elasticsearch version of returning a 'primary_key' was attribute.
     # Elasticsearch uses the static +_id+ column as primary_key, but also supports an additional +id+ column.
     # To provide functionality of returning the +id_Was+ attribute, this method must also support it
-    # with enabled +relay_id_attribute+.
+    # with enabled +delegate_id_attribute+.
     def id_was
-      relay_id_attribute? && has_attribute?('id') ? attribute_was('id') : super
+      delegate_id_attribute? && has_attribute?('id') ? attribute_was('id') : super
     end
 
     # overwrite the write_attribute method to always write to the 'id'-attribute, if present.
-    # This methods does not check for +relay_id_attribute+ flag!
+    # This methods does not check for +delegate_id_attribute+ flag!
     # see @ ActiveRecord::AttributeMethods::Write#write_attribute
     def write_attribute(attr_name, value)
       return _write_attribute('id', value) if attr_name.to_s == 'id' && has_attribute?('id')
@@ -56,7 +61,7 @@ module ElasticsearchRecord
     end
 
     # overwrite read_attribute method to read from the 'id'-attribute, if present.
-    # This methods does not check for +relay_id_attribute+ flag!
+    # This methods does not check for +delegate_id_attribute+ flag!
     # see @ ActiveRecord::AttributeMethods::Read#read_attribute
     def read_attribute(attr_name, &block)
       return _read_attribute('id', &block) if attr_name.to_s == 'id' && has_attribute?('id')

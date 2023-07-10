@@ -32,8 +32,8 @@ DESC
 
   spec.require_paths = ["lib"]
 
-  spec.add_dependency 'activerecord', '~> 7.0.0'
-  spec.add_dependency 'elasticsearch', '~> 8.4'
+  spec.add_dependency 'activerecord', '~> 7.0'
+  spec.add_dependency 'elasticsearch', '>= 7.17'
 
   #spec.add_development_dependency 'coveralls_reborn', '~> 0.25'
   spec.add_development_dependency 'rspec', '~> 3.0'

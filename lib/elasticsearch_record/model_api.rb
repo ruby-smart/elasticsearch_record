@@ -8,18 +8,47 @@ module ElasticsearchRecord
       @klass = klass
     end
 
-    # undelegated schema methods: clone rename create drop
+    # undelegated schema methods: clone rename create
     # those should not be quick-accessible, since they might end in heavily broken index
 
     # delegated dangerous methods (created with exclamation mark)
-    # not able to provide individual arguments - always the defaults will be used
+    # not able to provide individual arguments - always the defaults will be used!
+    #
+    # @example
+    #   open!
+    #   close!
+    #   refresh!
+    #   block!
+    #   unblock!
     %w(open close refresh block unblock).each do |method|
       define_method("#{method}!") do
         _connection.send("#{method}_table", _index_name)
       end
     end
 
+    # delegated dangerous methods with confirm parameter (created with exclamation mark)
+    # a exception will be raised, if +confirm:true+ is missing.
+    #
+    # @example
+    #   drop!(confirm: true)
+    #   truncate!(confirm: true)
+    %w(drop truncate).each do |method|
+      define_method("#{method}!") do |confirmed: false|
+        raise "#{method} of table '#{_index_name}' aborted!\nexecution not confirmed!\ncall with: #{klass}.api.#{method}!(confirmed: true)" unless confirmed
+        _connection.send("#{method}_table", _index_name)
+      end
+    end
+
     # delegated table methods
+    #
+    # @example
+    #   mappings
+    #   metas
+    #   settings
+    #   aliases
+    #   state
+    #   schema
+    #   exists?
     %w(mappings metas settings aliases state schema exists?).each do |method|
       define_method(method) do |*args|
         _connection.send("table_#{method}", _index_name, *args)
@@ -27,6 +56,12 @@ module ElasticsearchRecord
     end
 
     # delegated plain methods
+    #
+    # @example
+    #   alias_exists?
+    #   setting_exists?
+    #   mapping_exists?
+    #   meta_exists?
     %w(alias_exists? setting_exists? mapping_exists? meta_exists?).each do |method|
       define_method(method) do |*args|
         _connection.send(method, _index_name, *args)
@@ -89,7 +124,7 @@ module ElasticsearchRecord
       if data[0].is_a?(Hash)
         bulk(data, :delete, **options)
       else
-        bulk(data.map{|id| {id: id}}, :delete, **options)
+        bulk(data.map { |id| { id: id } }, :delete, **options)
       end
     end
 
@@ -102,7 +137,7 @@ module ElasticsearchRecord
 
       _connection.api(:core, :bulk, {
         index:   _index_name,
-        body:    data.map{|item| {operation => {_id: item[:id], data: item.except(:id)}}},
+        body:    data.map { |item| { operation => { _id: item[:id], data: item.except(:id) } } },
         refresh: refresh
       }, "BULK #{operation.to_s.upcase}", **options)
     end
