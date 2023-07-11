@@ -33,8 +33,8 @@ module ElasticsearchRecord
     #   drop!(confirm: true)
     #   truncate!(confirm: true)
     %w(drop truncate).each do |method|
-      define_method("#{method}!") do |confirmed: false|
-        raise "#{method} of table '#{_index_name}' aborted!\nexecution not confirmed!\ncall with: #{klass}.api.#{method}!(confirmed: true)" unless confirmed
+      define_method("#{method}!") do |confirm: false|
+        raise "#{method} of table '#{_index_name}' aborted!\nexecution not confirmed!\ncall with: #{klass}.api.#{method}!(confirm: true)" unless confirm
         _connection.send("#{method}_table", _index_name)
       end
     end
@@ -67,6 +67,84 @@ module ElasticsearchRecord
         _connection.send(method, _index_name, *args)
       end
     end
+
+    # -- DYNAMIC METHOD DOCUMENTATION FOR YARD -------------------------------------------------------------------------
+
+    # @!method open!
+    # Shortcut to open the closed index.
+    # @return [Boolean] acknowledged status
+
+    # @!method close!
+    # Shortcut to close the opened index.
+    # @return [Boolean] acknowledged status
+
+    # @!method refresh!
+    # Shortcut to refresh the index.
+    # @return [Boolean] result state (returns false if refreshing failed)
+
+    # @!method block!
+    # Shortcut to block write access on the index
+    # @return [Boolean] acknowledged status
+
+    # @!method unblock!
+    # Shortcut to unblock all blocked accesses on the index
+    # @return [Boolean] acknowledged status
+
+    # @!method drop!(confirm: false)
+    # Shortcut to drop the index
+    # @param confirm
+    # @return [Boolean] acknowledged status
+
+    # @!method truncate!(confirm: false)
+    # Shortcut to truncate the index
+    # @param confirm
+    # @return [Boolean] acknowledged status
+
+    # @!method mappings
+    # Shortcut for mappings
+    # @return [Hash]
+
+    # @!method metas
+    # Shortcut for metas
+    # @return [Hash]
+
+    # @!method settings(flat_settings=true)
+    # Shortcut for settings
+    # @param [Boolean] flat_settings (default: true)
+    # @return [Hash]
+
+    # @!method aliases
+    # Shortcut for aliases
+    # @return [Hash]
+
+    # @!method state
+    # Shortcut for state
+    # @return [Hash]
+
+    # @!method schema(features=[])
+    # Shortcut for schema
+    # @param [Array, Symbol] features
+    # @return [Hash]
+
+    # @!method exists?
+    # Shortcut for exists
+    # @return [Boolean]
+
+    # @!method alias_exists?
+    # Shortcut for alias_exists
+    # @return [Boolean]
+
+    # @!method setting_exists?
+    # Shortcut for setting_exists
+    # @return [Boolean]
+
+    # @!method mapping_exists?
+    # Shortcut for mapping_exists
+    # @return [Boolean]
+
+    # @!method meta_exists?
+    # Shortcut for meta_exists
+    # @return [Boolean]
 
     # fast insert/update data.
     #

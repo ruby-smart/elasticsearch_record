@@ -56,6 +56,7 @@ Or install it yourself as:
 ## Setup
 
 ### a) Update your **database.yml** and add a elasticsearch connection:
+
 ```yml
  # config/database.yml
  
@@ -115,6 +116,7 @@ end
 ```
 
 ### c) Create a model that inherits from `ElasticsearchRecord::Base` model.
+
 ```ruby
 # app/models/application_elasticsearch_record.rb
 
@@ -135,6 +137,7 @@ end
 ```
 
 ### d) have FUN with your model:
+
 ```ruby
 scope = Search
         .where(name: 'Custom Object Name')
@@ -155,12 +158,13 @@ scope.where(kind: :undefined).offset(10).update_all(name: "New Name")
 
 ## Active Record Query Interface
 
-### Refactored ```where``` method:
+### Refactored `where` method:
 Different to the default where-method you can now use it in different ways.
 
 Using it by default with a Hash, the method decides itself to either add a filter, or must_not clause.
 
-_Hint: If not provided through ```#kind```-method a default kind **:bool** will be used._
+_Hint: If not provided through `#kind`-method a default kind **:bool** will be used._
+
 ```ruby
 # use it by default
 Search.where(name: 'A nice object')
@@ -213,7 +217,6 @@ results_count = scope.count
 # > 5
 total = scope.total
 # > 3335
-
 ```
 
 ### Available query/relation chain methods
@@ -322,7 +325,6 @@ Elasticsearch's default value for queries without a **size** is forced to **10**
 To provide a similar behaviour as the (my)SQL interface,
 this can be automatically set to the `max_result_window` value by calling `.limit(nil)` on the models' relation.
 
-
 ```ruby
 SearchUser.where(name: 'Peter').limit(nil)
 # returns a maximum of 10 items ...
@@ -350,6 +352,7 @@ SearchUser.where(name: 'Peter').limit(nil)
 Quick access to model-related methods for easier access without creating a overcomplicated method call on the models connection...
 
 Access these methods through the model class method `.api`.
+
 ```ruby
 # returns mapping of model class
 klass.api.mappings
@@ -523,7 +526,6 @@ class AddTests < ActiveRecord::Migration[7.0]
 end
 ```
 
-
 ## environment-related-table-name:
 Using the `_env_table_name`-method will resolve the table (index) name within the current environment,
 even if the environments shares the same cluster ...
@@ -533,11 +535,14 @@ Within the migration the `_env_table_name`-method must be used in combination wi
 
 **Example:**
 Production uses a index suffix with '-pro', development uses '-dev' - they share the same cluster, but different indexes.
+
 For the **settings** table:
-- settings-pro
-- settings-dev
+
+* settings-pro
+* settings-dev
 
 A single migration can be created to be used within each environment:
+
 ```ruby
 # Example migration
 class AddSettings < ActiveRecord::Migration[7.0]

@@ -100,7 +100,7 @@ module ActiveRecord
         end
 
         # returns the meta hash
-        # @param [Hash]
+        # @return [Hash]
         def meta
           __get_attribute(:meta) || {}
         end

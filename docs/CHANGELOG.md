@@ -1,5 +1,9 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.5.1] - 2023-07-11
+* [fix] `ElasticsearchRecord::ModelApi` 'drop!' & 'truncate!' methods to support correct parameter 'confirm'
+* [ref] improved yard documentation
+
 ## [1.5.0] - 2023-07-10
 * [add] additional `ElasticsearchRecord::ModelApi` methods **drop!** & **truncate!**, which have to be called with a `confirm:true` parameter
 * [add] `.ElasticsearchRecord::Base.delegate_query_nil_limit` to automatically delegate a relations `limit(nil)`-call to the **max_result_window** _(set to 10.000 as default)_
