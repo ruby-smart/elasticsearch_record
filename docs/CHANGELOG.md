@@ -1,5 +1,8 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.5.2] - 2023-07-12
+* [fix] `ElasticsearchRecord::Relation#limit` setter method `limit_value=` to work with **delegate_query_nil_limit?**
+
 ## [1.5.1] - 2023-07-11
 * [fix] `ElasticsearchRecord::ModelApi` 'drop!' & 'truncate!' methods to support correct parameter 'confirm'
 * [ref] improved yard documentation

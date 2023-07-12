@@ -337,6 +337,8 @@ SearchUser.where(name: 'Peter').limit(nil)
 # returns up to 10_000 items ...
 # => [...]
 
+# hint: setting the 'max_result_window' can also be done by providing '__max__' wto the limit method: SearchUser.limit('__max__')
+
 # hint: if you want more than 10_000 use the +#pit_results+ method!
 ```
 
