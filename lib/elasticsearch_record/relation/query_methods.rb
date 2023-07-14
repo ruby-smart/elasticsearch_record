@@ -184,35 +184,36 @@ module ElasticsearchRecord
 
       # creates a condition on the relation.
       # There are several possibilities to call this method.
+      #
       # @example
       #   # create a simple 'term' condition on the query[:filter] param
-      #     where({name: 'hans'})
-      #     > query[:filter] << { term: { name: 'hans' } }
+      #   where({name: 'hans'})
+      #   #> query[:filter] << { term: { name: 'hans' } }
       #
       #   # create a simple 'terms' condition on the query[:filter] param
-      #     where({name: ['hans','peter']})
-      #     > query[:filter] << { terms: { name: ['hans','peter'] } }
+      #   where({name: ['hans','peter']})
+      #   #> query[:filter] << { terms: { name: ['hans','peter'] } }
       #
-      #     where(:must_not, term: {name: 'horst'})
-      #     where(:query_string, "(new york OR dublin)", fields: ['name','description'])
+      #   where(:must_not, term: {name: 'horst'})
+      #   where(:query_string, "(new york OR dublin)", fields: ['name','description'])
       #
       #   # nested array
       #   where([ [:filter, {...}], [:must_not, {...}]])
-      def where(*args)
-        return none if args[0] == :none
-
-        super
-      end
-
+      #
+      #   # invalidate query
+      #   where(:none)
+      #
       def where!(opts, *rest)
         # :nodoc:
         case opts
-          # check the first provided parameter +opts+ and validate, if this is an alias for "must, must_not, should or filter"
-          # if true, we expect the rest[0] to be a hash.
-          # For this correlation we forward this as RAW-data without check & manipulation
         when Symbol
           case opts
+          when :none
+            none!
           when :filter, :must, :must_not, :should
+            # check the first provided parameter +opts+ and validate, if this is an alias for "must, must_not, should or filter".
+            # if true, we expect the rest[0] to be a hash.
+            # For this correlation we forward this as RAW-data without check & manipulation
             send("#{opts}!", *rest)
           else
             raise ArgumentError, "Unsupported prefix type '#{opts}'. Allowed types are: :filter, :must, :must_not, :should"
@@ -220,9 +221,7 @@ module ElasticsearchRecord
         when Array
           # check if this is a nested array of multiple [<kind>,<data>]
           if opts[0].is_a?(Array)
-            opts.each { |item|
-              where!(*item)
-            }
+            opts.each { |item| where!(*item) }
           else
             where!(*opts, *rest)
           end

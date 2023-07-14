@@ -61,21 +61,17 @@ module ElasticsearchRecord
 
       private
 
-      # WARNING: BETA!!!
       # Resolves the +auto_increment+ status from the tables +_meta+ attributes.
       def _insert_with_auto_increment(values)
-        # check, if the primary_key's values is provided.
-        # so, no need to resolve a +auto_increment+ value, but provide
-        if values[self.primary_key].present?
-          # resolve id from values
-          id = values[self.primary_key]
-
+        # check, if the primary_key's value is provided.
+        # so, no need to resolve a +auto_increment+ value, but provide the id directly
+        if (id = values[self.primary_key]).present?
           yield({id: id})
         elsif auto_increment?
           ids = [
-            # we try to resolve the current-auto-increment value from the tables meta
+            # try to resolve the current-auto-increment value from the tables meta
             connection.table_metas(self.table_name).dig('auto_increment').to_i + 1,
-            # for secure reasons, we also resolve the current maximum value for the primary key
+            # for secure reasons: also resolve the current maximum value for the primary key
             self.unscoped.all.maximum(self.primary_key).to_i + 1
           ]
 

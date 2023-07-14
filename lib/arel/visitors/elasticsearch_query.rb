@@ -138,12 +138,11 @@ module Arel # :nodoc: all
 
       # CUSTOM node by elasticsearch_record
       def visit_Query(o)
-        # in some cases we don't have a kind, but where conditions.
-        # in this case we force the kind as +:bool+.
-        kind = :bool if o.wheres.present? && o.kind.blank?
-
-        # resolve kind, if not already set
-        kind ||= o.kind.present? ? visit(o.kind.expr) : nil
+        # resolves the query kind.
+        # PLEASE NOTE: in some cases there is no kind, but an existing +where+ conditions.
+        # This will then be treat as +:bool+.
+        kind = o.kind.present? ? visit(o.kind.expr).presence : nil
+        kind ||= :bool if o.wheres.present?
 
         # check for existing kind - we cannot create a node if we don't have any kind
         return unless kind
@@ -423,13 +422,13 @@ module Arel # :nodoc: all
         o
       end
 
+      # alias for RAW returns
       alias :visit_Integer :visit_Struct_Raw
       alias :visit_Symbol :visit_Struct_Raw
       alias :visit_Hash :visit_Struct_Raw
       alias :visit_NilClass :visit_Struct_Raw
       alias :visit_String :visit_Struct_Raw
       alias :visit_Arel_Nodes_SqlLiteral :visit_Struct_Raw
-
 
       # used by insert / update statements.
       # does not claim / assign any values!
@@ -453,6 +452,7 @@ module Arel # :nodoc: all
         o.name
       end
 
+      # alias for ATTRIBUTE returns
       alias :visit_Arel_Attributes_Attribute :visit_Struct_Attribute
       alias :visit_Arel_Nodes_UnqualifiedColumn :visit_Struct_Attribute
       alias :visit_ActiveModel_Attribute_FromUser :visit_Struct_Attribute
@@ -473,6 +473,7 @@ module Arel # :nodoc: all
         o.value
       end
 
+      # alias for BIND returns
       alias :visit_ActiveModel_Attribute :visit_Struct_BindValue
       alias :visit_ActiveRecord_Relation_QueryAttribute :visit_Struct_BindValue
 
@@ -484,6 +485,7 @@ module Arel # :nodoc: all
         collect(o)
       end
 
+      # alias for ARRAY returns
       alias :visit_Set :visit_Array
     end
   end

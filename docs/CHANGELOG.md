@@ -1,5 +1,9 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.5.3] - 2023-07-14
+* [fix] `ElasticsearchRecord::Relation#where!` on nested, provided `:none` key
+* [ref] minor code tweaks and comment updates
+
 ## [1.5.2] - 2023-07-12
 * [fix] `ElasticsearchRecord::Relation#limit` setter method `limit_value=` to work with **delegate_query_nil_limit?**
 

@@ -89,8 +89,7 @@ module Arel # :nodoc: all
         # prepare query
         claim(:type, ::ElasticsearchRecord::Query::TYPE_INDEX_UPDATE_SETTING)
 
-        # special overcomplicated blocks to assign a hash of settings directly to the body...
-        # todo: refactor this in future versions
+        # overcomplicated blocks to assign a hash of settings directly to the body
         assign(:__query__, {}) do
           assign(:body, {}) do
             resolve(o.items, :visit_TableSettingDefinition)
