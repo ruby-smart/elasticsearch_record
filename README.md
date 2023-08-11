@@ -53,6 +53,22 @@ Or install it yourself as:
   * logs Elasticsearch API-calls
   * shows Runtime in logs
 
+## Notice
+Since ActiveRecord does not have any configuration option to support transactions and 
+Elasticsearch does **NOT** support transactions, it may be risky to ignore them.
+
+As a default, transactions are 'silently swallowed' to not break any existing applications...
+
+To raise an exception while using transactions on a ElasticsearchRecord model, the following flag can be enabled.
+However enabling this flag will surely fail transactional tests _(prevent this with 'use_transactional_tests=false')_
+
+```ruby
+# config/initializers/elasticsearch_record.yml
+
+# enable transactional exceptions
+ElasticsearchRecord.error_on_transaction = true
+```
+
 ## Setup
 
 ### a) Update your **database.yml** and add a elasticsearch connection:
@@ -224,6 +240,7 @@ total = scope.total
 - configure
 - aggregate
 - refresh
+- timeout
 - query
 - filter
 - must_not
@@ -260,6 +277,7 @@ _see simple documentation about these methods @ [rubydoc](https://rubydoc.info/g
 - composite
 - point_in_time
 - pit_results
+- pit_delete
 
 _see simple documentation about these methods @ [rubydoc](https://rubydoc.info/gems/elasticsearch_record/ElasticsearchRecord/Relation/ResultMethods)_
 
@@ -366,13 +384,26 @@ SearchUser.api.mappings
 SearchUser.api.insert([{name: 'Hans', age: 34}, {name: 'Peter', age: 22}])
 ```
 
+### dangerous methods
 * open!
 * close!
 * refresh!
 * block!
 * unblock!
+
+### dangerous methods with args
+* create!(...)
+* clone!(...)
+* rename!(...)
+* backup!(...)
+* restore!(...)
+* reindex!(...)
+
+### dangerous methods with confirm parameter
 * drop!(confirm: true)
 * truncate!(confirm: true)
+
+### table methods
 * mappings
 * metas
 * settings
@@ -380,17 +411,19 @@ SearchUser.api.insert([{name: 'Hans', age: 34}, {name: 'Peter', age: 22}])
 * state
 * schema
 * exists?
-* alias_exists?
-* setting_exists?
-* mapping_exists?
-* meta_exists?
 
-Fast insert, update, delete raw data
-* index
-* insert
-* update
-* delete
-* bulk
+### plain methods
+* alias_exists?(...)
+* setting_exists?(...)
+* mapping_exists?(...)
+* meta_exists?(...)
+
+### Fast insert, update, delete raw data
+* index(...)
+* insert(...)
+* update(...)
+* delete(...)
+* bulk(...)
 
 -----
 
@@ -436,6 +469,9 @@ Access these methods through the model's connection or within any `Migration`.
 - create_table
 - change_table
 - rename_table
+- reindex_table
+- backup_table
+- restore_table
 
 ### table actions:
 - change_meta

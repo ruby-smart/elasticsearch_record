@@ -8,7 +8,7 @@ module ElasticsearchRecord
       # this through +_read_attribute(:id)+.
       # To also have the ability of accessing this attribute through the default, this flag can be enabled.
       # @attribute! Boolean
-      class_attribute :delegate_id_attribute, instance_writer: false, default: false
+      class_attribute :delegate_id_attribute, default: false
 
       # Elasticsearch's default value for queries without a +size+ is forced to +10+.
       # To provide a similar behaviour as SQL, this can be automatically set to the +max_result_window+ value.
@@ -45,7 +45,7 @@ module ElasticsearchRecord
 
     # overwrite to provide a Elasticsearch version of returning a 'primary_key' was attribute.
     # Elasticsearch uses the static +_id+ column as primary_key, but also supports an additional +id+ column.
-    # To provide functionality of returning the +id_Was+ attribute, this method must also support it
+    # To provide functionality of returning the +id_was+ attribute, this method must also support it
     # with enabled +delegate_id_attribute+.
     def id_was
       delegate_id_attribute? && has_attribute?('id') ? attribute_was('id') : super
@@ -67,6 +67,19 @@ module ElasticsearchRecord
       return _read_attribute('id', &block) if attr_name.to_s == 'id' && has_attribute?('id')
 
       super
+    end
+
+    # resets a possible active +delegate_id_attribute?+ to false during block execution.
+    # Unfortunately this is required, since a lot of rails-code forces 'accessors' on the primary_key-field through the
+    # +id+-getter & setter methods. This will then fail to set the doc-_id and instead set the +id+-attribute ...
+    def undelegate_id_attribute_with(&block)
+      return block.call unless self.delegate_id_attribute?
+
+      self.delegate_id_attribute = false
+      result = block.call
+      self.delegate_id_attribute = true
+
+      result
     end
 
     module PrependClassMethods

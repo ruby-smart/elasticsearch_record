@@ -46,7 +46,7 @@ module ElasticsearchRecord
 
         # final coloring
         name  = color(name, name_color(payload[:name]), true)
-        query = color(query, gate_color(payload[:gate]), true) if colorize_logging
+        query = color(query, gate_color(payload[:gate], payload[:name]), true) if colorize_logging
 
         debug "  #{name} #{query.presence || '-/-'}"
       end
@@ -61,7 +61,7 @@ module ElasticsearchRecord
         end
       end
 
-      def gate_color(gate)
+      def gate_color(gate, name)
         case gate
           # SELECTS
         when 'core.get', 'core.mget', 'core.search', 'core.msearch', 'core.count', 'core.exists', 'sql.query'
@@ -77,7 +77,11 @@ module ElasticsearchRecord
           YELLOW
           # MIXINS
         when /indices\.\w+/, 'core.bulk', 'core.index'
-          WHITE
+          if name.end_with?('Pit Delete')
+            RED
+          else
+            WHITE
+          end
         else
           MAGENTA
         end

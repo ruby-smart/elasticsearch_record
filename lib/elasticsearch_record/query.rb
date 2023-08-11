@@ -86,9 +86,9 @@ module ElasticsearchRecord
     # @!attribute Boolean
     attr_reader :refresh
 
-    # defines the query body - in most cases this is a hash
-    # @!attribute Hash
-    # attr_reader :body
+    # defines the query timeout
+    # @!attribute Integer|String
+    attr_reader :timeout
 
     # defines the query arguments to be passed to the API
     # @!attribute Hash
@@ -98,11 +98,12 @@ module ElasticsearchRecord
     # @!attribute Array
     attr_reader :columns
 
-    def initialize(index: nil, type: TYPE_UNDEFINED, status: STATUS_VALID, body: nil, refresh: nil, arguments: {}, columns: [])
+    def initialize(index: nil, type: TYPE_UNDEFINED, status: STATUS_VALID, body: nil, refresh: nil, timeout: nil, arguments: {}, columns: [])
       @index     = index
       @type      = type
       @status    = status
       @refresh   = refresh
+      @timeout   = timeout
       @body      = body
       @arguments = arguments
       @columns   = columns
@@ -162,6 +163,9 @@ module ElasticsearchRecord
 
       # set refresh, if defined (also includes false value)
       args[:refresh] = self.refresh unless self.refresh.nil?
+
+      # set timeout, if present
+      args[:timeout] = self.timeout if self.timeout.present?
 
       args
     end

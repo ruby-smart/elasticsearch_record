@@ -8,9 +8,6 @@ module ElasticsearchRecord
       @klass = klass
     end
 
-    # undelegated schema methods: clone rename create
-    # those should not be quick-accessible, since they might end in heavily broken index
-
     # delegated dangerous methods (created with exclamation mark)
     # not able to provide individual arguments - always the defaults will be used!
     #
@@ -23,6 +20,21 @@ module ElasticsearchRecord
     %w(open close refresh block unblock).each do |method|
       define_method("#{method}!") do
         _connection.send("#{method}_table", _index_name)
+      end
+    end
+
+    # delegated dangerous methods with args
+    #
+    # @example
+    #   create!(:new_table_name, settings: , mappings:, alias: , ...)
+    #   clone!(:new_table_name)
+    #   rename!(:new_table_name)
+    #   backup!(to: :backup_name)
+    #   restore!(from: :backup_name)
+    #   reindex!(:new_table_name)
+    %w(create clone rename backup restore reindex).each do |method|
+      define_method("#{method}!") do |*args|
+        _connection.send("#{method}_table", _index_name, *args)
       end
     end
 
@@ -146,12 +158,51 @@ module ElasticsearchRecord
     # Shortcut for meta_exists
     # @return [Boolean]
 
+    # @!method create!(force: false, copy_from: nil, if_not_exists: false, **options)
+    # Shortcut for create_table
+    # @param [Boolean] force
+    # @param [nil, String] copy_from
+    # @param [Hash] options
+    # @return [Boolean] acknowledged status
+
+    # @!method clone!(target_name, **options)
+    # Shortcut for clone_table
+    # @param [String] target_name
+    # @param [Hash] options
+    # @return [Boolean]
+
+    # @!method rename!(target_name, timeout: nil, **options)
+    # Shortcut for rename_table
+    # @param [String] target_name
+    # @param [String (frozen)] timeout
+    # @param [Hash] options
+
+    # @!method backup!(to: nil, close: true)
+    # Shortcut for backup_table
+    # @param [String] to
+    # @param [Boolean] close
+    # @return [String] backup_name
+
+    # @!method restore!(from:, timeout: nil, open: true, drop_backup: false)
+    # Shortcut for restore_table
+    # @param [String] from
+    # @param [String (frozen)] timeout
+    # @param [Boolean] open
+    # @return [Boolean] acknowledged status
+
+    # @!method reindex!(target_name, **options)
+    # Shortcut for reindex_table
+    # @param [String] target_name
+    # @param [Hash] options
+    # @return [Hash] reindex stats
+
     # fast insert/update data.
+    # IMPORTANT: Any 'doc'-id must by provided with underscore '_' ( +:_id+ )
     #
     # @example
     #   index([{name: 'Hans', age: 34}, {name: 'Peter', age: 22}])
     #
-    #   index({id: 5, name: 'Georg', age: 87})
+    #   index({_id: 5, name: 'Georg', age: 87})
     #
     # @param [Array<Hash>,Hash] data
     # @param [Hash] options
@@ -160,6 +211,7 @@ module ElasticsearchRecord
     end
 
     # fast insert new data.
+    # IMPORTANT: Any 'doc'-id must by provided with underscore '_' ( +:_id+ )
     #
     # @example
     #   insert([{name: 'Hans', age: 34}, {name: 'Peter', age: 22}])
@@ -173,11 +225,12 @@ module ElasticsearchRecord
     end
 
     # fast update existing data.
+    # IMPORTANT: Any 'doc'-id must by provided with underscore '_' ( +:_id+ )
     #
     # @example
-    #   update([{id: 1, name: 'Hansi'}, {id: 2, name: 'Peter Parker', age: 42}])
+    #   update([{_id: 1, name: 'Hansi'}, {_id: 2, name: 'Peter Parker', age: 42}])
     #
-    #   update({id: 3, name: 'Georg McCain'})
+    #   update({_id: 3, name: 'Georg McCain'})
     #
     # @param [Array<Hash>,Hash] data
     # @param [Hash] options
@@ -186,13 +239,14 @@ module ElasticsearchRecord
     end
 
     # fast delete data.
+    # IMPORTANT: Any 'doc'-id must by provided with underscore '_' ( +:_id+ )
     #
     # @example
     #   delete([1,2,3,5])
     #
     #   delete(3)
     #
-    #   delete({id: 2})
+    #   delete({_id: 2})
     #
     # @param [Array<Hash>,Hash] data
     # @param [Hash] options
@@ -202,12 +256,12 @@ module ElasticsearchRecord
       if data[0].is_a?(Hash)
         bulk(data, :delete, **options)
       else
-        bulk(data.map { |id| { id: id } }, :delete, **options)
+        bulk(data.map { |id| { _id: id } }, :delete, **options)
       end
     end
 
     # bulk handle provided data (single Hash or multiple Array<Hash>).
-    # @param [Hash,Array<Hash>] data - the data to insert/update/delete ...
+    # @param [Hash,Array<Hash<Symbol=>Object>>] data - the data to insert/update/delete ...
     # @param [Symbol] operation
     # @param [Boolean, Symbol] refresh
     def bulk(data, operation = :index, refresh: true, **options)
@@ -215,7 +269,11 @@ module ElasticsearchRecord
 
       _connection.api(:core, :bulk, {
         index:   _index_name,
-        body:    data.map { |item| { operation => { _id: item[:id], data: item.except(:id) } } },
+        body:    if operation == :update
+                   data.map { |item| { operation => { _id: (item[:_id].presence || item['_id']), data: { doc: item.except(:_id, '_id') } } } }
+                 else
+                   data.map { |item| { operation => { _id: (item[:_id].presence || item['_id']), data: item.except(:_id, '_id') } } }
+                 end,
         refresh: refresh
       }, "BULK #{operation.to_s.upcase}", **options)
     end

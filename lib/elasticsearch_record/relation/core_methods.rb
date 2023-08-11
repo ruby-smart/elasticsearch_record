@@ -125,6 +125,18 @@ module ElasticsearchRecord
           self
         end
       end
+
+      # overwrite original methods to provide a elasticsearch version:
+      # checks against the +#access_id_fielddata?+ to ensure the Elasticsearch Cluster allows access on the +_id+ field.
+      def reverse_sql_order(order_query)
+        if order_query.empty?
+          return [table[primary_key].desc] if primary_key != '_id' || klass.connection.access_id_fielddata?
+          raise ActiveRecord::IrreversibleOrderError,
+                "Relation has no current order and fielddata access on the _id field is disallowed! However, you can re-enable it by updating the dynamic cluster setting: indices.id_field_data.enabled"
+        end
+
+        super
+      end
     end
   end
 end

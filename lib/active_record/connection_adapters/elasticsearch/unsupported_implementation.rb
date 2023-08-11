@@ -3,13 +3,6 @@
 module ActiveRecord
   module ConnectionAdapters
     module Elasticsearch
-
-      class UnsupportedImplementationError < StandardError
-        def initialize(method_name)
-          super "Unsupported implementation of method: #{method_name}."
-        end
-      end
-
       module UnsupportedImplementation
         extend ActiveSupport::Concern
 

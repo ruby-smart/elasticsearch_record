@@ -90,7 +90,9 @@ module ElasticsearchRecord
       #
       # @param [String] keep_alive - how long to keep alive (for each single request) - default: '1m'
       # @param [Integer] batch_size - how many results per query (default: 1000 - this means at least 10 queries before reaching the +max_result_window+)
-      def pit_results(keep_alive: '1m', batch_size: 1000)
+      # @param [Boolean] ids_only - resolve ids only from results
+      # @return [Integer, Array] either returns the results-array (no block provided) or the total amount of results
+      def pit_results(keep_alive: '1m', batch_size: 1000, ids_only: false)
         raise(ArgumentError, "Batch size cannot be above the 'max_result_window' (#{klass.max_result_window}) !") if batch_size > klass.max_result_window
 
         # check if limit or offset values where provided
@@ -104,6 +106,9 @@ module ElasticsearchRecord
         # with PIT a order by '_shard_doc' can also be used
         # see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/paginate-search-results.html
         relation.order!(_shard_doc: :asc) if relation.order_values.empty? && klass.connection.access_shard_doc?
+
+        # resolve ids only
+        relation.reselect!('_id') if ids_only
 
         # clear limit & offset
         relation.offset!(nil).limit!(nil)
@@ -122,10 +127,16 @@ module ElasticsearchRecord
           # resolve new data until we got all we need
           loop do
             # change pit settings & limit (spawn is required, since a +resolve+ will make the relation immutable)
-            current_response = relation.spawn.configure!(current_pit_hash).limit!(batch_size).resolve('Pit').response
+            current_response = relation.spawn.configure!(current_pit_hash).limit!(batch_size).resolve('Pit Results').response
 
             # resolve only data from hits->hits[{_source}]
-            current_results        = current_response['hits']['hits'].map { |result| result['_source'].merge('_id' => result['_id']) }
+            current_results        = if ids_only
+                                       current_response['hits']['hits'].map { |result| result['_id'] }
+                                       # future with helper
+                                       # current_response['hits']['hits'].map.from_hash('_id')
+                                     else
+                                       current_response['hits']['hits'].map { |result| result['_source'].merge('_id' => result['_id']) }
+                                     end
             current_results_length = current_results.length
 
             # check if we reached the required offset
@@ -171,11 +182,37 @@ module ElasticsearchRecord
           end
         end
 
-        # return results array
-        results
+        # return results array or total value
+        if block_given?
+          results_total
+        else
+          results
+        end
       end
 
       alias_method :total_results, :pit_results
+
+      # executes a delete query in a +point_in_time+ scope.
+      # this will provide the possibility to delete more than the +max_result_window+ (default: 10000) docs in a batched process.
+      # @param [String] keep_alive
+      # @param [Integer] batch_size
+      # @param [Boolean] refresh index after delete finished (default: true)
+      # @return [Integer] total amount of deleted docs
+      def pit_delete(keep_alive: '1m', batch_size: 1000, refresh: true)
+        delete_count = select('_id').pit_results(keep_alive: keep_alive, batch_size: batch_size, ids_only: true) do |ids|
+          # skip empty results
+          next unless ids.any?
+
+          # delete all IDs, but do not refresh index, yet
+          klass.connection.api(:core, :bulk, { index: klass.table_name, body: ids.map { |id| { delete: { _id: id } } }, refresh: false }, "#{klass} Pit Delete")
+        end
+
+        # refresh index
+        klass.connection.refresh_table(klass.table_name) if refresh
+
+        # return total count
+        delete_count
+      end
 
       # returns the RAW response for the current query
       # @return [Array]

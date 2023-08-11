@@ -102,6 +102,16 @@ module ElasticsearchRecord
         configure!(:__query__, refresh: value)
       end
 
+      # sets the query's +timeout+ value.
+      # @param [Boolean] value (default: true)
+      def timeout(value = true)
+        spawn.timeout!(value)
+      end
+
+      def timeout!(value = true)
+        configure!(:__query__, timeout: value)
+      end
+
       # add a whole query 'node' to the query.
       # @example
       #   query(:bool, {filter: ...})

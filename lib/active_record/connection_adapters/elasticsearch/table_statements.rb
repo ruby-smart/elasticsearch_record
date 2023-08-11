@@ -116,7 +116,7 @@ module ActiveRecord
           #   Defaults to false.
           # @param [String] table_name
           # @param [Boolean] if_exists
-          # @return [Array] acknowledged status
+          # @return [Boolean] acknowledged status
           def drop_table(table_name, if_exists: false, **)
             schema_cache.clear_data_source_cache!(table_name)
             api(:indices, :delete, { index: table_name, ignore: (if_exists ? 404 : nil) }, 'DROP TABLE').dig('acknowledged')
@@ -148,11 +148,12 @@ module ActiveRecord
             end
           end
 
-          # clones an entire table (index) to the provided +target_name+.
+          # clones an entire table (index) with its docs to the provided +target_name+.
           # During cloning, the table will be automatically 'write'-blocked.
           # @param [String] table_name
           # @param [String] target_name
           # @param [Hash] options
+          # @return [Boolean] acknowledged status
           def clone_table(table_name, target_name, **options)
             # create new definition
             definition = clone_table_definition(table_name, target_name, **extract_table_options!(options))
@@ -168,6 +169,54 @@ module ActiveRecord
             definition.exec!
           end
 
+          # creates a backup (snapshot) of the entire table (index) from provided +table_name+.
+          # The backup will be closed, to prevent read/write access.
+          # The +target_name+ will be auto-generated, if not provided.
+          #
+          # @example
+          #   backup_table('screenshots', to: 'screenshots-backup-v1')
+          #
+          # @param [String] table_name
+          # @param [String] to - target_name
+          # @param [Boolean] close - closes backup after creation (default: true)
+          # @return [String] backup_name
+          def backup_table(table_name, to: nil, close: true)
+            to ||= "#{table_name}-snapshot-#{Time.now.strftime('%s%3N')}"
+            raise ArgumentError, "unable to backup '#{table_name}' to already existing target '#{to}'!" if table_exists?(to)
+
+            clone_table(table_name, to)
+            close_table(to) if close
+
+            to
+          end
+
+          # restores a entire table (index) from provided +target_name+.
+          # The +table_name+ will be dropped, if exists.
+          # The +from+ will persist, if not provided +drop_backup:true+.
+          #
+          # @example
+          #   restore_table('screenshots', from: 'screenshots-backup-v1')
+          #
+          # @param [String] table_name
+          # @param [String] from
+          # @param [String (frozen)] timeout - renaming timout (default: '30s')
+          # @param [Boolean] open - opens restored backup after creation (default: true)
+          # @return [Boolean] acknowledged status
+          def restore_table(table_name, from:, timeout: nil, open: true, drop_backup: false)
+            raise ArgumentError, "unable to restore from missing target '#{from}'!" unless table_exists?(from)
+            drop_table(table_name, if_exists: true)
+
+            # choose best strategy
+            if drop_backup
+              rename_table(from, table_name, timeout: timeout)
+            else
+              clone_table(from, table_name)
+            end
+
+            # open, if provided
+            open_table(from) if open
+          end
+
           # renames a table (index) by executing multiple steps:
           # - clone table
           # - wait for 'green' state
@@ -178,11 +227,11 @@ module ActiveRecord
           # @param [String] target_name
           # @param [String (frozen)] timeout (default: '30s')
           # @param [Hash] options - additional 'clone' options (like settings, alias, ...)
-          def rename_table(table_name, target_name, timeout: '30s', **options)
+          def rename_table(table_name, target_name, timeout: nil, **options)
             schema_cache.clear_data_source_cache!(table_name)
 
             clone_table(table_name, target_name, **options)
-            cluster_health(index: target_name, wait_for_status: 'green', timeout: timeout)
+            cluster_health(index: target_name, wait_for_status: 'green', timeout: timeout.presence || '30s')
             drop_table(table_name)
           end
 
@@ -253,6 +302,15 @@ module ActiveRecord
 
             # execute definition query(ies)
             definition.exec!
+          end
+
+          # Copies documents from a source to a destination.
+          # @param [String] table_name
+          # @param [String] target_name
+          # @param [Hash] options
+          # @return [Hash] reindex stats
+          def reindex_table(table_name, target_name, **options)
+            api(:core, :reindex, { body: { source: { index: table_name }, dest: { index: target_name } } }.merge(options), 'REINDEX TABLE')
           end
 
           # -- mapping -------------------------------------------------------------------------------------------------

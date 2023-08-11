@@ -28,6 +28,9 @@ module Arel # :nodoc: all
         when :refresh
           # change the refresh state
           @refresh = args[0]
+        when :timeout
+          # change the timeout
+          @timeout = args[0]
         when :index
           # change the index name
           @index = args[0]

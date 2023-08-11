@@ -13,6 +13,7 @@ require 'active_record/connection_adapters/elasticsearch/schema_dumper'
 require 'active_record/connection_adapters/elasticsearch/schema_statements'
 require 'active_record/connection_adapters/elasticsearch/type'
 require 'active_record/connection_adapters/elasticsearch/table_statements'
+require 'active_record/connection_adapters/elasticsearch/transactions'
 
 require 'arel/visitors/elasticsearch'
 require 'arel/collectors/elasticsearch_query'
@@ -24,6 +25,12 @@ module ActiveRecord # :nodoc:
   module ConnectionHandling # :nodoc:
     def elasticsearch_connection(config)
       config          = config.symbolize_keys
+
+      # move 'username' to 'user'
+      config[:user]  = config.delete(:username) if config[:username]
+
+      # append 'port' to 'host'
+      config[:host]  += ":#{config.delete(:port)}" if config[:port] && config[:host]
 
       # move 'host' to 'hosts'
       config[:hosts]  = config.delete(:host) if config[:host]
@@ -45,7 +52,7 @@ module ActiveRecord # :nodoc:
 
       # defines the Elasticsearch 'base' structure, which is always included but cannot be resolved through mappings ...
       BASE_STRUCTURE = [
-        { 'name' => '_id', 'type' => 'keyword', 'virtual' => true, 'enabled' => true, 'meta' => { 'primary_key' => 'true' } },
+        { 'name' => '_id', 'type' => 'keyword', 'meta' => { 'primary_key' => 'true' } },
         { 'name' => '_index', 'type' => 'keyword', 'virtual' => true },
         { 'name' => '_score', 'type' => 'float', 'virtual' => true },
         { 'name' => '_type', 'type' => 'keyword', 'virtual' => true },
@@ -57,6 +64,7 @@ module ActiveRecord # :nodoc:
       include Elasticsearch::DatabaseStatements
       include Elasticsearch::SchemaStatements
       include Elasticsearch::TableStatements
+      include Elasticsearch::Transactions
 
       class << self
         def base_structure_keys
@@ -69,7 +77,7 @@ module ActiveRecord # :nodoc:
           client.ping unless config[:ping] == false
           client
         rescue ::Elastic::Transport::Transport::Errors::Unauthorized
-          raise ActiveRecord::DatabaseConnectionError.username_error(config[:username])
+          raise ActiveRecord::DatabaseConnectionError.username_error(config[:user])
         rescue ::Elastic::Transport::Transport::ServerError => error
           raise ::ActiveRecord::ConnectionNotEstablished, error.message
         end
@@ -135,7 +143,7 @@ module ActiveRecord # :nodoc:
 
       # define native types - which will be used for schema-dumping
       NATIVE_DATABASE_TYPES = {
-        primary_key: { name: 'long' },
+        primary_key: { name: 'long' }, # maybe this hae to changed to 'keyword'
         string:      { name: 'keyword' },
         blob:        { name: 'binary' },
         datetime:    { name: 'date' },
@@ -170,6 +178,12 @@ module ActiveRecord # :nodoc:
       # overwrite method to provide a Elasticsearch path
       def migrations_paths
         @config[:migrations_paths] || ['db/migrate_elasticsearch']
+      end
+
+      # Does this adapter support transactions in general?
+      # HINT: This is +NOT* an official setting and only introduced to ElasticsearchRecord
+      def supports_transactions?
+        false
       end
 
       # Does this adapter support explain?

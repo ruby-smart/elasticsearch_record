@@ -1,5 +1,27 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.6.0] - 2023-08-11
+* [add] `ElasticsearchRecord::Base#undelegate_id_attribute_with` method to support a temporary 'undelegation' (used to create a new record)
+* [add] `ElasticsearchRecord::Relation#timeout` to directly provide the timeout-parameter to the query
+* [add] `ElasticsearchRecord.error_on_transaction`-flag to throw transactional errors (default: `false`) - this will now **IGNORE** all transactions
+* [add] `ElasticsearchRecord::ModelApi` create!, clone!, rename!, backup!, restore! & reindex!-methods
+* [add] `ElasticsearchRecord::Relation#pit_delete` which executes a delete query in a 'point_in_time' scope.
+* [add] `ActiveRecord::ConnectionAdapters::Elasticsearch::TableStatements#backup_table` to create a backup (snapshot) of the entire table (index)
+* [add] `ActiveRecord::ConnectionAdapters::Elasticsearch::TableStatements#restore_table` to restore a entire table (index)
+* [add] `ActiveRecord::ConnectionAdapters::Elasticsearch::TableStatements#reindex_table` to copy documents from source to destination
+* [ref] `ElasticsearchRecord::Base.delegate_id_attribute` now supports instance writer
+* [ref] `ElasticsearchRecord::Relation#pit_results` adds `ids_only`-parameter to now support a simple return of the records-ids...
+* [fix] Relation `#last`-method will raise an transport exception if cluster setting '**indices.id_field_data.enabled**' is disabled (now checks for `access_id_fielddata?`)
+* [fix] ElasticsearchRecord-connection settings does not support `username` key
+* [fix] ElasticsearchRecord-connection settings does not support `port` key
+* [fix] `_id`-Attribute is erroneously defined as 'virtual' attribute - but is required for insert statements.
+* [fix] unsupported **SAVEPOINT** transactions throws exceptions _(especially in tests)_
+* [fix] `ElasticsearchRecord::ModelApi#bulk` does not recognize `'_id' / :_id` attribute
+* [fix] `ElasticsearchRecord::ModelApi#bulk` does not correctly build the data-hash for `update`-operation _(missing 'doc'-node)_
+* [ref] simplify `ElasticsearchRecord::Base#searchable_column_names`
+* [fix] creating a new record does not recognize a manually provided `_id`-attribute
+* [fix] creating a new record with active `delegate_id_attribute`-flag does not update the records `_id`.
+
 ## [1.5.3] - 2023-07-14
 * [fix] `ElasticsearchRecord::Relation#where!` on nested, provided `:none` key
 * [ref] minor code tweaks and comment updates
@@ -13,10 +35,10 @@
 
 ## [1.5.0] - 2023-07-10
 * [add] additional `ElasticsearchRecord::ModelApi` methods **drop!** & **truncate!**, which have to be called with a `confirm:true` parameter
-* [add] `.ElasticsearchRecord::Base.delegate_query_nil_limit` to automatically delegate a relations `limit(nil)`-call to the **max_result_window** _(set to 10.000 as default)_
+* [add] `ElasticsearchRecord::Base.delegate_query_nil_limit` to automatically delegate a relations `limit(nil)`-call to the **max_result_window** _(set to 10.000 as default)_
 * [add] `ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaStatements#access_shard_doc?` which checks, if the **PIT**-shard_doc order is available
 * [add] support for **_shard_doc** as a default order for `ElasticsearchRecord::Relation#pit_results`
-* [ref] `.ElasticsearchRecord::Base.relay_id_attribute` to a more coherent name: `delegate_id_attribute` 
+* [ref] `ElasticsearchRecord::Base.relay_id_attribute` to a more coherent name: `delegate_id_attribute` 
 * [ref] `ElasticsearchRecord::Relation#ordered_relation` to optimize already ordered relations
 * [ref] gemspecs to support different versions of Elasticsearch
 * [ref] improved README

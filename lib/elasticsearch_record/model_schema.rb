@@ -52,11 +52,8 @@ module ElasticsearchRecord
       # @return [Array<String>]
       def searchable_column_names
         @searchable_column_names ||= columns.select(&:enabled?).reduce([]) { |m, column|
-          m << column.name
-          m += column.field_names
-          m += column.property_names
-          m.uniq
-        }
+          m + [column.name] + column.field_names + column.property_names
+        }.uniq
       end
 
       # clears schema-related instance variables.

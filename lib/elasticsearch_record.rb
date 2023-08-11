@@ -55,6 +55,16 @@ module ElasticsearchRecord
 
     autoload :ElasticsearchDatabaseTasks, 'elasticsearch_record/tasks/elasticsearch_database_tasks'
   end
+
+  ##
+  # :singleton-method:
+  # Specifies if a exception should be raised while using transactions.
+  # Since ActiveRecord does not have any configuration option to support transactions and
+  # Elasticsearch does **NOT** support transactions, it may be risky to ignore them.
+  # As default, transactional are 'silently swallowed' to not break any existing applications...
+  # However enabling this flag will surely fail transactional tests ...
+  singleton_class.attr_accessor :error_on_transaction
+  self.error_on_transaction = false
 end
 
 ActiveSupport.on_load(:active_record) do

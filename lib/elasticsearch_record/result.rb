@@ -49,7 +49,7 @@ module ElasticsearchRecord
     end
 
     # Returns the RAW +_source+ data from each hit - aka. +rows+.
-    # PLEASE NOTE: The array will only contain the RAW data from each +_source+ (meta info like '_score' is not included)
+    # PLEASE NOTE: The array will only contain the RAW data from each +_source+ (meta info like '_id' or '_score' are not included)
     # @return [Array]
     def results
       return [] unless response['hits']

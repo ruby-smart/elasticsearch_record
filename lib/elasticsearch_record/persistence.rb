@@ -11,7 +11,7 @@ module ElasticsearchRecord
         # values is not a "key=>values"-Hash, but a +ActiveModel::Attribute+ - so the casted values gets resolved here
         values = values.transform_values(&:value)
 
-        # resolve & update a auto_increment value
+        # resolve & update a auto_increment value, if configured
         _insert_with_auto_increment(values) do |arguments|
           # build new query
           query = ElasticsearchRecord::Query.new(
@@ -68,6 +68,9 @@ module ElasticsearchRecord
         if (id = values[self.primary_key]).present?
           yield({id: id})
         elsif auto_increment?
+          # future increments: uuid (+uuidv6 ?), hex, radix(2-36), integer
+          # allocated through: primary_key_type
+
           ids = [
             # try to resolve the current-auto-increment value from the tables meta
             connection.table_metas(self.table_name).dig('auto_increment').to_i + 1,
@@ -86,6 +89,15 @@ module ElasticsearchRecord
         else
           yield({})
         end
+      end
+    end
+
+    # overwrite to provide a Elasticsearch version:
+    # Creates a record with values matching those of the instance attributes
+    # and returns its id.
+    def _create_record(*args)
+      undelegate_id_attribute_with do
+        super
       end
     end
   end
