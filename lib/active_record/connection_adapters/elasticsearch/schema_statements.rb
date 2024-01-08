@@ -223,7 +223,7 @@ module ActiveRecord
           # @param [String] _table_name
           # @param [Hash] field
           # @return [ActiveRecord::ConnectionAdapters::Column]
-          def new_column_from_field(_table_name, field)
+          def new_column_from_field(_table_name, field, _definitions)
             ActiveRecord::ConnectionAdapters::Elasticsearch::Column.new(
               field["name"],
               field["null_value"],

@@ -188,8 +188,9 @@ module ElasticsearchRecord
       end
 
       def none! # :nodoc:
+        @none = true
         # tell the query it 'failed'
-        configure!(:__query__, status: :failed).extending!(ActiveRecord::NullRelation)
+        configure!(:__query__, status: :failed)
       end
 
       # creates a condition on the relation.

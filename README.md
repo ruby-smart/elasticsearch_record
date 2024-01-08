@@ -4,7 +4,7 @@
 [![Documentation](https://img.shields.io/badge/docs-rdoc.info-blue.svg)](http://rubydoc.info/gems/elasticsearch_record)
 
 [![Gem Version](https://badge.fury.io/rb/elasticsearch_record.svg)](https://badge.fury.io/rb/elasticsearch_record)
-[![License](https://img.shields.io/github/license/ruby-smart/elasticsearch_record)](docs/LICENSE.txt)
+[![License](https://img.shields.io/github/license/ruby-smart/elasticsearch_record)](docs/LICENSE)
 
 ActiveRecord adapter for Elasticsearch
 
@@ -620,7 +620,7 @@ This project is intended to be a safe, welcoming space for collaboration, and co
 
 The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
 
-A copy of the [LICENSE](docs/LICENSE.txt) can be found @ the docs.
+A copy of the [LICENSE](docs/LICENSE) can be found @ the docs.
 
 ## Code of Conduct
 

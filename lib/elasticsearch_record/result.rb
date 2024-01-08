@@ -1,13 +1,19 @@
 # frozen_string_literal: true
 
+require "active_record/future_result"
+
 module ElasticsearchRecord
   class Result
     include Enumerable
 
     # creates an empty response
     # @return [ElasticsearchRecord::Result (frozen)]
-    def self.empty
-      new(nil).freeze
+    def self.empty(async: false) # :nodoc:
+      if async
+        EMPTY_ASYNC
+      else
+        EMPTY
+      end
     end
 
     attr_reader :response, :columns, :column_types
@@ -272,5 +278,11 @@ module ElasticsearchRecord
                               []
                             end
     end
+
+    EMPTY = new([].freeze, [].freeze, {}.freeze).freeze
+    private_constant :EMPTY
+
+    EMPTY_ASYNC = ::ActiveRecord::FutureResult::Complete.new(EMPTY).freeze
+    private_constant :EMPTY_ASYNC
   end
 end

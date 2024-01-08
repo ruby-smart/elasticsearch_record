@@ -77,6 +77,22 @@ module ElasticsearchRecord
         _load_from_sql(_query_by_sql(query), &block)
       end
 
+      # ES|QL query API
+      # Returns search results for an ES|QL (Elasticsearch query language) query.
+      #
+      # @param [String] esql
+      # @param [Proc] block
+      def find_by_esql(esql, &block)
+        # build new query
+        query = ElasticsearchRecord::Query.new(
+          type: ElasticsearchRecord::Query::TYPE_ESQL,
+          body: { query: esql },
+          # IMPORTANT: Always provide all columns
+          columns: source_column_names)
+
+        _load_from_sql(_query_by_sql(query), &block)
+      end
+
       # executes a msearch by provided +RAW+ queries
       def msearch(queries, async: false)
         # build new msearch query
@@ -87,7 +103,7 @@ module ElasticsearchRecord
           # IMPORTANT: Always provide all columns
           columns: source_column_names)
 
-        connection.exec_query(query, "#{name} Msearch", async: async)
+        connection.internal_exec_query(query, "#{name} Msearch", async: async)
       end
 
       # executes a search by provided +RAW+ query - supports +Elasticsearch::DSL+ gem if loaded
