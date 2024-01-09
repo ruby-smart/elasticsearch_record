@@ -14,8 +14,8 @@ _ElasticsearchRecord is a ActiveRecord adapter and provides similar functionalit
 
 **PLEASE NOTE:**
 
-- This is the `rails-7-0-stable`-branch, which only supports rails **7.0** _(see section 'Rails_Versions' for supported versions)_
-- supports ActiveRecord ~> 7.0 + Elasticsearch >= 7.17
+- This is the `rails-7-1-stable`-branch, which only supports rails **7.1** _(see section 'Rails_Versions' for supported versions)_
+- supports ActiveRecord ~> 7.1 + Elasticsearch >= 7.17
 
 -----
 
@@ -44,10 +44,10 @@ https://github.com/ruby-smart/elasticsearch_record/tree/rails-7-0-stable
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'elasticsearch_record', '~> 1.7'
+gem 'elasticsearch_record', '~> 1.8'
 
 # alternative
-gem 'elasticsearch_record', git: 'https://github.com/ruby-smart/elasticsearch_record', branch: 'rails-7-0-stable'
+gem 'elasticsearch_record', git: 'https://github.com/ruby-smart/elasticsearch_record', branch: 'rails-7-1-stable'
 
 ```
 
