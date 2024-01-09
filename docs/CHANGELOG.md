@@ -1,5 +1,10 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.7.1] - 2024-01-09
+* [fix] `ElasticsearchRecord::Relation` calculation methods return with different nodes
+* [ref] `ElasticsearchRecord::Relation#calculate` removes default value of `node`
+* [ref] `ActiveRecord::ConnectionAdapters::ElasticsearchAdapter#api` prevents inaccurate variable interpretation of `log`
+
 ## [1.7.0] - 2024-01-09
 * [add] `ElasticsearchRecord::Relation#boxplot` calculation method
 * [add] `ElasticsearchRecord::Relation#stats` calculation method

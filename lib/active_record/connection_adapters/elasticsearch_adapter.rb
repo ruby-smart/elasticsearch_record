@@ -238,7 +238,7 @@ module ActiveRecord # :nodoc:
         # resolve the API target
         target = namespace == :core ? @connection : @connection.__send__(namespace)
 
-        log("#{namespace}.#{action}", arguments, name, async: async, log: log) do
+        __send__(:log, "#{namespace}.#{action}", arguments, name, async: async, log: log) do
           response = ActiveSupport::Dependencies.interlock.permit_concurrent_loads do
             target.__send__(action, arguments)
           end
