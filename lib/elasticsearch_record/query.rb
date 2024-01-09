@@ -12,6 +12,7 @@ module ElasticsearchRecord
     TYPE_SEARCH  = :search
     TYPE_MSEARCH = :msearch
     TYPE_SQL     = :sql
+    TYPE_ESQL    = :esql
 
     # -- DOCUMENT TYPES ------------------------------------------------------------------------------------------------
     TYPE_CREATE          = :create
@@ -34,7 +35,7 @@ module ElasticsearchRecord
     # includes valid types only
     TYPES = [
       # -- QUERY TYPES
-      TYPE_COUNT, TYPE_SEARCH, TYPE_MSEARCH, TYPE_SQL,
+      TYPE_COUNT, TYPE_SEARCH, TYPE_MSEARCH, TYPE_SQL, TYPE_ESQL,
       # -- DOCUMENT TYPES
       TYPE_CREATE, TYPE_UPDATE, TYPE_UPDATE_BY_QUERY, TYPE_DELETE, TYPE_DELETE_BY_QUERY,
 
@@ -46,7 +47,7 @@ module ElasticsearchRecord
 
     # includes reading types only
     READ_TYPES = [
-      TYPE_COUNT, TYPE_SEARCH, TYPE_MSEARCH, TYPE_SQL
+      TYPE_COUNT, TYPE_SEARCH, TYPE_MSEARCH, TYPE_SQL, TYPE_ESQL
     ].freeze
 
     # defines a body to be executed if the query fails - +(none)+
@@ -60,6 +61,7 @@ module ElasticsearchRecord
     # if no special type is defined, it simply uses +[:core,self.type]+
     GATES = {
       TYPE_SQL                  => [:sql, :query],
+      TYPE_ESQL                 => [:esql, :query],
       TYPE_INDEX_CREATE         => [:indices, :create],
       TYPE_INDEX_CLONE          => [:indices, :clone],
       TYPE_INDEX_UPDATE_MAPPING => [:indices, :put_mapping],
@@ -118,6 +120,12 @@ module ElasticsearchRecord
       self
     end
 
+    # returns true, if the query failed
+    # @return [Boolean]
+    def failed?
+      self.status == STATUS_FAILED
+    end
+
     # returns true, if the query is valid (e.g. index & type defined)
     # @return [Boolean]
     def valid?
@@ -143,7 +151,7 @@ module ElasticsearchRecord
     # failed queried will return the related +FAILED_BODIES+ or +{}+ as fallback
     # @return [Hash, nil]
     def body
-      return (FAILED_BODIES[self.type].presence || {}) if self.status == STATUS_FAILED
+      return (FAILED_BODIES[self.type].presence || {}) if failed?
 
       @body
     end

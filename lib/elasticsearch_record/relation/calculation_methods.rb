@@ -45,6 +45,84 @@ module ElasticsearchRecord
         end
       end
 
+      # A boxplot metrics aggregation that computes boxplot of numeric values extracted from the aggregated documents.
+      # These values can be generated from specific numeric or histogram fields in the documents.
+      #
+      # The boxplot aggregation returns essential information for making a box plot:
+      # *minimum*, *maximum*, *median*, *first quartile* (25th percentile) and *third quartile* (75th percentile) values.
+      #
+      #   Person.all.boxplot(:age)
+      #   > {
+      #       "min": 0.0,
+      #       "max": 990.0,
+      #       "q1": 167.5,
+      #       "q2": 445.0,
+      #       "q3": 722.5,
+      #       "lower": 0.0,
+      #       "upper": 990.0
+      #     }
+      #
+      # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-boxplot-aggregation.html
+      #
+      # @param [Symbol, String] column_name
+      def boxplot(column_name)
+        calculate(:boxplot, column_name)
+      end
+
+      # A multi-value metrics aggregation that computes stats over numeric values extracted from the aggregated documents.      #
+      # The stats that are returned consist of: *min*, *max*, *sum*, *count* and *avg*.
+      #
+      #   Person.all.stats(:age)
+      #   > {
+      #       "count": 10,
+      #       "min": 0.0,
+      #       "max": 990.0,
+      #       "sum": 16859,
+      #       "avg": 75.5
+      #     }
+      #
+      # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-stats-aggregation.html
+      #
+      # @param [Symbol, String] column_name
+      def stats(column_name)
+        calculate(:stats, column_name)
+      end
+
+      # A multi-value metrics aggregation that computes statistics over string values extracted from the aggregated documents.
+      # These values can be retrieved either from specific keyword fields.
+      #
+      #   Person.all.string_stats(:name)
+      #   > {
+      #       "count": 5,
+      #       "min_length": 24,
+      #       "max_length": 30,
+      #       "avg_length": 28.8,
+      #       "entropy": 3.94617750050791
+      #     }
+      #
+      # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-string-stats-aggregation.html
+      #
+      # @param [Symbol, String] column_name
+      def string_stats(column_name)
+        calculate(:string_stats, column_name)
+      end
+
+      # The matrix_stats aggregation is a numeric aggregation that computes the following statistics over a set of document fields:
+      # *count*        Number of per field samples included in the calculation.
+      # *mean*        The average value for each field.
+      # *variance*    Per field Measurement for how spread out the samples are from the mean.
+      # *skewness*    Per field measurement quantifying the asymmetric distribution around the mean.
+      # *kurtosis*    Per field measurement quantifying the shape of the distribution.
+      # *covariance*  A matrix that quantitatively describes how changes in one field are associated with another.
+      # *correlation* The covariance matrix scaled to a range of -1 to 1, inclusive. Describes the relationship between field distributions.
+      #
+      # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-matrix-stats-aggregation.html
+      #
+      # @param [Array<Symbol|String>] column_names
+      def matrix_stats(*column_names)
+        calculate(:matrix_stats, *column_names)
+      end
+
       # A multi-value metrics aggregation that calculates one or more
       # percentiles over numeric values extracted from the aggregated documents.
       # Returns a hash with empty values (but keys still exists) if there is no row.
@@ -59,6 +137,9 @@ module ElasticsearchRecord
       #     "95.0" => 2021.0,
       #     "99.0" => 2022.0
       #     }
+      #
+      # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-percentile-aggregation.html
+      #
       # @param [Symbol, String] column_name
       def percentiles(column_name)
         calculate(:percentiles, column_name, node: :values)
@@ -81,6 +162,9 @@ module ElasticsearchRecord
       #     "95.0" => 2021.0,
       #     "99.0" => 2022.0
       #     }
+      #
+      # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-percentile-rank-aggregation.html
+      #
       # @param [Symbol, String] column_name
       # @param [Array] values
       def percentile_ranks(column_name, values)
@@ -92,6 +176,8 @@ module ElasticsearchRecord
       #   Person.all.cardinality(:age)
       #   > 12
       #
+      # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-cardinality-aggregation.html
+      #
       # @param [Symbol, String] column_name
       def cardinality(column_name)
         calculate(:cardinality, column_name)
@@ -100,6 +186,8 @@ module ElasticsearchRecord
       # Calculates the average value on a given column. Returns +nil+ if there's no row. See #calculate for examples with options.
       #
       #   Person.all.average(:age) # => 35.8
+      #
+      # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-avg-aggregation.html
       #
       # @param [Symbol, String] column_name
       def average(column_name)
@@ -112,6 +200,8 @@ module ElasticsearchRecord
       #   Person.all.minimum(:age)
       #   > 7
       #
+      # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-min-aggregation.html
+      #
       # @param [Symbol, String] column_name
       def minimum(column_name)
         calculate(:min, column_name)
@@ -123,9 +213,28 @@ module ElasticsearchRecord
       #
       #   Person.all.maximum(:age) # => 93
       #
+      # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-max-aggregation.html
+      #
       # @param [Symbol, String] column_name
       def maximum(column_name)
         calculate(:max, column_name)
+      end
+
+      # This single-value aggregation approximates the median absolute deviation of its search results.
+      # Median absolute deviation is a measure of variability. It is a robust statistic,
+      # meaning that it is useful for describing data that may have outliers, or may not be normally distributed.
+      # For such data it can be more descriptive than standard deviation.
+      #
+      # It is calculated as the median of each data point’s deviation from the median of the entire sample.
+      # That is, for a random variable X, the median absolute deviation is median(|median(X) - Xi|).
+      #
+      #   Person.all.median_absolute_deviation(:age) # => 91
+      #
+      # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-median-absolute-deviation-aggregation.html
+      #
+      # @param [Symbol, String] column_name
+      def median_absolute_deviation(column_name)
+        calculate(:median_absolute_deviation, column_name)
       end
 
       # Calculates the sum of values on a given column. The value is returned
@@ -134,22 +243,28 @@ module ElasticsearchRecord
       #
       #   Person.all.sum(:age) # => 4562
       #
+      # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-sum-aggregation.html
+      #
       # @param [Symbol, String] column_name (optional)
       def sum(column_name)
         calculate(:sum, column_name)
       end
 
-      # creates a aggregation with the provided metric (e.g. :sum) and column.
+      # creates a aggregation with the provided metric (e.g. :sum) and columns.
       # returns the metric node (default: :value) from the aggregations result.
       # @param [Symbol, String] metric
-      # @param [Symbol, String] column
+      # @param [Array<Symbol|String>] columns
       # @param [Hash] opts - additional arguments that get merged with the metric definition
       # @param [Symbol] node (default :value)
-      def calculate(metric, column, opts: {}, node: :value)
-        metric_key = "#{column}_#{metric}"
+      def calculate(metric, *columns, opts: {}, node: :value)
+        metric_key = "calculate_#{metric}"
 
         # spawn a new aggregation and return the aggs
-        response = aggregate(metric_key, { metric => { field: column }.merge(opts) }).aggregations
+        response = if columns.size == 1
+                     aggregate(metric_key, { metric => { field: columns[0] }.merge(opts) }).aggregations
+                   else
+                     aggregate(metric_key, { metric => { fields: columns }.merge(opts) }).aggregations
+                   end
 
         response[metric_key][node]
       end

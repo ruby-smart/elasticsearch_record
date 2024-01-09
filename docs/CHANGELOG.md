@@ -1,5 +1,15 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.7.0] - 2024-01-09
+* [add] `ElasticsearchRecord::Relation#boxplot` calculation method
+* [add] `ElasticsearchRecord::Relation#stats` calculation method
+* [add] `ElasticsearchRecord::Relation#string_stats` calculation method
+* [add] `ElasticsearchRecord::Relation#matrix_stats` calculation method
+* [add] `ElasticsearchRecord::Relation#median_absolute_deviation` calculation method
+* [add] `ElasticsearchRecord::Base#esql` + `ElasticsearchRecord::Base#find_by_esql` to support `ES|QL` queries
+* [add] new repository branch `rails-7-0-stable` to support different rails versions
+* [ref] minor code optimizations & documentation changes
+
 ## [1.6.0] - 2023-08-11
 * [add] `ElasticsearchRecord::Base#undelegate_id_attribute_with` method to support a temporary 'undelegation' (used to create a new record)
 * [add] `ElasticsearchRecord::Relation#timeout` to directly provide the timeout-parameter to the query

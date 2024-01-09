@@ -4,7 +4,7 @@
 [![Documentation](https://img.shields.io/badge/docs-rdoc.info-blue.svg)](http://rubydoc.info/gems/elasticsearch_record)
 
 [![Gem Version](https://badge.fury.io/rb/elasticsearch_record.svg)](https://badge.fury.io/rb/elasticsearch_record)
-[![License](https://img.shields.io/github/license/ruby-smart/elasticsearch_record)](docs/LICENSE.txt)
+[![License](https://img.shields.io/github/license/ruby-smart/elasticsearch_record)](docs/LICENSE)
 
 ActiveRecord adapter for Elasticsearch
 
@@ -14,8 +14,28 @@ _ElasticsearchRecord is a ActiveRecord adapter and provides similar functionalit
 
 **PLEASE NOTE:**
 
-- Specs & documentation are still missing, but will follow.
-- Currently supports ActiveRecord ~> 7.0 + Elasticsearch >= 7.17
+- This is the `rails-7-0-stable`-branch, which only supports rails **7.0** _(see section 'Rails_Versions' for supported versions)_
+- supports ActiveRecord ~> 7.0 + Elasticsearch >= 7.17
+
+-----
+
+## Rails versions
+
+Supported rails versions:
+
+### Rails 7.1:
+_(since gem version 1.8)_
+
+https://github.com/ruby-smart/elasticsearch_record/tree/rails-7-1-stable
+
+[![rails-7-1-stable](https://img.shields.io/badge/rails-7.1.stable-orange.svg)](https://github.com/ruby-smart/elasticsearch_record/tree/rails-7-1-stable)
+
+### Rails 7.0:
+_(until gem version 1.7)_
+
+https://github.com/ruby-smart/elasticsearch_record/tree/rails-7-0-stable
+
+[![rails-7-0-stable](https://img.shields.io/badge/rails-7.0.stable-orange.svg)](https://github.com/ruby-smart/elasticsearch_record/tree/rails-7-0-stable)
 
 -----
 
@@ -24,7 +44,11 @@ _ElasticsearchRecord is a ActiveRecord adapter and provides similar functionalit
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'elasticsearch_record'
+gem 'elasticsearch_record', '~> 1.7'
+
+# alternative
+gem 'elasticsearch_record', git: 'https://github.com/ruby-smart/elasticsearch_record', branch: 'rails-7-0-stable'
+
 ```
 
 And then execute:
@@ -235,6 +259,19 @@ total = scope.total
 # > 3335
 ```
 
+### Available core query methods
+
+- find_by_sql
+- find_by_query
+- find_by_esql
+- esql
+- msearch
+- search
+
+_see simple documentation about these methods @ {ElasticsearchRecord::Querying rubydoc}_
+
+_(also see @ [github](https://github.com/ruby-smart/elasticsearch_record/blob/main/lib/elasticsearch_record/querying.rb) )_
+
 ### Available query/relation chain methods
 - kind 
 - configure
@@ -252,7 +289,9 @@ total = scope.total
 - aggs_only!
 - total_only!
 
-_see simple documentation about these methods @ [rubydoc](https://rubydoc.info/gems/elasticsearch_record/ElasticsearchRecord/Relation/QueryMethods)_
+_see simple documentation about these methods @ {ElasticsearchRecord::Relation::QueryMethods rubydoc}_
+
+_(also see @ [github](https://github.com/ruby-smart/elasticsearch_record/blob/main/lib/elasticsearch_record/relation/query_methods.rb) )_
 
 ### Available calculation methods
 - percentiles
@@ -262,9 +301,16 @@ _see simple documentation about these methods @ [rubydoc](https://rubydoc.info/g
 - minimum
 - maximum
 - sum
+- boxplot
+- stats
+- string_stats
+- matrix_stats
+- median_absolute_deviation
 - calculate
 
-_see simple documentation about these methods @ [rubydoc](https://rubydoc.info/gems/elasticsearch_record/ElasticsearchRecord/Relation/CalculationMethods)_
+_see simple documentation about these methods @ {ElasticsearchRecord::Relation::CalculationMethods rubydoc}_
+
+_(also see @ [github](https://github.com/ruby-smart/elasticsearch_record/blob/main/lib/elasticsearch_record/relation/calculation_methods.rb) )_
 
 ### Available result methods
 - aggregations
@@ -279,7 +325,9 @@ _see simple documentation about these methods @ [rubydoc](https://rubydoc.info/g
 - pit_results
 - pit_delete
 
-_see simple documentation about these methods @ [rubydoc](https://rubydoc.info/gems/elasticsearch_record/ElasticsearchRecord/Relation/ResultMethods)_
+_see simple documentation about these methods @ {ElasticsearchRecord::Relation::ResultMethods rubydoc}_
+
+_(also see @ [github](https://github.com/ruby-smart/elasticsearch_record/blob/main/lib/elasticsearch_record/relation/result_methods.rb) )_
 
 ### Additional methods 
 - to_query
@@ -620,7 +668,7 @@ This project is intended to be a safe, welcoming space for collaboration, and co
 
 The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
 
-A copy of the [LICENSE](docs/LICENSE.txt) can be found @ the docs.
+A copy of the [LICENSE](docs/LICENSE) can be found @ the docs.
 
 ## Code of Conduct
 

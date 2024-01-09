@@ -77,7 +77,42 @@ module ElasticsearchRecord
         _load_from_sql(_query_by_sql(query), &block)
       end
 
-      # executes a msearch by provided +RAW+ queries
+      # ES|QL query API
+      # Returns search results for an ES|QL (Elasticsearch query language) query.
+      #
+      # @param [String] esql
+      # @param [Proc] block
+      def find_by_esql(esql, &block)
+        # build new query
+        query = ElasticsearchRecord::Query.new(
+          type: ElasticsearchRecord::Query::TYPE_ESQL,
+          body: { query: esql },
+          # IMPORTANT: Always provide all columns
+          columns: source_column_names)
+
+        _load_from_sql(_query_by_sql(query), &block)
+      end
+
+      # executes a +esql+ by provided *ES|SL* query
+      # Does NOT instantiate records.
+      # @param [String] esql
+      # @param [Boolean] async (default: false)
+      def esql(esql, async: false)
+        # build new query
+        query = ElasticsearchRecord::Query.new(
+          type: ElasticsearchRecord::Query::TYPE_ESQL,
+          body: { query: esql },
+          # IMPORTANT: Always provide all columns
+          columns: source_column_names)
+
+        connection.exec_query(query, "#{name} ES|QL", async: async)
+      end
+
+
+      # executes a +msearch+ by provided *RAW* queries.
+      # Does NOT instantiate records.
+      # @param [Array<String>] queries
+      # @param [Boolean] async (default: false)
       def msearch(queries, async: false)
         # build new msearch query
         query = ElasticsearchRecord::Query.new(
