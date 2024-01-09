@@ -168,7 +168,7 @@ module ElasticsearchRecord
       # @param [Symbol, String] column_name
       # @param [Array] values
       def percentile_ranks(column_name, values)
-        calculate(:percentiles, column_name, opts: { values: values }, node: :values)
+        calculate(:percentile_ranks, column_name, opts: { values: values }, node: :values)
       end
 
       # Calculates the cardinality on a given column. Returns +0+ if there's no row.
@@ -180,7 +180,7 @@ module ElasticsearchRecord
       #
       # @param [Symbol, String] column_name
       def cardinality(column_name)
-        calculate(:cardinality, column_name)
+        calculate(:cardinality, column_name, node: :value)
       end
 
       # Calculates the average value on a given column. Returns +nil+ if there's no row. See #calculate for examples with options.
@@ -191,7 +191,7 @@ module ElasticsearchRecord
       #
       # @param [Symbol, String] column_name
       def average(column_name)
-        calculate(:avg, column_name)
+        calculate(:avg, column_name, node: :value)
       end
 
       # Calculates the minimum value on a given column. The value is returned
@@ -204,7 +204,7 @@ module ElasticsearchRecord
       #
       # @param [Symbol, String] column_name
       def minimum(column_name)
-        calculate(:min, column_name)
+        calculate(:min, column_name, node: :value)
       end
 
       # Calculates the maximum value on a given column. The value is returned
@@ -217,7 +217,7 @@ module ElasticsearchRecord
       #
       # @param [Symbol, String] column_name
       def maximum(column_name)
-        calculate(:max, column_name)
+        calculate(:max, column_name, node: :value)
       end
 
       # This single-value aggregation approximates the median absolute deviation of its search results.
@@ -247,7 +247,7 @@ module ElasticsearchRecord
       #
       # @param [Symbol, String] column_name (optional)
       def sum(column_name)
-        calculate(:sum, column_name)
+        calculate(:sum, column_name, node: :value)
       end
 
       # creates a aggregation with the provided metric (e.g. :sum) and columns.
@@ -255,8 +255,8 @@ module ElasticsearchRecord
       # @param [Symbol, String] metric
       # @param [Array<Symbol|String>] columns
       # @param [Hash] opts - additional arguments that get merged with the metric definition
-      # @param [Symbol] node (default :value)
-      def calculate(metric, *columns, opts: {}, node: :value)
+      # @param [Symbol] node (default: nil)
+      def calculate(metric, *columns, opts: {}, node: nil)
         metric_key = "calculate_#{metric}"
 
         # spawn a new aggregation and return the aggs
@@ -266,7 +266,11 @@ module ElasticsearchRecord
                      aggregate(metric_key, { metric => { fields: columns }.merge(opts) }).aggregations
                    end
 
-        response[metric_key][node]
+        if node.present?
+          response[metric_key][node]
+        else
+          response[metric_key]
+        end
       end
     end
   end
