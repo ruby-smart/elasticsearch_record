@@ -23,31 +23,18 @@ require 'elasticsearch'
 
 module ActiveRecord # :nodoc:
   module ConnectionHandling # :nodoc:
+    def elasticsearch_adapter_class
+      ConnectionAdapters::ElasticsearchAdapter
+    end
+
     def elasticsearch_connection(config)
-      config          = config.symbolize_keys
-
-      # move 'username' to 'user'
-      config[:user]  = config.delete(:username) if config[:username]
-
-      # append 'port' to 'host'
-      config[:host]  += ":#{config.delete(:port)}" if config[:port] && config[:host]
-
-      # move 'host' to 'hosts'
-      config[:hosts]  = config.delete(:host) if config[:host]
-
-      # enable logging (Rails.logger)
-      config[:logger] = logger if config.delete(:log)
-
-      ConnectionAdapters::ElasticsearchAdapter.new(
-        ConnectionAdapters::ElasticsearchAdapter.new_client(config),
-        logger,
-        config
-      )
+      elasticsearch_adapter_class.new(config)
     end
   end
 
   module ConnectionAdapters # :nodoc:
     class ElasticsearchAdapter < AbstractAdapter
+      # defines the *Elasticsearch* adapter name.
       ADAPTER_NAME = "Elasticsearch"
 
       # defines the Elasticsearch 'base' structure, which is always included but cannot be resolved through mappings ...
@@ -68,16 +55,20 @@ module ActiveRecord # :nodoc:
 
       class << self
         def base_structure_keys
-          @base_structure_keys ||= BASE_STRUCTURE.map { |struct| struct['name'] }.freeze
+          # using a class_variable to not reinitialize for descendants
+          @@base_structure_keys ||= BASE_STRUCTURE.map { |struct| struct['name'] }.freeze
         end
 
         def new_client(config)
           # IMPORTANT: remove +adapter+ from config - otherwise we mess up with Faraday::AdapterRegistry
-          client = ::Elasticsearch::Client.new(config.except(:adapter))
-          client.ping unless config[:ping] == false
-          client
+          client_config          = config.except(:adapter)
+          # add rails logger manually, if +:log+ is true
+          client_config[:logger] = logger if client_config.delete(:log)
+
+          # build an return new client
+          ::Elasticsearch::Client.new(client_config)
         rescue ::Elastic::Transport::Transport::Errors::Unauthorized
-          raise ActiveRecord::DatabaseConnectionError.username_error(config[:user])
+          raise ::ActiveRecord::DatabaseConnectionError.username_error(config[:user])
         rescue ::Elastic::Transport::Transport::ServerError => error
           raise ::ActiveRecord::ConnectionNotEstablished, error.message
         end
@@ -144,25 +135,35 @@ module ActiveRecord # :nodoc:
       # define native types - which will be used for schema-dumping
       NATIVE_DATABASE_TYPES = {
         primary_key: { name: 'long' }, # maybe this hae to changed to 'keyword'
-        string:      { name: 'keyword' },
-        blob:        { name: 'binary' },
-        datetime:    { name: 'date' },
-        bigint:      { name: 'long' },
-        json:        { name: 'object' }
+        string:   { name: 'keyword' },
+        blob:     { name: 'binary' },
+        datetime: { name: 'date' },
+        bigint:   { name: 'long' },
+        json:     { name: 'object' }
       }.merge(
         TYPE_MAP.keys.map { |key| [key.to_sym, { name: key }] }.to_h
       )
 
-      def initialize(*args)
-        super(*args)
+      def initialize(...)
+        super
 
-        # prepared statements are not supported by Elasticsearch.
-        # documentation for mysql prepares statements @ https://dev.mysql.com/doc/refman/8.0/en/sql-prepared-statements.html
-        @prepared_statements = false
+        # transform provided config
+        config         = @config.dup
+
+        # move 'username' to 'user'
+        config[:user]  = config.delete(:username) if config[:username]
+
+        # append 'port' to 'host'
+        config[:host]  += ":#{config.delete(:port)}" if config[:port] && config[:host]
+
+        # move 'host' to 'hosts'
+        config[:hosts] = config.delete(:host) if config[:host]
+
+        @connection_parameters = config
       end
 
       def schema_migration # :nodoc:
-        @schema_migration ||= ElasticsearchRecord::SchemaMigration
+        ElasticsearchRecord::SchemaMigration.new(self)
       end
 
       # provide a table_name_prefix from the configuration to create & restrict schema creation
@@ -178,6 +179,12 @@ module ActiveRecord # :nodoc:
       # overwrite method to provide a Elasticsearch path
       def migrations_paths
         @config[:migrations_paths] || ['db/migrate_elasticsearch']
+      end
+
+      # prepared statements are not supported by Elasticsearch.
+      # documentation for mysql prepares statements @ https://dev.mysql.com/doc/refman/8.0/en/sql-prepared-statements.html
+      def default_prepared_statements
+        false
       end
 
       # Does this adapter support transactions in general?
@@ -236,7 +243,7 @@ module ActiveRecord # :nodoc:
         raise ::StandardError, 'ASYNC api calls are not supported' if async
 
         # resolve the API target
-        target = namespace == :core ? @connection : @connection.__send__(namespace)
+        target = namespace == :core ? raw_connection : raw_connection.__send__(namespace)
 
         __send__(:log, "#{namespace}.#{action}", arguments, name, async: async, log: log) do
           response = ActiveSupport::Dependencies.interlock.permit_concurrent_loads do
@@ -257,6 +264,30 @@ module ActiveRecord # :nodoc:
       end
 
       private
+
+      def connect
+        @raw_connection = self.class.new_client(@connection_parameters)
+      rescue ::ActiveRecord::ConnectionNotEstablished => ex
+        raise ex.set_pool(@pool)
+      end
+
+      def reconnect
+        @raw_connection = nil
+        connect
+      end
+
+      def active?
+        !!@raw_connection&.ping
+      end
+
+      # Disconnects from the database if already connected.
+      # Otherwise, this method does nothing.
+      def disconnect!
+        super
+        @raw_connection = nil
+      end
+
+      alias :reset! :reconnect!
 
       def type_map
         TYPE_MAP

@@ -105,7 +105,7 @@ module ElasticsearchRecord
           # IMPORTANT: Always provide all columns
           columns: source_column_names)
 
-        connection.exec_query(query, "#{name} ES|QL", async: async)
+        connection.internal_exec_query(query, "#{name} ES|QL", async: async)
       end
 
 
@@ -122,7 +122,7 @@ module ElasticsearchRecord
           # IMPORTANT: Always provide all columns
           columns: source_column_names)
 
-        connection.exec_query(query, "#{name} Msearch", async: async)
+        connection.internal_exec_query(query, "#{name} Msearch", async: async)
       end
 
       # executes a search by provided +RAW+ query - supports +Elasticsearch::DSL+ gem if loaded

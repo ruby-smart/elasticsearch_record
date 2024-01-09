@@ -50,43 +50,12 @@ module ActiveRecord
             query.write?
           end
 
-          # Executes the query object in the context of this connection and returns the raw result
-          # from the connection adapter.
-          # @param [ElasticsearchRecord::Query] query
-          # @param [String (frozen)] name
-          # @param [Boolean] async
-          # @return [ElasticsearchRecord::Result]
-          def execute(query, name = nil, async: false)
-            # validate the query
-            raise ActiveRecord::StatementInvalid, 'Unable to execute! Provided query is not a "ElasticsearchRecord::Query".' unless query.is_a?(ElasticsearchRecord::Query)
-            raise ActiveRecord::StatementInvalid, 'Unable to execute! Provided query is invalid.' unless query.valid?
-
-            # checks for write query - raises an exception if connection is locked to readonly ...
-            check_if_write_query(query)
-
-            api(*query.gate, query.query_arguments, name, async: async)
-          end
-
-          # gets called for all queries - a +ElasticsearchRecord::Query+ must be provided.
-          # @param [ElasticsearchRecord::Query] query
-          # @param [String (frozen)] name
-          # @param [Array] binds - not supported on the top-level and therefore ignored!
-          # @param [Boolean] prepare - used by the default AbstractAdapter - but not supported and therefore never ignored!
-          # @param [Boolean] async
-          # @return [ElasticsearchRecord::Result]
-          def exec_query(query, name = "QUERY", binds = [], prepare: false, async: false)
-            build_result(
-              execute(query, name, async: async),
-              columns: query.columns
-            )
-          end
-
           # Executes insert +query+ statement in the context of this connection using
           # +binds+ as the bind substitutes. +name+ is logged along with
           # the executed +query+ arguments.
           # @return [ElasticsearchRecord::Result]
-          def exec_insert(query, name = nil, binds = [], _pk = nil, _sequence_name = nil)
-            result = exec_query(query, name, binds)
+          def exec_insert(query, name = nil, binds = [], _pk = nil, _sequence_name = nil, returning: nil)
+            result = internal_exec_query(query, name, binds)
 
             # fetch additional Elasticsearch response result
             # raise ::ElasticsearchRecord::ResponseResultError.new('created', result.result) unless result.result == 'created'
@@ -101,7 +70,7 @@ module ActiveRecord
           # expects a integer as return.
           # @return [Integer]
           def exec_update(query, name = nil, binds = [])
-            result = exec_query(query, name, binds)
+            result = internal_exec_query(query, name, binds)
 
             # fetch additional Elasticsearch response result
             # raise ::ElasticsearchRecord::ResponseResultError.new('updated', result.result) unless result.result == 'updated'
@@ -115,7 +84,7 @@ module ActiveRecord
           # expects a integer as return.
           # @return [Integer]
           def exec_delete(query, name = nil, binds = [])
-            result = exec_query(query, name, binds)
+            result = internal_exec_query(query, name, binds)
 
             # fetch additional Elasticsearch response result
             # raise ::ElasticsearchRecord::ResponseResultError.new('deleted', result.result) unless result.result == 'deleted'
@@ -135,7 +104,7 @@ module ActiveRecord
               type:  ElasticsearchRecord::Query::TYPE_MSEARCH,
               body:  queries.map { |q| { search: q.body } })
 
-            exec_query(query, name, async: async)
+            internal_exec_query(query, name, async: async)
           end
 
           # executes a count query for provided arel
@@ -151,13 +120,47 @@ module ActiveRecord
               status:    query.status,
               arguments: query.arguments)
 
-            exec_query(query, name, async: async).response['count']
+            internal_exec_query(query, name, async: async).response['count']
           end
 
           # returns the last inserted id from the result.
           # called through +#insert+
           def last_inserted_id(result)
             result.response['_id']
+          end
+
+          private
+
+          # Executes the query object in the context of this connection and returns the raw result
+          # from the connection adapter.
+          # @param [ElasticsearchRecord::Query] query
+          # @param [String (frozen),nil] name
+          # @param [Boolean] async (default: false)
+          # @param [Boolean] allow_retry (default: false)
+          # @return [ElasticsearchRecord::Result]
+          def internal_execute(query, name = nil, async: false, allow_retry: false, materialize_transactions: nil)
+            # validate the query
+            raise ActiveRecord::StatementInvalid, 'Unable to execute! Provided query is not a "ElasticsearchRecord::Query".' unless query.is_a?(ElasticsearchRecord::Query)
+            raise ActiveRecord::StatementInvalid, 'Unable to execute! Provided query is invalid.' unless query.valid?
+
+            # checks for write query - raises an exception if connection is locked to readonly ...
+            check_if_write_query(query)
+
+            api(*query.gate, query.query_arguments, name, async: async)
+          end
+
+          # gets called for all queries - a +ElasticsearchRecord::Query+ must be provided.
+          # @param [ElasticsearchRecord::Query] query
+          # @param [String (frozen),nil] name
+          # @param [Array] binds - not supported on the top-level and therefore ignored!
+          # @param [Boolean] prepare - used by the default AbstractAdapter - but not supported and therefore never ignored!
+          # @param [Boolean] async
+          # @return [ElasticsearchRecord::Result]
+          def internal_exec_query(query, name = "QUERY", binds = [], prepare: false, async: false)
+            build_result(
+              internal_execute(query, name, async: async),
+              columns: query.columns
+            )
           end
         end
       end

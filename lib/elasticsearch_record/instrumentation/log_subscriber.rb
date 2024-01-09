@@ -45,8 +45,8 @@ module ElasticsearchRecord
         query = payload[:arguments].except(:_qt).inspect.gsub(/:(\w+)=>/, '\1: ').truncate((payload[:truncate] || 1000), omission: color(' (pruned)', RED))
 
         # final coloring
-        name  = color(name, name_color(payload[:name]), true)
-        query = color(query, gate_color(payload[:gate], payload[:name]), true) if colorize_logging
+        name  = color(name, name_color(payload[:name]), bold: true)
+        query = color(query, gate_color(payload[:gate], payload[:name]), bold: true) if colorize_logging
 
         debug "  #{name} #{query.presence || '-/-'}"
       end
