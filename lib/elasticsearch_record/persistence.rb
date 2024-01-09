@@ -7,7 +7,7 @@ module ElasticsearchRecord
       # NOTICE: We don't want to mess up with the Arel-builder - so we send new data directly to the API
       # @param [ActiveModel::Attribute] values
       # @return [Object] id
-      def _insert_record(values)
+      def _insert_record(values, returning)
         # values is not a "key=>values"-Hash, but a +ActiveModel::Attribute+ - so the casted values gets resolved here
         values = values.transform_values(&:value)
 
@@ -23,7 +23,7 @@ module ElasticsearchRecord
             refresh:   true)
 
           # execute query and return inserted id
-          connection.insert(query, "#{self} Create")
+          connection.insert(query, "#{self} Create", returning: returning)
         end
       end
 

@@ -70,7 +70,6 @@ end
 ActiveSupport.on_load(:active_record) do
   # load patches
   require 'elasticsearch_record/patches/active_record/relation_merger_patch'
-
   require 'elasticsearch_record/patches/arel/select_core_patch'
   require 'elasticsearch_record/patches/arel/select_manager_patch'
   require 'elasticsearch_record/patches/arel/select_statement_patch'

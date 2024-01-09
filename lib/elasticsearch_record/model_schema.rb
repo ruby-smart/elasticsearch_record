@@ -58,7 +58,7 @@ module ElasticsearchRecord
 
       # clears schema-related instance variables.
       # @see ActiveRecord::ModelSchema::ClassMethods#reload_schema_from_cache
-      def reload_schema_from_cache
+      def reload_schema_from_cache(recursive = true)
         # we also need to clear our custom-defined variables
         @source_column_names     = nil
         @searchable_column_names = nil
