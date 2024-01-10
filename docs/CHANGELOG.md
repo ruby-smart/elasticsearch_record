@@ -1,5 +1,8 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.7.2] - 2024-01-10
+* [ref] gemspec to lock on rails 7.0
+
 ## [1.7.1] - 2024-01-09
 * [fix] `ElasticsearchRecord::Relation` calculation methods return with different nodes
 * [ref] `ElasticsearchRecord::Relation#calculate` removes default value of `node`
