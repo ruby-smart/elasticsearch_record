@@ -1,8 +1,12 @@
 # ElasticsearchRecord - CHANGELOG
 
-## [1.8.0] - 2024-01-09
+## [1.8.0] - 2024-01-10
 * [ref] major method & dependency refactoring for `rails 7.1` - _(Does **NOT** work with rails 7.0)_
 * [add] new repository branch `rails-7-1-stable` to support different rails version
+* [ref] gemspec to lock on rails 7.1
+
+## [1.7.2] - 2024-01-10
+* [ref] gemspec to lock on rails 7.0
 
 ## [1.7.1] - 2024-01-09
 * [fix] `ElasticsearchRecord::Relation` calculation methods return with different nodes
@@ -16,7 +20,7 @@
 * [add] `ElasticsearchRecord::Relation#matrix_stats` calculation method
 * [add] `ElasticsearchRecord::Relation#median_absolute_deviation` calculation method
 * [add] `ElasticsearchRecord::Base#esql` + `ElasticsearchRecord::Base#find_by_esql` to support `ES|QL` queries
-* [add] new repository branch `rails-7-0-stable` to support different rails version
+* [add] new repository branch `rails-7-0-stable` to support different rails versions
 * [ref] minor code optimizations & documentation changes
 
 ## [1.6.0] - 2023-08-11
