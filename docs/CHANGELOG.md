@@ -1,5 +1,12 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.7.3] - 2024-05-07 _(no gem release)_
+* [add] new elasticsearch mapping types _(percolator, geo, vector, texts, ...)_
+* [ref] `ElasticsearchRecord::Relation#limit` to detect `Float::INFINITY` to also set the **max_result_window**
+* [fix] `ElasticsearchRecord::SchemaMigration` only returning the first ten migrations (broke migrated migrations)
+* [fix] `ElasticsearchRecord::Relation::CalculationMethods#calculate` method incompatibility - renamed to `#calculate_aggregation` (+ alias to `#calculate`)
+* [fix] `ElasticsearchRecord::ModelApi#bulk` method not correctly generating data for 'delete'
+
 ## [1.7.2] - 2024-01-10
 * [ref] gemspec to lock on rails 7.0
 

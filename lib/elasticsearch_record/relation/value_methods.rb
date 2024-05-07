@@ -45,7 +45,7 @@ module ElasticsearchRecord
 
       # overwrite the limit_value setter, to provide a special behaviour of auto-setting the +max_result_window+.
       def limit_value=(limit)
-        if limit == '__max__' || (limit.nil? && delegate_query_nil_limit?)
+        if limit == '__max__' || limit == Float::INFINITY || (limit.nil? && delegate_query_nil_limit?)
           super(max_result_window)
         else
           super(limit)

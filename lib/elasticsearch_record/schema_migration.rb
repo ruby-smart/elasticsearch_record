@@ -34,7 +34,9 @@ module ElasticsearchRecord
       end
 
       def all_versions
-        order(:version).pluck(:version)
+        # Elasticsearch's default value for queries without a size is forced to 10.
+        # Using *__max__* to set it to the +max_result_window+ value.
+        order(:version).limit('__max__').pluck(:version)
       end
 
       def table_exists?

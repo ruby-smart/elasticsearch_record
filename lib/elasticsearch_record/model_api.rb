@@ -269,8 +269,11 @@ module ElasticsearchRecord
 
       _connection.api(:core, :bulk, {
         index:   _index_name,
-        body:    if operation == :update
-                   data.map { |item| { operation => { _id: (item[:_id].presence || item['_id']), data: { doc: item.except(:_id, '_id') } } } }
+        body:    case operation
+                 when :update
+                   data.map { |item| { update: { _id: (item[:_id].presence || item['_id']), data: { doc: item.except(:_id, '_id') } } } }
+                 when :delete
+                   data.map { |item| { delete: { _id: (item[:_id].presence || item['_id']) } } }
                  else
                    data.map { |item| { operation => { _id: (item[:_id].presence || item['_id']), data: item.except(:_id, '_id') } } }
                  end,

@@ -3,7 +3,7 @@
 [![GitHub](https://img.shields.io/badge/github-ruby--smart/elasticsearch_record-blue.svg)](http://github.com/ruby-smart/elasticsearch_record)
 [![Documentation](https://img.shields.io/badge/docs-rdoc.info-blue.svg)](http://rubydoc.info/gems/elasticsearch_record)
 
-[![Gem Version](https://badge.fury.io/rb/elasticsearch_record.svg)](https://badge.fury.io/rb/elasticsearch_record)
+[![Repository Version](https://img.shields.io/badge/Repository_Version-1.7.3-green.svg)](https://github.com/ruby-smart/elasticsearch_record/tree/rails-7-0-stable)
 [![License](https://img.shields.io/github/license/ruby-smart/elasticsearch_record)](docs/LICENSE)
 
 ActiveRecord adapter for Elasticsearch
@@ -24,14 +24,14 @@ _ElasticsearchRecord is a ActiveRecord adapter and provides similar functionalit
 Supported rails versions:
 
 ### Rails 7.1:
-_(since gem version 1.8)_
+_(since gem version 1.8.0)_
 
 https://github.com/ruby-smart/elasticsearch_record/tree/rails-7-1-stable
 
 [![rails-7-1-stable](https://img.shields.io/badge/rails-7.1.stable-orange.svg)](https://github.com/ruby-smart/elasticsearch_record/tree/rails-7-1-stable)
 
 ### Rails 7.0:
-_(until gem version 1.7)_
+_(until gem version 1.7.x)_
 
 https://github.com/ruby-smart/elasticsearch_record/tree/rails-7-0-stable
 
@@ -41,14 +41,13 @@ https://github.com/ruby-smart/elasticsearch_record/tree/rails-7-0-stable
 
 ## Installation
 
+**PLEASE NOTE:** Since the currently stable version `1.7.3` cannot be pushed to rubygems _(due already released version 1.8.x)_ you have to use the branched gem definition.
+
+
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'elasticsearch_record', '~> 1.7.0'
-
-# alternative
 gem 'elasticsearch_record', git: 'https://github.com/ruby-smart/elasticsearch_record', branch: 'rails-7-0-stable'
-
 ```
 
 And then execute:

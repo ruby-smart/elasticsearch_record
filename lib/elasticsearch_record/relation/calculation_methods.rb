@@ -64,9 +64,12 @@ module ElasticsearchRecord
       #
       # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-boxplot-aggregation.html
       #
+      # @note returns *nil* on a *NullRelation*
+      #
       # @param [Symbol, String] column_name
+      # @return [Hash,nil]
       def boxplot(column_name)
-        calculate(:boxplot, column_name)
+        calculate_aggregation(:boxplot, column_name)
       end
 
       # A multi-value metrics aggregation that computes stats over numeric values extracted from the aggregated documents.      #
@@ -83,9 +86,12 @@ module ElasticsearchRecord
       #
       # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-stats-aggregation.html
       #
+      # @note returns *nil* on a *NullRelation*
+      #
       # @param [Symbol, String] column_name
+      # @return [Hash,nil]
       def stats(column_name)
-        calculate(:stats, column_name)
+        calculate_aggregation(:stats, column_name)
       end
 
       # A multi-value metrics aggregation that computes statistics over string values extracted from the aggregated documents.
@@ -102,9 +108,12 @@ module ElasticsearchRecord
       #
       # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-string-stats-aggregation.html
       #
+      # @note returns *nil* on a *NullRelation*
+      #
       # @param [Symbol, String] column_name
+      # @return [Hash,nil]
       def string_stats(column_name)
-        calculate(:string_stats, column_name)
+        calculate_aggregation(:string_stats, column_name)
       end
 
       # The matrix_stats aggregation is a numeric aggregation that computes the following statistics over a set of document fields:
@@ -118,9 +127,12 @@ module ElasticsearchRecord
       #
       # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-matrix-stats-aggregation.html
       #
+      # @note returns *nil* on a *NullRelation*
+      #
       # @param [Array<Symbol|String>] column_names
+      # @return [Hash,nil]
       def matrix_stats(*column_names)
-        calculate(:matrix_stats, *column_names)
+        calculate_aggregation(:matrix_stats, *column_names)
       end
 
       # A multi-value metrics aggregation that calculates one or more
@@ -140,9 +152,12 @@ module ElasticsearchRecord
       #
       # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-percentile-aggregation.html
       #
+      # @note returns *nil* on a *NullRelation*
+      #
       # @param [Symbol, String] column_name
+      # @return [Hash,nil]
       def percentiles(column_name)
-        calculate(:percentiles, column_name, node: :values)
+        calculate_aggregation(:percentiles, column_name, node: :values)
       end
 
       # A multi-value metrics aggregation that calculates one or more
@@ -165,10 +180,13 @@ module ElasticsearchRecord
       #
       # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-percentile-rank-aggregation.html
       #
+      # @note returns *nil* on a *NullRelation*
+      #
       # @param [Symbol, String] column_name
       # @param [Array] values
+      # @return [Hash,nil]
       def percentile_ranks(column_name, values)
-        calculate(:percentile_ranks, column_name, opts: { values: values }, node: :values)
+        calculate_aggregation(:percentile_ranks, column_name, opts: { values: values }, node: :values)
       end
 
       # Calculates the cardinality on a given column. Returns +0+ if there's no row.
@@ -178,9 +196,12 @@ module ElasticsearchRecord
       #
       # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-cardinality-aggregation.html
       #
+      # @note returns *nil* on a *NullRelation*
+      #
       # @param [Symbol, String] column_name
+      # @return [Integer,nil]
       def cardinality(column_name)
-        calculate(:cardinality, column_name, node: :value)
+        calculate_aggregation(:cardinality, column_name, node: :value)
       end
 
       # Calculates the average value on a given column. Returns +nil+ if there's no row. See #calculate for examples with options.
@@ -189,9 +210,12 @@ module ElasticsearchRecord
       #
       # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-avg-aggregation.html
       #
+      # @note returns *nil* on a *NullRelation*
+      #
       # @param [Symbol, String] column_name
+      # @return [Float,nil]
       def average(column_name)
-        calculate(:avg, column_name, node: :value)
+        calculate_aggregation(:avg, column_name, node: :value)
       end
 
       # Calculates the minimum value on a given column. The value is returned
@@ -202,9 +226,12 @@ module ElasticsearchRecord
       #
       # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-min-aggregation.html
       #
+      # @note returns *nil* on a *NullRelation*
+      #
       # @param [Symbol, String] column_name
+      # @return [Float,nil]
       def minimum(column_name)
-        calculate(:min, column_name, node: :value)
+        calculate_aggregation(:min, column_name, node: :value)
       end
 
       # Calculates the maximum value on a given column. The value is returned
@@ -215,9 +242,12 @@ module ElasticsearchRecord
       #
       # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-max-aggregation.html
       #
+      # @note returns *nil* on a *NullRelation*
+      #
       # @param [Symbol, String] column_name
+      # @return [Float,nil]
       def maximum(column_name)
-        calculate(:max, column_name, node: :value)
+        calculate_aggregation(:max, column_name, node: :value)
       end
 
       # This single-value aggregation approximates the median absolute deviation of its search results.
@@ -232,9 +262,12 @@ module ElasticsearchRecord
       #
       # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-median-absolute-deviation-aggregation.html
       #
+      # @note returns *nil* on a *NullRelation*
+      #
       # @param [Symbol, String] column_name
+      # @return [Float,nil]
       def median_absolute_deviation(column_name)
-        calculate(:median_absolute_deviation, column_name)
+        calculate_aggregation(:median_absolute_deviation, column_name)
       end
 
       # Calculates the sum of values on a given column. The value is returned
@@ -245,18 +278,27 @@ module ElasticsearchRecord
       #
       # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-sum-aggregation.html
       #
+      # @note returns *nil* on a *NullRelation*
+      #
       # @param [Symbol, String] column_name (optional)
+      # @return [Float,nil]
       def sum(column_name)
-        calculate(:sum, column_name, node: :value)
+        calculate_aggregation(:sum, column_name, node: :value)
       end
 
       # creates a aggregation with the provided metric (e.g. :sum) and columns.
       # returns the metric node (default: :value) from the aggregations result.
+      #
+      # @note returns *nil* on a *NullRelation*
+      #
       # @param [Symbol, String] metric
       # @param [Array<Symbol|String>] columns
       # @param [Hash] opts - additional arguments that get merged with the metric definition
       # @param [Symbol] node (default: nil)
-      def calculate(metric, *columns, opts: {}, node: nil)
+      def calculate_aggregation(metric, *columns, opts: {}, node: nil)
+        # prevent execution on a *NullRelation*
+        return if null_relation?
+
         metric_key = "calculate_#{metric}"
 
         # spawn a new aggregation and return the aggs
@@ -272,6 +314,8 @@ module ElasticsearchRecord
           response[metric_key]
         end
       end
+
+      alias_method :calculate, :calculate_aggregation
     end
   end
 end
