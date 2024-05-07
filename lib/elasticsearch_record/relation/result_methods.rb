@@ -132,11 +132,10 @@ module ElasticsearchRecord
             # resolve only data from hits->hits[{_source}]
             current_results        = if ids_only
                                        current_response['hits']['hits'].map { |result| result['_id'] }
-                                       # future with helper
-                                       # current_response['hits']['hits'].map.from_hash('_id')
                                      else
                                        current_response['hits']['hits'].map { |result| result['_source'].merge('_id' => result['_id']) }
                                      end
+
             current_results_length = current_results.length
 
             # check if we reached the required offset

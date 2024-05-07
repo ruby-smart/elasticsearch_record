@@ -87,7 +87,7 @@ To raise an exception while using transactions on a ElasticsearchRecord model, t
 However enabling this flag will surely fail transactional tests _(prevent this with 'use_transactional_tests=false')_
 
 ```ruby
-# config/initializers/elasticsearch_record.yml
+# config/initializers/elasticsearch_record.rb
 
 # enable transactional exceptions
 ElasticsearchRecord.error_on_transaction = true

@@ -8,11 +8,20 @@ module ActiveRecord
 
         included do
           # see @ ::ActiveRecord::ConnectionAdapters::ElasticsearchAdapter::NATIVE_DATABASE_TYPES.keys
-          define_column_methods :string, :blob, :datetime, :bigint, :json, :binary, :boolean, :keyword,
-                                :constant_keyword, :wildcard, :long, :integer, :short, :byte, :double, :float,
-                                :half_float, :scaled_float, :unsigned_long, :date, :object, :flattened, :nested,
+          define_column_methods :string, :blob, :datetime, :bigint, :json,
+                                :binary, :boolean,
+                                :keyword, :constant_keyword, :wildcard,
+                                :long, :integer, :short, :byte, :double, :float, :half_float, :scaled_float, :unsigned_long,
+                                :date, :date_nanos,
+                                :alias,
+                                :object, :flattened, :nested, :join,
                                 :integer_range, :float_range, :long_range, :double_range, :date_range, :ip_range,
-                                :ip, :version, :text
+                                :ip, :version, :murmur3,
+                                :aggregate_metric_double, :histogram,
+                                :text, :match_only_text, :completion, :search_as_you_type, :token_count,
+                                :dense_vector, :sparse_vector, :rank_feature, :rank_features,
+                                :geo_point, :geo_shape, :point, :shape,
+                                :percolator
 
           # Appends a primary key definition to the table definition.
           # Can be called multiple times, but this is probably not a good idea.
