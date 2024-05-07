@@ -385,7 +385,7 @@ user._id
 # => 'xtf31bh8x'
 ```
 
-## delegate_query_nil_limit
+### delegate_query_nil_limit
 Elasticsearch's default value for queries without a **size** is forced to **10**.
 To provide a similar behaviour as the (my)SQL interface,
 this can be automatically set to the `max_result_window` value by calling `.limit(nil)` on the models' relation.
