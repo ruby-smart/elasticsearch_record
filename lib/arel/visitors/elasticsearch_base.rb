@@ -27,11 +27,6 @@ module Arel # :nodoc: all
       def initialize(connection)
         super()
         @connection = connection
-
-        # required for nested assignment.
-        # see +#assign+ method
-        @nested      = false
-        @nested_args = []
       end
 
       def dispatch_as(mode)
@@ -45,6 +40,13 @@ module Arel # :nodoc: all
       end
 
       def compile(node, collector = Arel::Collectors::ElasticsearchQuery.new)
+        # IMPORTANT: To prevent persistent assigned variables due *accept* exceptions, those must be 'reset' before each compile.
+        #
+        # required for nested assignment.
+        # see +#assign+ method
+        @nested      = false
+        @nested_args = []
+
         # we don't need to forward the collector each time - we just set it and always access it, when we need.
         self.collector = collector
 

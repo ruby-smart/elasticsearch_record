@@ -296,8 +296,8 @@ module ElasticsearchRecord
           if (invalid = (opts.keys - klass.searchable_column_names)).present?
             raise(ActiveRecord::UnknownAttributeReference,
                   "Unable to build query with unknown searchable attributes: #{invalid.map(&:inspect).join(", ")}. " \
-                "If you want to build a custom query you should use one of those methods: 'filter, must, must_not, should'. " \
-                "#{klass.name}.filter('#{invalid[0]}' => '...')"
+                    "If you want to build a custom query you should use one of those methods: 'filter, must, must_not, should'. " \
+                    "#{klass.name}.filter('#{invalid[0]}' => '...')"
             )
           end
 
@@ -315,6 +315,10 @@ module ElasticsearchRecord
       end
 
       def build_query_clause(kind, data, rest = [])
+        # prevent Arrays with nil-data.
+        # e.g. [nil] - which will cause possible query-exceptions
+        data = nil if data.is_a?(Array) && data.all?(&:blank?)
+
         ElasticsearchRecord::Relation::QueryClause.new(kind, Array.wrap(data), rest.extract_options!)
       end
 

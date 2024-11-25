@@ -1,5 +1,10 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.7.4] - 2024-11-25 _(no gem release)_
+* [fix] `Arel::Visitors::ElasticsearchBase#compile` to always reset temporary assignments _(causes missing assignments after a query-build-exception)_
+* [fix] `Arel::Nodes::SelectAgg` to not merge nil-values
+* [fix] `ElasticsearchRecord::Relation::QueryMethods#build_query_clause` to prevent nil-Array assignment _(e.g. `[nil]` causes q query exception)_
+
 ## [1.7.3] - 2024-05-07 _(no gem release)_
 * [add] new elasticsearch mapping types _(percolator, geo, vector, texts, ...)_
 * [ref] `ElasticsearchRecord::Relation#limit` to detect `Float::INFINITY` to also set the **max_result_window**

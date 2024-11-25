@@ -9,7 +9,7 @@ module Arel # :nodoc: all
       end
 
       def right
-        return expr[1].reduce({}) { |m, data| m.merge(data) } if expr[1].is_a?(Array)
+        return expr[1].reduce({}) { |m, data| data ? m.merge(data) : m } if expr[1].is_a?(Array)
 
         expr[1]
       end
