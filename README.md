@@ -3,7 +3,7 @@
 [![GitHub](https://img.shields.io/badge/github-ruby--smart/elasticsearch_record-blue.svg)](http://github.com/ruby-smart/elasticsearch_record)
 [![Documentation](https://img.shields.io/badge/docs-rdoc.info-blue.svg)](http://rubydoc.info/gems/elasticsearch_record)
 
-[![Gem Version](https://badge.fury.io/rb/elasticsearch_record.svg)](https://badge.fury.io/rb/elasticsearch_record)
+[![Repository Version](https://img.shields.io/badge/Repository_Version-1.8.2-green.svg)](https://github.com/ruby-smart/elasticsearch_record/tree/rails-7-0-stable)
 [![License](https://img.shields.io/github/license/ruby-smart/elasticsearch_record)](docs/LICENSE)
 
 ActiveRecord adapter for Elasticsearch
@@ -16,6 +16,8 @@ _ElasticsearchRecord is a ActiveRecord adapter and provides similar functionalit
 
 - This is the `rails-7-1-stable`-branch, which only supports rails **7.1** _(see section 'Rails_Versions' for supported versions)_
 - supports ActiveRecord ~> 7.1 + Elasticsearch >= 7.17
+- added features up to Elasticsearch `8.16.1`
+- tested with Elasticsearch `8.15.2`
 
 -----
 

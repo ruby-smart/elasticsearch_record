@@ -18,7 +18,7 @@ module ActiveRecord
                                 :integer_range, :float_range, :long_range, :double_range, :date_range, :ip_range,
                                 :ip, :version, :murmur3,
                                 :aggregate_metric_double, :histogram,
-                                :text, :match_only_text, :completion, :search_as_you_type, :token_count,
+                                :text, :match_only_text, :completion, :search_as_you_type, :token_count, :semantic_text,
                                 :dense_vector, :sparse_vector, :rank_feature, :rank_features,
                                 :geo_point, :geo_shape, :point, :shape,
                                 :percolator
