@@ -315,9 +315,11 @@ module ElasticsearchRecord
       end
 
       def build_query_clause(kind, data, rest = [])
-        # prevent Arrays with nil-data.
+        # prevent empty data clauses
         # e.g. [nil] - which will cause possible query-exceptions
-        data = nil if data.is_a?(Array) && data.all?(&:blank?)
+        if data.blank? || (data.is_a?(Array) && data.all?(&:blank?))
+          raise ArgumentError, "Unable to build query clause for '#{kind}' without any data @ #{klass.name}!"
+        end
 
         ElasticsearchRecord::Relation::QueryClause.new(kind, Array.wrap(data), rest.extract_options!)
       end

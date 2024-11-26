@@ -1,5 +1,8 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.7.5] - 2024-11-26 _(no gem release)_
+* [ref] `ElasticsearchRecord::Relation::QueryMethods#build_query_clause` to raise an exception instead of building an empty `QueryClause`
+
 ## [1.7.4] - 2024-11-25 _(no gem release)_
 * [fix] `Arel::Visitors::ElasticsearchBase#compile` to always reset temporary assignments _(causes missing assignments after a query-build-exception)_
 * [fix] `Arel::Nodes::SelectAgg` to not merge nil-values
