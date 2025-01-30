@@ -34,18 +34,6 @@ module ActiveRecord # :nodoc:
 
   module ConnectionAdapters # :nodoc:
     class ElasticsearchAdapter < AbstractAdapter
-      # defines the *Elasticsearch* adapter name.
-      ADAPTER_NAME = "Elasticsearch"
-
-      # defines the Elasticsearch 'base' structure, which is always included but cannot be resolved through mappings ...
-      BASE_STRUCTURE = [
-        { 'name' => '_id', 'type' => 'keyword', 'meta' => { 'primary_key' => 'true' } },
-        { 'name' => '_index', 'type' => 'keyword', 'virtual' => true },
-        { 'name' => '_score', 'type' => 'float', 'virtual' => true },
-        { 'name' => '_type', 'type' => 'keyword', 'virtual' => true },
-        { 'name' => '_ignored', 'type' => 'boolean', 'virtual' => true }
-      ].freeze
-
       include Elasticsearch::UnsupportedImplementation
       include Elasticsearch::Quoting
       include Elasticsearch::DatabaseStatements
@@ -53,10 +41,25 @@ module ActiveRecord # :nodoc:
       include Elasticsearch::TableStatements
       include Elasticsearch::Transactions
 
+      # defines the *Elasticsearch* adapter name.
+      # @return [String]
+      ADAPTER_NAME = "Elasticsearch".freeze
+
+      # defines the Elasticsearch 'base' structure, which is always included but cannot be resolved through mappings ...
+      # - see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-fields.html
+      # @return [Hash]
+      METADATA_FIELDS = [
+        { 'name' => '_id', 'type' => 'keyword', 'meta' => { 'primary_key' => 'true' } },
+        { 'name' => '_index', 'type' => 'keyword', 'virtual' => true },
+        { 'name' => '_score', 'type' => 'float', 'virtual' => true },
+        { 'name' => '_type', 'type' => 'keyword', 'virtual' => true },
+        { 'name' => '_ignored', 'type' => 'boolean', 'virtual' => true }
+      ].freeze
+
       class << self
-        def base_structure_keys
+        def metadata_keys
           # using a class_variable to not reinitialize for descendants
-          @@base_structure_keys ||= BASE_STRUCTURE.map { |struct| struct['name'] }.freeze
+          @@metadata_keys ||= METADATA_FIELDS.map { |struct| struct['name'] }.freeze
         end
 
         def new_client(config)
@@ -65,7 +68,7 @@ module ActiveRecord # :nodoc:
           # add rails logger manually, if +:log+ is true
           client_config[:logger] = logger if client_config.delete(:log)
 
-          # build an return new client
+          # build and return new client
           ::Elasticsearch::Client.new(client_config)
         rescue ::Elastic::Transport::Transport::Errors::Unauthorized
           raise ::ActiveRecord::DatabaseConnectionError.username_error(config[:user])
@@ -129,20 +132,22 @@ module ActiveRecord # :nodoc:
         end
       end
 
+      # -- TYPE MAP -- DO NOT insert before this line (*initialize_type_map* needs to be rewritten)
       # reinitialize the constant with new types
       TYPE_MAP = ActiveRecord::Type::HashLookupTypeMap.new.tap { |m| initialize_type_map(m) }
 
       # define native types - which will be used for schema-dumping
+      # @return [Hash]
       NATIVE_DATABASE_TYPES = {
         primary_key: { name: 'long' }, # maybe this hae to changed to 'keyword'
         string:   { name: 'keyword' },
         blob:     { name: 'binary' },
         datetime: { name: 'date' },
         bigint:   { name: 'long' },
-        json:     { name: 'object' }
-      }.merge(
-        TYPE_MAP.keys.map { |key| [key.to_sym, { name: key }] }.to_h
-      )
+        json:     { name: 'object' },
+
+        **TYPE_MAP.keys.map { |key| [key.to_sym, { name: key }] }.to_h
+      }.freeze
 
       def initialize(...)
         super
@@ -167,11 +172,13 @@ module ActiveRecord # :nodoc:
       end
 
       # provide a table_name_prefix from the configuration to create & restrict schema creation
+      # HINT: This is not an official setting and only introduced to ElasticsearchRecord.
       def table_name_prefix
         @config.fetch(:table_name_prefix, '')
       end
 
       # provide a table_name_suffix from the configuration to create & restrict schema creation
+      # HINT: This is not an official setting and only introduced to ElasticsearchRecord.
       def table_name_suffix
         @config.fetch(:table_name_suffix, '')
       end
@@ -188,7 +195,7 @@ module ActiveRecord # :nodoc:
       end
 
       # Does this adapter support transactions in general?
-      # HINT: This is +NOT* an official setting and only introduced to ElasticsearchRecord
+      # HINT: This is not an official setting and only introduced to ElasticsearchRecord.
       def supports_transactions?
         false
       end
@@ -229,51 +236,66 @@ module ActiveRecord # :nodoc:
         NATIVE_DATABASE_TYPES
       end
 
-      # calls the +elasticsearch-api+ endpoints by provided namespace and action.
-      # if a block was provided it'll yield the response.body and returns the blocks result.
-      # otherwise it will return the response itself...
-      # @param [Symbol] namespace - the API namespace (e.g. indices, nodes, sql, ...)
-      # @param [Symbol] action - the API action to call in tha namespace
-      # @param [Hash] arguments - action arguments
+      # calls the +elasticsearch-api+ endpoints by provided gate and returns a response object.
+      # @param [Symbol,String] gate - the API namespace & action gate (e.g. 'indices.get','cluster.health', :bulk, ...)
+      # @param [Hash] arguments - gate arguments
       # @param [String (frozen)] name - the logging name
-      # @param [Boolean] async - send async (default: false) - currently not supported
-      # @param [Boolean] log - send log to instrumenter (default: true)
+      # @param [Boolean] async - send async (default: false) - NOT supported!
+      # @param [Boolean] allow_retry - allows to retry a possible failing query (default: false)
+      # @param [Boolean] materialize_transactions - materializes transactions (default: false) - NOT supported!
       # @return [Elasticsearch::API::Response, Object]
-      def api(namespace, action, arguments = {}, name = 'API', async: false, log: true)
+      def api(gate, arguments = {}, name = 'API', async: false, allow_retry: false, materialize_transactions: false)
+        raise ::ArgumentError, "ElasticsearchRecord API call is now using a single `gate` instead of providing `namespace & action`.\n'core' namespace must not provided (only provide action symbol) - any other must be provided as string (e.g. 'nodes.stats')" if arguments.is_a?(Symbol)
         raise ::StandardError, 'ASYNC api calls are not supported' if async
 
-        # resolve the API target
-        target = namespace == :core ? raw_connection : raw_connection.__send__(namespace)
+        # drop 'core.' prefix
+        if gate.is_a?(String) && gate.starts_with?('core.')
+          # add deprecation warning
+          ::ActiveRecord.deprecator.warn(<<~MSG)
+            Providing the 'core.' namespace prefix in the `gate` parameter is deprecated and will be removed in a future version.
+            Please provide only the action symbol (e.g.:bulk) or the full namespace and action as a string (e.g.'nodes.stats')
+          MSG
 
-        __send__(:log, "#{namespace}.#{action}", arguments, name, async: async, log: log) do
-          response = ActiveSupport::Dependencies.interlock.permit_concurrent_loads do
-            target.__send__(action, arguments)
+          gate = gate.gsub('core.', '').to_sym
+        end
+
+        # PLEASE NOTE: Don't remove the +statistics+ assignment here.
+        # - this is required as referenced hash for the instrumentation
+        log(gate, arguments, name, async:, statistics: (statistics = {})) do
+          with_raw_connection(allow_retry:, materialize_transactions:) do |conn|
+            response = ::ActiveSupport::Dependencies.interlock.permit_concurrent_loads do
+              # determinate the correct target from the provided gate
+              if gate.is_a?(Symbol) || !gate.include?('.')
+                conn.__send__(gate, arguments)
+              else
+                namespace, action = gate.split('.')
+                conn.__send__(namespace).__send__(action, arguments)
+              end
+            end
+
+            verified!
+
+            if response.is_a?(::Elasticsearch::API::Response)
+              # reverse information for the LogSubscriber - shows the 'query-time' in the logs
+              # this works, since we use a referenced hash ...
+              statistics[:took] = response['took']
+
+              # raise timeouts
+              raise(::ActiveRecord::StatementTimeout, "Elasticsearch api request failed due a timeout") if response['timed_out']
+            end
+
+            # return response
+            response
           end
-
-          if response.is_a?(::Elasticsearch::API::Response)
-            # reverse information for the LogSubscriber - shows the 'query-time' in the logs
-            # this works, since we use a referenced hash ...
-            arguments[:_qt] = response['took']
-
-            # raise timeouts
-            raise(ActiveRecord::StatementTimeout, "Elasticsearch api request failed due a timeout") if response['timed_out']
-          end
-
-          response
         end
       end
 
-      private
-
-      def connect
-        @raw_connection = self.class.new_client(@connection_parameters)
-      rescue ::ActiveRecord::ConnectionNotEstablished => ex
-        raise ex.set_pool(@pool)
-      end
-
       def reconnect
-        @raw_connection = nil
-        connect
+        @lock.synchronize do
+          # no need to 'close' a connection for +::Elasticsearch::Client+ / +::Elastic::Transport+
+          @raw_connection = nil
+          connect
+        end
       end
 
       def active?
@@ -283,62 +305,94 @@ module ActiveRecord # :nodoc:
       # Disconnects from the database if already connected.
       # Otherwise, this method does nothing.
       def disconnect!
-        super
-        @raw_connection = nil
+        @lock.synchronize do
+          super
+          # no need to 'close' a connection for +::Elasticsearch::Client+ / +::Elastic::Transport+
+          @raw_connection = nil
+        end
       end
 
       alias :reset! :reconnect!
 
+      private
+
+      def connect
+        @raw_connection = self.class.new_client(@connection_parameters)
+      rescue ::ActiveRecord::ConnectionNotEstablished => ex
+        raise ex.set_pool(@pool)
+      end
+
       def type_map
         TYPE_MAP
+      end
+
+      # OVERWRITE - to support +::ActiveRecord::StatementTimeout+ as possible retry.
+      # IMPORTANT: From the point ES supports transactions (+#supports_transactions?+) this must be redefined with a *super* call.
+      def retryable_query_error?(exception)
+        exception.is_a?(::ActiveRecord::StatementTimeout) || exception.is_a?(::ActiveRecord::Deadlocked) || exception.is_a?(::ActiveRecord::LockWaitTimeout)
       end
 
       # catch Elasticsearch Transport-errors to be treated as +StatementInvalid+ (the original message is still readable ...)
       def translate_exception(exception, message:, sql:, binds:)
         case exception
         when ::Elastic::Transport::Transport::Errors::ClientClosedRequest
-          ::ActiveRecord::QueryCanceled.new(message, sql: sql, binds: binds)
+          ::ActiveRecord::QueryCanceled.new(message, sql: sql, binds: binds, connection_pool: @pool)
         when ::Elastic::Transport::Transport::Errors::RequestTimeout
-          ::ActiveRecord::StatementTimeout.new(message, sql: sql, binds: binds)
+          ::ActiveRecord::StatementTimeout.new(message, sql: sql, binds: binds, connection_pool: @pool)
         when ::Elastic::Transport::Transport::Errors::Conflict
-          ::ActiveRecord::RecordNotUnique.new(message, sql: sql, binds: binds)
+          ::ActiveRecord::RecordNotUnique.new(message, sql: sql, binds: binds, connection_pool: @pool)
         when ::Elastic::Transport::Transport::Errors::BadRequest
           if exception.message.match?(/resource_already_exists_exception/)
-            ::ActiveRecord::DatabaseAlreadyExists.new(message, sql: sql, binds: binds)
+            ::ActiveRecord::DatabaseAlreadyExists.new(message, sql: sql, binds: binds, connection_pool: @pool)
           else
-            ::ActiveRecord::StatementInvalid.new(message, sql: sql, binds: binds)
+            ::ActiveRecord::StatementInvalid.new(message, sql: sql, binds: binds, connection_pool: @pool)
           end
         when ::Elastic::Transport::Transport::Errors::Unauthorized
           ::ActiveRecord::DatabaseConnectionError.username_error(@config[:username])
           # must be last 'Elastic' error
         when ::Elastic::Transport::Transport::ServerError
-          ::ActiveRecord::StatementInvalid.new(message, sql: sql, binds: binds)
+          ::ActiveRecord::StatementInvalid.new(message, sql: sql, binds: binds, connection_pool: @pool)
         else
           # just forward the exception ...
           exception
         end
       end
 
-      # provide a custom log instrumenter for elasticsearch subscribers
-      def log(gate, arguments, name, async: false, log: true, &block)
-        if log
-          @instrumenter.instrument(
-            "query.elasticsearch_record",
-            gate:      gate,
-            name:      name,
-            arguments: gate == 'core.msearch' ? arguments.deep_dup : arguments,
-            async:     async) do
-            @lock.synchronize(&block)
-          rescue => e
-            raise translate_exception_class(e, arguments, [])
-          end
-        else
-          begin
-            @lock.synchronize(&block)
-          rescue => e
-            raise translate_exception_class(e, arguments, [])
-          end
-        end
+      # Logs and instruments Elasticsearch operations.
+      #
+      # This method facilitates logging and instrumentation of Elasticsearch queries
+      # by delegating the execution to the instrumenter. It also captures any raised
+      # exceptions during execution, translating them into a domain-specific class.
+      #
+      # Queries are tracked under the "query.elasticsearch_record" event, allowing
+      # listeners or subscribers to analyze the performance and behavior of the
+      # queries.
+      #
+      # A `translate_exception_class` helper is used to ensure that any exceptions
+      # raised are appropriately captured and translated with contextual details.
+      #
+      # @param [Symbol, String] gate the target gate for the Elasticsearch operation,
+      #   representing either a `<namespace>.<action>` or an `core.<action>`.
+      # @param [Hash] arguments the request parameters to be sent for the operation.
+      # @param [String] name a label for the operation, defaulting to 'QUERY'.
+      # @param [Boolean] async whether the operation is asynchronous. Defaults to `false`.
+      # @param [Hash, nil] statistics an optional hash for gathering operation metadata.
+      # @yield [block] the operation block to be executed under logging and instrumentation.
+      # @raise [Exception] any exception encountered during execution, after translation.
+      # @return [void]
+      def log(gate, arguments, name = 'QUERY', async: false, statistics: nil, &block)
+        @instrumenter.instrument(
+          "query.elasticsearch_record",
+          gate:,
+          name:,
+          arguments:,
+          async:,
+          statistics:,
+          connection: self,
+          &block
+        )
+      rescue => e
+        raise translate_exception_class(e, arguments, [])
       end
 
       # returns a new collector for the Arel visitor.
@@ -348,13 +402,13 @@ module ActiveRecord # :nodoc:
         # so we don't have to check for +prepared_statements+ here.
         # Also, bindings are (currently) not supported.
         # So, we just need a single, simple query collector...
-        Arel::Collectors::ElasticsearchQuery.new
+        ::Arel::Collectors::ElasticsearchQuery.new
       end
 
       # returns a new visitor to compile Arel into Elasticsearch Hashes (in this case we use a query object)
       # @return [Arel::Visitors::Elasticsearch]
       def arel_visitor
-        Arel::Visitors::Elasticsearch.new(self)
+        ::Arel::Visitors::Elasticsearch.new(self)
       end
 
       # Builds the result object.
@@ -362,14 +416,14 @@ module ActiveRecord # :nodoc:
       # custom result objects with response-specific data.
       # @return [ElasticsearchRecord::Result]
       def build_result(response, columns: [], column_types: {})
-        ElasticsearchRecord::Result.new(response, columns, column_types)
+        ::ElasticsearchRecord::Result.new(response, columns, column_types)
       end
 
       # register native types
-      ActiveRecord::Type.register(:format_string, ActiveRecord::ConnectionAdapters::Elasticsearch::Type::FormatString, adapter: :elasticsearch)
-      ActiveRecord::Type.register(:multicast_value, ActiveRecord::ConnectionAdapters::Elasticsearch::Type::MulticastValue, adapter: :elasticsearch)
-      ActiveRecord::Type.register(:object, ActiveRecord::ConnectionAdapters::Elasticsearch::Type::Object, adapter: :elasticsearch, override: false)
-      ActiveRecord::Type.register(:range, ActiveRecord::ConnectionAdapters::Elasticsearch::Type::Range, adapter: :elasticsearch)
+      ::ActiveRecord::Type.register(:format_string, ::ActiveRecord::ConnectionAdapters::Elasticsearch::Type::FormatString, adapter: :elasticsearch)
+      ::ActiveRecord::Type.register(:multicast_value, ::ActiveRecord::ConnectionAdapters::Elasticsearch::Type::MulticastValue, adapter: :elasticsearch)
+      ::ActiveRecord::Type.register(:object, ::ActiveRecord::ConnectionAdapters::Elasticsearch::Type::Object, adapter: :elasticsearch, override: false)
+      ::ActiveRecord::Type.register(:range, ::ActiveRecord::ConnectionAdapters::Elasticsearch::Type::Range, adapter: :elasticsearch)
     end
   end
 end

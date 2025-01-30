@@ -35,7 +35,7 @@ module ActiveRecord
           # @return [Boolean] acknowledged status
           def open_table(table_name)
             schema_cache.clear_data_source_cache!(table_name)
-            api(:indices, :open, { index: table_name }, 'OPEN TABLE').dig('acknowledged')
+            api('indices.open', { index: table_name }, 'OPEN TABLE').dig('acknowledged')
           end
 
           # Opens closed indices.
@@ -53,7 +53,7 @@ module ActiveRecord
           # @return [Boolean] acknowledged status
           def close_table(table_name)
             schema_cache.clear_data_source_cache!(table_name)
-            api(:indices, :close, { index: table_name }, 'CLOSE TABLE').dig('acknowledged')
+            api('indices.close', { index: table_name }, 'CLOSE TABLE').dig('acknowledged')
           end
 
           # Closes indices by provided names.
@@ -73,7 +73,7 @@ module ActiveRecord
           # @param [String] table_name
           # @return [Boolean] result state (returns false if refreshing failed)
           def refresh_table(table_name)
-            api(:indices, :refresh, { index: table_name }, 'REFRESH TABLE').dig('_shards', 'failed') == 0
+            api('indices.refresh', { index: table_name }, 'REFRESH TABLE').dig('_shards', 'failed') == 0
           end
 
           # refresh indices by provided names.
@@ -119,7 +119,7 @@ module ActiveRecord
           # @return [Boolean] acknowledged status
           def drop_table(table_name, if_exists: false, **)
             schema_cache.clear_data_source_cache!(table_name)
-            api(:indices, :delete, { index: table_name, ignore: (if_exists ? 404 : nil) }, 'DROP TABLE').dig('acknowledged')
+            api('indices.delete', { index: table_name, ignore: (if_exists ? 404 : nil) }, 'DROP TABLE').dig('acknowledged')
           end
 
           # blocks access to the provided table (index) and +block+ name.
@@ -127,7 +127,7 @@ module ActiveRecord
           # @param [Symbol] block_name The block to add (one of :read, :write, :read_only or :metadata)
           # @return [Boolean] acknowledged status
           def block_table(table_name, block_name = :write)
-            api(:indices, :add_block, { index: table_name, block: block_name }, "BLOCK #{block_name.to_s.upcase} TABLE").dig('acknowledged')
+            api('indices.add_block', { index: table_name, block: block_name }, "BLOCK #{block_name.to_s.upcase} TABLE").dig('acknowledged')
           end
 
           # unblocks access to the provided table (index) and +block+ name.
@@ -237,16 +237,16 @@ module ActiveRecord
 
           # creates a new table (index).
           # [<tt>:force</tt>]
-          #   Set to +true+ to drop an existing table
+          #   Set to +true+ to drop an existing index
           #   Defaults to false.
           # [<tt>:copy_from</tt>]
           #   Set to an existing index, to copy it's schema.
           # [<tt>:if_not_exists</tt>]
-          #   Set to +true+ to skip creation if table already exists.
+          #   Set to +true+ to skip creation if index already exists.
           #   Defaults to false.
           # @param [String] table_name
-          # @param [Boolean] force - force a drop on the existing table (default: false)
-          # @param [nil, String] copy_from - copy schema from existing table
+          # @param [Boolean] force - force a drop on the existing index (default: false)
+          # @param [nil, String] copy_from - copy schema from existing index
           # @param [Hash] options
           # @return [Boolean] acknowledged status
           def create_table(table_name, force: false, copy_from: nil, if_not_exists: false, **options)
@@ -310,7 +310,7 @@ module ActiveRecord
           # @param [Hash] options
           # @return [Hash] reindex stats
           def reindex_table(table_name, target_name, **options)
-            api(:core, :reindex, { body: { source: { index: table_name }, dest: { index: target_name } } }.merge(options), 'REINDEX TABLE')
+            api(:reindex, { body: { source: { index: table_name }, dest: { index: target_name } } }.merge(options), 'REINDEX TABLE')
           end
 
           # -- mapping -------------------------------------------------------------------------------------------------

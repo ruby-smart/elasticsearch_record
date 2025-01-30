@@ -37,12 +37,14 @@ module ElasticsearchRecord
                end
         name = "CACHE #{name}" if payload[:cached]
 
-        # nice feature: displays the REAL query-time from elasticsearch response (_qt)
+        # nice feature: displays the REAL query-time from elasticsearch response
         # this is handled through the +::ActiveRecord::ConnectionAdapters::ElasticsearchAdapter#api+ method
-        name = "#{name} (took: #{payload[:arguments][:_qt].round(1)}ms)" if payload[:arguments][:_qt]
+        if payload[:statistics].present?
+          name = "#{name} (took: #{payload[:statistics][:took].round(1)}ms)" if payload[:statistics][:took]
+        end
 
         # build query
-        query = payload[:arguments].except(:_qt).inspect.gsub(/:(\w+)=>/, '\1: ').truncate((payload[:truncate] || 1000), omission: color(' (pruned)', RED))
+        query = payload[:arguments].inspect.gsub(/:(\w+)=>/, '\1: ').truncate((payload[:truncate] || 1000), omission: color(' (pruned)', RED))
 
         # final coloring
         name  = color(name, name_color(payload[:name]), bold: true)
@@ -62,21 +64,21 @@ module ElasticsearchRecord
       end
 
       def gate_color(gate, name)
-        case gate
+        case gate.to_s
           # SELECTS
-        when 'core.get', 'core.mget', 'core.search', 'core.msearch', 'core.count', 'core.exists', 'sql.query'
+        when 'get', 'mget', 'search', 'msearch', 'count', 'exists', 'sql.query'
           BLUE
           # DELETES
-        when 'core.delete', 'core.delete_by_query'
+        when 'delete', 'delete_by_query'
           RED
           # CREATES
-        when 'core.create', 'core.reindex'
+        when 'create', 'reindex'
           GREEN
           # UPDATES
-        when 'core.update', 'core.update_by_query'
+        when 'update', 'update_by_query'
           YELLOW
           # MIXINS
-        when /indices\.\w+/, 'core.bulk', 'core.index'
+        when /indices\.\w+/, 'bulk', 'index'
           if name.end_with?('Pit Delete')
             RED
           else

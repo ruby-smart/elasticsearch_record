@@ -267,7 +267,7 @@ module ElasticsearchRecord
     def bulk(data, operation = :index, refresh: true, **options)
       data = [data] unless data.is_a?(Array)
 
-      _connection.api(:core, :bulk, {
+      _connection.api(:bulk, {
         index:   _index_name,
         body:    case operation
                  when :update

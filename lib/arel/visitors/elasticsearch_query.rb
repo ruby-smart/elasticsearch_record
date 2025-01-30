@@ -196,19 +196,33 @@ module Arel # :nodoc: all
         when ::ActiveRecord::FinderMethods::ONE_AS_ONE
           # force return NO fields
           assign(:_source, false)
+
+          # also clear the columns in the query (which will be forwarded to +ElasticsearchRecord::Result+)
+          # HINT: If future changes rely on the first column value (in this case '1' -> SELECT 1 AS one) this must be fixed within the +ElasticsearchRecord::Result+.
+          # Maybe check on the columns[0] value within the #rows method ...
+          claim(:columns, %w[one])
         else
           assign(:_source, fields)
-          # also overwrite the columns in the query
+
+          # also overwrite the columns in the query (which will be forwarded to +ElasticsearchRecord::Result+)
           claim(:columns, fields)
         end
       end
 
       # CUSTOM node by elasticsearch_record
       def visit_Create(o)
-        # sets values
-        if o.values
-          values = collect(o.values) # visit_Arel_Nodes_ValuesList
-          claim(:body, values) if values.present?
+        # detect, if *columns* where provided.
+        # This happens through the +::Arel::InsertManager#insert+ by splitting up the columns & values.
+        values = if o.columns.present?
+                   # IMPORTANT: we do not "visit" the columns & rows here but directly build a final hash.
+                   # o.values.rows.*first* (first) is correct here, since +::Arel::InsertManager#create_values+ will provide all values in a nested Array
+                   collect(Hash[o.columns.map(&:name).zip(o.values.rows.first)])
+                 elsif o.values.present?
+                   collect(o.values)
+                 end
+
+        if values.present?
+          claim(:body, values)
         else
           failed!
         end
@@ -356,9 +370,9 @@ module Arel # :nodoc: all
         self.collector.add_binds(values, o.proc_for_binds)
 
         if o.type == :in
-          assign(:filter, [{ terms: { o.column_name => o.casted_values } }])
+          assign(:filter, [{ terms: { visit(o.left) => o.casted_values } }])
         else
-          assign(:must_not, [{ terms: { o.column_name => o.casted_values } }])
+          assign(:must_not, [{ terms: { visit(o.left) => o.casted_values } }])
         end
       end
 
@@ -454,6 +468,7 @@ module Arel # :nodoc: all
 
       # alias for ATTRIBUTE returns
       alias :visit_Arel_Attributes_Attribute :visit_Struct_Attribute
+      alias :visit_Arel_Attribute :visit_Struct_Attribute
       alias :visit_Arel_Nodes_UnqualifiedColumn :visit_Struct_Attribute
       alias :visit_ActiveModel_Attribute_FromUser :visit_Struct_Attribute
 
@@ -487,6 +502,14 @@ module Arel # :nodoc: all
 
       # alias for ARRAY returns
       alias :visit_Set :visit_Array
+
+      def visit_Arel_Nodes_True(o)
+        true
+      end
+
+      def visit_Arel_Nodes_False(o)
+        false
+      end
     end
   end
 end

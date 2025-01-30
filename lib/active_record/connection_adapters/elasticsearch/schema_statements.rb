@@ -97,8 +97,8 @@ module ActiveRecord
             versions = migration_context.migrations.map(&:version)
 
             unless migrated.include?(version)
-              # use a ActiveRecord syntax to create a new version
-              schema_migration.create(version: version)
+              # use Arel syntax to create a new version
+              schema_migration.create_version(version)
             end
 
             inserting = (versions - migrated).select { |v| v < version }
@@ -107,8 +107,8 @@ module ActiveRecord
                 raise "Duplicate migration #{duplicate}. Please renumber your migrations to resolve the conflict."
               end
 
-              # use a ActiveRecord syntax to create new versions
-              inserting.each { |iversion| schema_migration.create(version: iversion) }
+              # use Arel syntax to create new versions
+              inserting.each { |iversion| schema_migration.create_version(iversion) }
             end
 
             true
@@ -119,7 +119,7 @@ module ActiveRecord
           # @see ActiveRecord::ConnectionAdapters::SchemaStatements#data_sources
           # @return [Array<String>]
           def data_sources
-            api(:indices, :get, { index: :_all, expand_wildcards: [:open, :closed] }, 'SCHEMA').keys
+            api('indices.get', { index: :_all, expand_wildcards: [:open, :closed] }, 'SCHEMA').keys
           end
 
           # Returns an array of table names defined in the database.
@@ -134,7 +134,7 @@ module ActiveRecord
           # @param [String] table_name
           # @return [Hash]
           def table_mappings(table_name)
-            api(:indices, :get_mapping, { index: table_name, expand_wildcards: [:open, :closed] }, 'SCHEMA').dig(table_name, 'mappings')
+            api('indices.get_mapping', { index: table_name, expand_wildcards: [:open, :closed] }, 'SCHEMA').dig(table_name, 'mappings')
           end
 
           # returns a hash of all meta data by provided table_name (index).
@@ -150,21 +150,21 @@ module ActiveRecord
           # @param [Boolean] flat_settings (default: true)
           # @return [Hash]
           def table_settings(table_name, flat_settings = true)
-            api(:indices, :get_settings, { index: table_name, expand_wildcards: [:open, :closed], flat_settings: flat_settings }, 'SCHEMA').dig(table_name, 'settings')
+            api('indices.get_settings', { index: table_name, expand_wildcards: [:open, :closed], flat_settings: flat_settings }, 'SCHEMA').dig(table_name, 'settings')
           end
 
           # returns a hash of all aliases by provided table_name (index).
           # @param [String] table_name
           # @return [Hash]
           def table_aliases(table_name)
-            api(:indices, :get_alias, { index: table_name, expand_wildcards: [:open, :closed] }, 'SCHEMA').dig(table_name, 'aliases')
+            api('indices.get_alias', { index: table_name, expand_wildcards: [:open, :closed] }, 'SCHEMA').dig(table_name, 'aliases')
           end
 
           # returns information about number of primaries and replicas, document counts, disk size, ... by provided table_name (index).
           # @param [String] table_name
           # @return [Hash]
           def table_state(table_name)
-            response = api(:cat, :indices, { index: table_name, expand_wildcards: [:open, :closed] }, 'SCHEMA')
+            response = api('cat.indices', { index: table_name, expand_wildcards: [:open, :closed] }, 'SCHEMA')
 
             [:health, :status, :name, :uuid, :pri, :rep, :docs_count, :docs_deleted, :store_size, :pri_store_size].zip(
               response.body.split(' ')
@@ -178,9 +178,9 @@ module ActiveRecord
           # @return [Hash]
           def table_schema(table_name, features = [:aliases, :mappings, :settings])
             if cluster_info[:version] >= '8.5.0'
-              response = api(:indices, :get, { index: table_name, expand_wildcards: [:open, :closed], features: features, flat_settings: true }, 'SCHEMA')
+              response = api('indices.get', { index: table_name, expand_wildcards: [:open, :closed], features: features, flat_settings: true }, 'SCHEMA')
             else
-              response = api(:indices, :get, { index: table_name, expand_wildcards: [:open, :closed], flat_settings: true }, 'SCHEMA')
+              response = api('indices.get', { index: table_name, expand_wildcards: [:open, :closed], flat_settings: true }, 'SCHEMA')
             end
 
             {
@@ -204,8 +204,8 @@ module ActiveRecord
             # raise(ActiveRecord::StatementInvalid, "Could not find valid mappings for '#{table_name}'") if mappings.blank? || mappings['properties'].blank?
 
             # since the received mappings do not have the "primary" +_id+-column we manually need to add this here
-            # The BASE_STRUCTURE will also include some meta keys like '_score', '_type', ...
-            ActiveRecord::ConnectionAdapters::ElasticsearchAdapter::BASE_STRUCTURE + mappings['properties'].map { |key, prop|
+            # The METADATA_FIELDS will also include some meta keys like '_score', '_type', ...
+            ActiveRecord::ConnectionAdapters::ElasticsearchAdapter::METADATA_FIELDS + mappings['properties'].map { |key, prop|
               # resolve (nested) fields and properties
               fields, properties = resolve_fields_and_properties(key, prop, true)
 
@@ -250,9 +250,9 @@ module ActiveRecord
           # The only thing that uniquely identifies a document is the index together with the +_id+.
           # To support this concept we simulate this through the +_meta+ field (from the index).
           #
-          # As a alternative, the primary_key can also be provided through the mappings +meta+ field.
-          #
-          # see @ https://www.elastic.co/guide/en/elasticsearch/reference/8.5/mapping-meta-field.html
+          # As an alternative, the primary_key can also be provided through the mappings +meta+ field.
+          # - see @ https://www.elastic.co/guide/en/elasticsearch/reference/8.5/mapping-meta-field.html
+
           # @see ActiveRecord::ConnectionAdapters::AbstractMysqlAdapter#primary_keys
           # @param [String] table_name
           def primary_keys(table_name)
@@ -270,7 +270,7 @@ module ActiveRecord
           # @return [Boolean]
           def data_source_exists?(name)
             # response returns boolean
-            api(:indices, :exists?, { index: name, expand_wildcards: [:open, :closed] }, 'SCHEMA')
+            api('indices.exists?', { index: name, expand_wildcards: [:open, :closed] }, 'SCHEMA')
           end
 
           # Checks to see if the table +table_name+ exists on the database.
@@ -388,7 +388,7 @@ module ActiveRecord
           # @return [Hash{Symbol->Unknown}]
           def cluster_info
             @cluster_info ||= begin
-                                response = api(:core, :info, {}, 'CLUSTER INFO')
+                                response = api(:info, {}, 'CLUSTER INFO')
 
                                 {
                                   name:           response.dig('name'),
@@ -403,14 +403,14 @@ module ActiveRecord
           # returns a hash of current set, none-default settings in flat
           # @return [Hash]
           def cluster_settings
-            settings = api(:cluster, :get_settings, { flat_settings: true }, 'CLUSTER SETTINGS')
+            settings = api('cluster.get_settings', { flat_settings: true }, 'CLUSTER SETTINGS')
             settings['persistent'].merge(settings['transient'])
           end
 
           # returns the cluster health
           # @return [Hash]
           def cluster_health(**options)
-            api(:cluster, :health, options, 'CLUSTER HEALTH').to_h
+            api('cluster.health', options, 'CLUSTER HEALTH').to_h
           end
 
           # transforms provided schema-type to a sql-type

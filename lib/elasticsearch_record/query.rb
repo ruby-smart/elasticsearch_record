@@ -59,15 +59,16 @@ module ElasticsearchRecord
 
     # defines special api gates to be used per type.
     # if no special type is defined, it simply uses +[:core,self.type]+
+    # @return [Hash<Symbol=>String>]
     GATES = {
-      TYPE_SQL                  => [:sql, :query],
-      TYPE_ESQL                 => [:esql, :query],
-      TYPE_INDEX_CREATE         => [:indices, :create],
-      TYPE_INDEX_CLONE          => [:indices, :clone],
-      TYPE_INDEX_UPDATE_MAPPING => [:indices, :put_mapping],
-      TYPE_INDEX_UPDATE_SETTING => [:indices, :put_settings],
-      TYPE_INDEX_UPDATE_ALIAS   => [:indices, :put_alias],
-      TYPE_INDEX_DELETE_ALIAS   => [:indices, :delete_alias],
+      TYPE_SQL                  => 'sql.query',
+      TYPE_ESQL                 => 'esql.query',
+      TYPE_INDEX_CREATE         => 'indices.create',
+      TYPE_INDEX_CLONE          => 'indices.clone',
+      TYPE_INDEX_UPDATE_MAPPING => 'indices.put_mapping',
+      TYPE_INDEX_UPDATE_SETTING => 'indices.put_settings',
+      TYPE_INDEX_UPDATE_ALIAS   => 'indices.put_alias',
+      TYPE_INDEX_DELETE_ALIAS   => 'indices.delete_alias'
     }.freeze
 
     # defines the index the query should be executed on
@@ -136,9 +137,9 @@ module ElasticsearchRecord
     # returns the API gate to be called to execute the query.
     # each query type needs a different endpoint.
     # @see Elasticsearch::API
-    # @return [Array<Symbol, Symbol>] - API gate [<namespace>,<action>]
+    # @return [Symbol, String] - API gate "<namespace>.<action>" | <:action>
     def gate
-      GATES[self.type].presence || [:core, self.type]
+      GATES[self.type].presence || self.type
     end
 
     # returns true if this is a write query

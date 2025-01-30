@@ -14,6 +14,12 @@ module ActiveRecord
           @aliases  = HashWithIndifferentAccess.new
           @metas    = HashWithIndifferentAccess.new
 
+          # HINT: Currently there is only one attribute, that cannot be assigned to any of the top hash kind, and also not opts:
+          # * dynamic
+          # This attribute must be assigned below the *mappings* node but as sibling to *properties*.
+          # This can only be done to create a special kind of options (@flags ???) and assign & fetch them within the required arel.
+          # Since this only setting can also be assigned to each individual mapping, there is currently no need to build this ...
+
           transform_settings!(settings) if settings.present?
           transform_mappings!(mappings) if mappings.present?
           transform_aliases!(aliases) if aliases.present?

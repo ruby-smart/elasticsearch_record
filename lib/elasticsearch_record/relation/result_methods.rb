@@ -66,7 +66,7 @@ module ElasticsearchRecord
       # @return [nil, String] - either returns the pit_id (no block given) or nil
       def point_in_time(keep_alive: '1m')
         # resolve a initial PIT id
-        initial_pit_id = klass.connection.api(:core, :open_point_in_time, { index: klass.table_name, keep_alive: keep_alive }, "#{klass} Open Pit").dig('id')
+        initial_pit_id = klass.connection.api(:open_point_in_time, { index: klass.table_name, keep_alive: keep_alive }, "#{klass} Open Pit").dig('id')
 
         return initial_pit_id unless block_given?
 
@@ -74,7 +74,7 @@ module ElasticsearchRecord
         yield initial_pit_id
 
         # close PIT
-        klass.connection.api(:core, :close_point_in_time, { body: { id: initial_pit_id } }, "#{klass} Close Pit")
+        klass.connection.api(:close_point_in_time, { body: { id: initial_pit_id } }, "#{klass} Close Pit")
 
         # return nil if everything was ok
         nil
@@ -203,7 +203,7 @@ module ElasticsearchRecord
           next unless ids.any?
 
           # delete all IDs, but do not refresh index, yet
-          klass.connection.api(:core, :bulk, { index: klass.table_name, body: ids.map { |id| { delete: { _id: id } } }, refresh: false }, "#{klass} Pit Delete")
+          klass.connection.api(:bulk, { index: klass.table_name, body: ids.map { |id| { delete: { _id: id } } }, refresh: false }, "#{klass} Pit Delete")
         end
 
         # refresh index
