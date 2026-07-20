@@ -263,6 +263,22 @@ module ActiveRecord # :nodoc:
         end
       end
 
+      # IMPORTANT: +active?+ and +disconnect!+ are declared PUBLIC on
+      # ActiveRecord::ConnectionAdapters::AbstractAdapter and are invoked publicly by the
+      # connection pool, +ActiveRecord::Migration.maintain_test_schema!+ and the db:* rake
+      # tasks. Narrowing them to private breaks those callers with a NoMethodError, so they
+      # must stay above the +private+ keyword below.
+      def active?
+        !!@raw_connection&.ping
+      end
+
+      # Disconnects from the database if already connected.
+      # Otherwise, this method does nothing.
+      def disconnect!
+        super
+        @raw_connection = nil
+      end
+
       private
 
       def connect
@@ -274,17 +290,6 @@ module ActiveRecord # :nodoc:
       def reconnect
         @raw_connection = nil
         connect
-      end
-
-      def active?
-        !!@raw_connection&.ping
-      end
-
-      # Disconnects from the database if already connected.
-      # Otherwise, this method does nothing.
-      def disconnect!
-        super
-        @raw_connection = nil
       end
 
       alias :reset! :reconnect!
