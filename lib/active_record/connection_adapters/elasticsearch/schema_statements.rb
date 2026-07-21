@@ -97,8 +97,8 @@ module ActiveRecord
             versions = migration_context.migrations.map(&:version)
 
             unless migrated.include?(version)
-              # use a ActiveRecord syntax to create a new version
-              schema_migration.create(version: version)
+              # use the SchemaMigration API to create a new version
+              schema_migration.create_version(version)
             end
 
             inserting = (versions - migrated).select { |v| v < version }
@@ -107,8 +107,8 @@ module ActiveRecord
                 raise "Duplicate migration #{duplicate}. Please renumber your migrations to resolve the conflict."
               end
 
-              # use a ActiveRecord syntax to create new versions
-              inserting.each { |iversion| schema_migration.create(version: iversion) }
+              # use the SchemaMigration API to create new versions
+              inserting.each { |iversion| schema_migration.create_version(iversion) }
             end
 
             true
