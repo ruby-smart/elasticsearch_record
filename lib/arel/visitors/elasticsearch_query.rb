@@ -208,6 +208,14 @@ module Arel # :nodoc: all
         # sets values
         if o.values
           values = collect(o.values) # visit_Arel_Nodes_ValuesList
+
+          # plain-value rows do not carry their column names (see +#visit_Arel_Nodes_ValuesList+) -
+          # the values must be zipped (by position) with the statement columns to restore the pairs.
+          if values.is_a?(Array)
+            keys   = collect(o.columns) # visit_Arel_Attributes_Attribute => column name
+            values = values.reduce({}) { |m, row| m.merge(keys.zip(row).to_h) }
+          end
+
           claim(:body, values) if values.present?
         else
           failed!
@@ -432,13 +440,21 @@ module Arel # :nodoc: all
 
       # used by insert / update statements.
       # does not claim / assign any values!
-      # returns a Hash of key => value pairs
+      # returns a Hash of key => value pairs for attribute-shaped rows (e.g. +ActiveModel::Attribute+ -
+      # the ActiveRecord persistence shape, where each element carries its own name & value).
+      # Rows of plain, already casted values (e.g. built by rails 7.1's +SchemaMigration#create_version+,
+      # where the column names live on the insert statement instead) are returned as an Array of
+      # value-rows - pairing them with the statement columns is up to the caller (see +#visit_Create+).
       def visit_Arel_Nodes_ValuesList(o)
-        o.rows.reduce({}) do |m, row|
-          row.each do |attr|
-            m[visit(attr.name)] = visit(attr.value)
+        if o.rows.all? { |row| row.all? { |attr| attr.respond_to?(:name) && attr.respond_to?(:value) } }
+          o.rows.reduce({}) do |m, row|
+            row.each do |attr|
+              m[visit(attr.name)] = visit(attr.value)
+            end
+            m
           end
-          m
+        else
+          o.rows.map { |row| row.map { |value| visit(value) } }
         end
       end
 
