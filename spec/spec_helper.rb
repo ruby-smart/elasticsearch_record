@@ -2,6 +2,9 @@
 
 require "elasticsearch_record"
 
+# eager-load ActiveRecord, so the gem's on_load patches (select_core, select_manager, ...) apply
+ActiveRecord::Base # rubocop:disable Void
+
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
   config.example_status_persistence_file_path = ".rspec_status"

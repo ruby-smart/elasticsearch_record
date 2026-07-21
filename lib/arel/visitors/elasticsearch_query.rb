@@ -363,10 +363,11 @@ module Arel # :nodoc: all
         # (see @ ActiveRecord::StatementCache::PartialQueryCollector)
         self.collector.add_binds(values, o.proc_for_binds)
 
+        # HINT: rails 7.1 dropped +column_name+ (the attribute's name) from the node
         if o.type == :in
-          assign(:filter, [{ terms: { o.column_name => o.casted_values } }])
+          assign(:filter, [{ terms: { o.attribute.name => o.casted_values } }])
         else
-          assign(:must_not, [{ terms: { o.column_name => o.casted_values } }])
+          assign(:must_not, [{ terms: { o.attribute.name => o.casted_values } }])
         end
       end
 

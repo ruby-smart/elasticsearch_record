@@ -45,4 +45,23 @@ RSpec.describe Arel::Visitors::Elasticsearch do
       end
     end
   end
+
+  describe '#visit_Arel_Nodes_HomogeneousIn' do
+    # rails 7.1 removed +column_name+ from the node - the field name must resolve via +attribute.name+
+    it 'builds a terms query from the attribute name' do
+      type_caster = Class.new do
+        def type_for_attribute(_name)
+          ActiveModel::Type::String.new
+        end
+      end.new
+      typed_table = Arel::Table.new('searches', type_caster: type_caster)
+
+      sm = Arel::SelectManager.new(typed_table)
+      sm.where(Arel::Nodes::HomogeneousIn.new(%w[A00 B01], typed_table['code'], :in))
+
+      query = visitor.compile(sm.ast)
+
+      expect(query.body).to eq({ query: { bool: { filter: [{ terms: { 'code' => %w[A00 B01] } }] } } })
+    end
+  end
 end
