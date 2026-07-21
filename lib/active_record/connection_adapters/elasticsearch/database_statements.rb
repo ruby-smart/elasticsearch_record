@@ -19,6 +19,8 @@ module ActiveRecord
       # - select_all
       # - select_one
       # - select_value
+      #
+      # OVERWRITTEN methods for Elasticsearch:
       # - select_values
       #
       # *UNSUPPORTED* methods that will be +ignored+:
@@ -121,6 +123,22 @@ module ActiveRecord
               arguments: query.arguments)
 
             internal_exec_query(query, name, async: async).response['count']
+          end
+
+          # Returns an array of the values of the first column in a select:
+          #   select_values("SELECT id FROM companies LIMIT 3") => [1,2,3]
+          #
+          # The Elasticsearch result object resolves each row as a +field => value+ hash
+          # _(not as a positional value-array like a SQL adapter)_ - so the original
+          # implementation (+select_rows(...).map(&:first)+) would return +[field, value]+
+          # pairs instead of plain values. Resolves each value by the result's first column.
+          # @see ActiveRecord::ConnectionAdapters::DatabaseStatements#select_values
+          # @return [Array]
+          def select_values(arel, name = nil, binds = [])
+            result = select_all(arel, name, binds)
+            column = result.columns.first
+
+            result.map { |row| column.nil? ? row.values.first : row[column] }
           end
 
           # returns the last inserted id from the result.
