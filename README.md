@@ -17,6 +17,8 @@ _ElasticsearchRecord is a ActiveRecord adapter and provides similar functionalit
 - This is the `main`-branch, which currently supports rails **7.1** _(see section 'Rails_Versions' for supported versions)_
 - supports ActiveRecord ~> 7.1 + Elasticsearch >= 7.17
 - added features up to Elasticsearch `8.17.1`
+- _ES|QL_ queries _(`TYPE_ESQL` / the `esql.query` gate)_ require **Elasticsearch >= 8.11**, where the feature became
+  generally available. All other features remain available from Elasticsearch `7.17`.
 
 -----
 

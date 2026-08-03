@@ -248,15 +248,17 @@ module ActiveRecord # :nodoc:
         raise ::ArgumentError, "ElasticsearchRecord API call is now using a single `gate` instead of providing `namespace & action`.\n'core' namespace must not provided (only provide action symbol) - any other must be provided as string (e.g. 'nodes.stats')" if arguments.is_a?(Symbol)
         raise ::StandardError, 'ASYNC api calls are not supported' if async
 
-        # drop 'core.' prefix
-        if gate.is_a?(String) && gate.starts_with?('core.')
+        # drop 'core.' prefix, if provided
+        if gate.is_a?(String) && gate[0..4] == 'core.'
           # add deprecation warning
           ::ActiveRecord.deprecator.warn(<<~MSG)
             Providing the 'core.' namespace prefix in the `gate` parameter is deprecated and will be removed in a future version.
             Please provide only the action symbol (e.g.:bulk) or the full namespace and action as a string (e.g.'nodes.stats')
           MSG
 
-          gate = gate.gsub('core.', '').to_sym
+          # IMPORTANT: only strip the *prefix* - a +gsub+ would also replace any later occurrence
+          # (e.g. 'core.score.thing' would become :sthing)
+          gate = gate.delete_prefix('core.').to_sym
         end
 
         # PLEASE NOTE: Don't remove the +statistics+ assignment here.
@@ -273,6 +275,7 @@ module ActiveRecord # :nodoc:
               end
             end
 
+            # marks the connection as verified (an AbstractAdapter method, which is used to decide how errors and connections are handled)
             verified!
 
             if response.is_a?(::Elasticsearch::API::Response)

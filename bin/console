@@ -4,6 +4,18 @@
 require "bundler/setup"
 require "elasticsearch_record"
 
+# configure elasticsearch
+ActiveRecord::Base.configurations = {
+  ActiveRecord::ConnectionHandling::DEFAULT_ENV.call => {
+    'elasticsearch' => {
+      'adapter'  => 'elasticsearch',
+      'host'     => ENV.fetch('ES_HOST', 'localhost:9400'),
+      'user'     => ENV.fetch('ES_USER', 'elastic'),
+      'password' => ENV.fetch('ES_PASSWORD', '7rpRj7cKnlHWOd5DNeJM')
+    }
+  }
+}
+
 # You can add fixtures and/or initialization code here to make experimenting
 # with your gem easier. You can also use a different console, if you like.
 
