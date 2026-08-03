@@ -45,14 +45,7 @@ module ElasticsearchRecord
     # @return [Integer]
     def total
       # chop total only
-      @total ||= _chop_total
-    end
-
-    # returns the response RAW hits hash.
-    # PLEASE NOTE: Does not return the nested hits (+response['hits']['hits']+) array!
-    # @return [ActiveSupport::HashWithIndifferentAccess, Hash]
-    def hits
-      response.key?('hits') ? response['hits'].with_indifferent_access : {}
+      @total ||= _total
     end
 
     # Returns the RAW +_source+ data from each hit - aka. +rows+.
@@ -63,7 +56,7 @@ module ElasticsearchRecord
 
       # IMPORTANT: check against missing hits without any '_source' node.
       # This happens if the Elasticsearch query has the  +_source:false+ flag!
-      response['hits']['hits'].map { |result| result['_source'] || {} }
+      response['hits']['hits'].map { |doc| doc['_source'] || {} }
     end
 
     # returns an array of all rows.
@@ -71,11 +64,23 @@ module ElasticsearchRecord
     # The +rows+ is used by the ActiveRecord ConnectionAdapters and must not be removed!
     # @return [Array]
     def rows
-      results.map { |result|
+      # IMPORTANT: without provided +columns+ we cannot build positional rows - mapping over an
+      # empty +columns+ array would return an empty array per hit and silently lose all data.
+      # In this case we fall back to the raw +_source+ values.
+      return results.map(&:values) if columns.blank?
+
+      results.map { |doc|
         columns.map { |column|
-          result[column]
+          doc[column]
         }
       }
+    end
+
+    # returns the response RAW hits hash.
+    # PLEASE NOTE: Does not return the nested hits (+response['hits']['hits']+) array!
+    # @return [ActiveSupport::HashWithIndifferentAccess, Hash]
+    def hits
+      response.key?('hits') ? response['hits'].with_indifferent_access : {}
     end
 
     # returns the response RAW aggregations hash.
@@ -159,35 +164,46 @@ module ElasticsearchRecord
       self
     end
 
-    # used by ActiveRecord
+    # used by ActiveRecord for "pluck"
     def cast_values(type_overrides = {})
-      # :nodoc:
+      # fast escape, if no hits are available
+      return [] unless response['hits']
+
+      # HINT: This is separated to avoid allocating a (nested) array per row
       if columns.one?
-        # Separated to avoid allocating an array per row
+        # resolve the column key
         key = columns.first
 
-        type = if type_overrides.is_a?(Array)
-                 type_overrides.first
-               else
-                 column_type(columns.first, type_overrides)
-               end
+        # resolve type from overrides or +#column_type+ method
+        type = type_overrides.is_a?(Array) ? type_overrides.first : column_type(key, type_overrides)
 
-        results.map do |result|
-          type.deserialize(result[key])
+        # EDGE-case for metadata fields
+        if ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.metadata_keys.include?(key)
+          # directly read from doc
+          response['hits']['hits'].map { |doc| type.deserialize(doc[key]) }
+        else
+          results.map do |result|
+            type.deserialize(result[key])
+          end
         end
       else
-        types = if type_overrides.is_a?(Array)
-                  type_overrides
-                else
-                  columns.map { |name| column_type(name, type_overrides) }
-                end
+        # resolve types from overrides or +#column_type+ method
+        types = type_overrides.is_a?(Array) ? type_overrides : columns.map { |name| column_type(name, type_overrides) }
 
         size = types.size
 
-        results.map do |result|
+        # EDGE-case for metadata fields - they have to be resolved from the doc, so we merge them into the +_source+
+        rows = if (ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.metadata_keys & columns).any?
+                 response['hits']['hits'].map { |doc|
+                   (doc['_source'] || {}).merge(doc.slice(*ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.metadata_keys))
+                 }
+               else
+                 results
+               end
+
+        rows.map do |result|
           Array.new(size) { |i|
-            key = columns[i]
-            types[i].deserialize(result[key])
+            types[i].deserialize(result[columns[i]])
           }
         end
       end
@@ -200,9 +216,9 @@ module ElasticsearchRecord
       type_overrides.fetch(name, ::ActiveRecord::Type.default_value)
     end
 
-    # chops total value from response
+    # resolves total value from response
     # @return [Integer]
-    def _chop_total
+    def _total
       return self.response['total'] if self.response.key?('total')
       return self.response['hits']['total']['value'] if self.response.key?('hits')
       return self.response['aggregations'].count if self.response.key?('aggregations')
@@ -212,13 +228,13 @@ module ElasticsearchRecord
 
     # used for +msearch+ results
     # @return [Array]
-    def _results_for_responses
+    def _results_from_responses
       response['responses'].map { |response| self.class.new(response, self.columns, self.column_types) }
     end
 
     # used for +search+ results
     # @return [Array]
-    def _results_for_hits
+    def _results_from_hits
       # PLEASE NOTE: the 'hits' response has multiple nodes: BASE nodes & the +_source+ node.
       # The real data is within the source node, but we also want the METADATA nodes for possible score & type check
       metadata_fields = ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.metadata_keys
@@ -227,12 +243,15 @@ module ElasticsearchRecord
       if @columns.present?
         # We freeze the strings to prevent them getting duped when
         # used as keys in ActiveRecord::Base's @attributes hash.
-        # IMPORTANT: remove *metadata_fields* from possible provided columns
-        columns = @columns ? (@columns - metadata_fields).map(&:-@) : []
+        # IMPORTANT: remove *metadata_fields* from possible provided columns ( &:-@ -> freeze strings )
+        columns = (@columns - metadata_fields).map(&:-@)
 
         # this is the hashed result array
         response['hits']['hits'].map { |doc|
+          # allocate new result hash with all known metadata keys ('_id', ...)
           result = doc.slice(*metadata_fields)
+
+          # iterate through each requested column
           columns.each do |column|
             result[column] = doc['_source'][column]
           end
@@ -281,10 +300,10 @@ module ElasticsearchRecord
     # @return [Array]
     def computed_results
       @computed_results ||= if response.key?('hits')
-                              _results_for_hits
+                              _results_from_hits
                             elsif response.key?('responses')
                               # used by +msearch+
-                              _results_for_responses
+                              _results_from_responses
                             else
                               []
                             end

@@ -202,9 +202,16 @@ module Arel # :nodoc: all
           # Maybe check on the columns[0] value within the #rows method ...
           claim(:columns, %w[one])
         else
-          assign(:_source, fields)
+          # IMPORTANT: metadata fields (like '_id' or '_score') are NOT part of the +_source+ node - they
+          # are always returned on the document level. Providing them to the +_source+-filter would create
+          # a filter that never matches, so they must be removed here.
+          source_fields = fields - ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.metadata_keys
+
+          # if ONLY metadata fields were provided we must not resolve any +_source+ at all.
+          assign(:_source, source_fields.presence || false)
 
           # also overwrite the columns in the query (which will be forwarded to +ElasticsearchRecord::Result+)
+          # HINT: metadata fields must stay within the columns - they are resolved from the document level.
           claim(:columns, fields)
         end
       end
