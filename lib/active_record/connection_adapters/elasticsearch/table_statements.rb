@@ -42,7 +42,7 @@ module ActiveRecord
           # @param [Array] table_names
           # @return [Array] acknowledged status for each provided table
           def open_tables(*table_names)
-            table_names -= [schema_migration.table_name, InternalMetadata.table_name]
+            table_names -= [schema_migration.table_name, internal_metadata.table_name]
             return if table_names.empty?
 
             table_names.map { |table_name| open_table(table_name) }
@@ -60,7 +60,7 @@ module ActiveRecord
           # @param [Array] table_names
           # @return [Array] acknowledged status for each provided table
           def close_tables(*table_names)
-            table_names -= [schema_migration.table_name, InternalMetadata.table_name]
+            table_names -= [schema_migration.table_name, internal_metadata.table_name]
             return if table_names.empty?
 
             table_names.map { |table_name| close_table(table_name) }
@@ -80,7 +80,7 @@ module ActiveRecord
           # @param [Array] table_names
           # @return [Array] result state (returns false if refreshing failed)
           def refresh_tables(*table_names)
-            table_names -= [schema_migration.table_name, InternalMetadata.table_name]
+            table_names -= [schema_migration.table_name, internal_metadata.table_name]
             return if table_names.empty?
 
             table_names.map { |table_name| refresh_table(table_name) }
@@ -104,7 +104,7 @@ module ActiveRecord
           # @param [Array] table_names
           # @return [Array] acknowledged status for each provided table
           def truncate_tables(*table_names)
-            table_names -= [schema_migration.table_name, InternalMetadata.table_name]
+            table_names -= [schema_migration.table_name, internal_metadata.table_name]
             return if table_names.empty?
 
             table_names.map { |table_name| truncate_table(table_name) }

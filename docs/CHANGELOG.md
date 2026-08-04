@@ -1,5 +1,14 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [Unreleased]
+* [fix] `ElasticsearchRecord::Result#cast_values` to resolve values from the `_source` node - metadata fields _(`_id`, `_score`, ...)_ are now resolved from the document level
+* [fix] `Arel::Visitors::ElasticsearchQuery#visit_Selects` to no longer provide metadata fields to the `_source`-filter _(this created a filter that never matches)_ - if only metadata fields are projected the `_source` is now disabled _(`_source: false`)_
+* [add] `ElasticsearchRecord::Relation::QueryMethods#select` now raises on provided metadata fields _(`_id`, `_score`, ...)_ - they are always returned and accessible within the record
+* [add] specs for `ElasticsearchRecord::Relation::ResultMethods` _(covers `agg_pluck`, `composite`, `point_in_time`, `pit_results`, `pit_delete`, `response`, `aggregations`, `buckets`, `hits`, `results`, `total`, `hits_only!`, `aggs_only!`, `total_only!` & `meta_only!`)_
+* [add] `ElasticsearchRecord::Relation::ResultMethods#meta_only!` to resolve the metadata nodes _(`_id`, `_score`, ...)_ of each hit without transferring the `_source`
+* [ref] `ElasticsearchRecord::Relation::ResultMethods#pit_results` to resolve the results through `ElasticsearchRecord::Result` _(respects the current projection - the `ids_only` argument was therefore removed in favour of `meta_only!`)_
+* [fix] `ElasticsearchRecord::Relation::ResultMethods#pit_delete` to no longer `select('_id')` _(rejected by the new metadata-projection guard)_ - it now resolves the ids through `meta_only!`
+
 ## [1.8.2] - 2024-11-26
 * [fix] `ElasticsearchRecord::Relation::QueryMethods#build_query_clause` to raise an exception on `nil` assignments
 * [fix] `Arel::Visitors::ElasticsearchBase#compile` to always reset temporary assignments _(causes missing assignments after a query-build-exception)_

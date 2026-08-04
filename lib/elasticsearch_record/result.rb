@@ -40,15 +40,21 @@ module ElasticsearchRecord
       response['took']
     end
 
+    # returns the response result string
+    # @return [String]
+    def result
+      response['result'] || ''
+    end
+
     # returns the response total value.
     # either chops the +total+ value directly from response, from hits or aggregations.
     # @return [Integer]
     def total
-      # chop total only
+      # chop total from response and not from the generated data
       @total ||= _total
     end
 
-    # Returns the RAW +_source+ data from each hit - aka. +rows+.
+    # Returns the RAW +_source+ data from each hit.
     # PLEASE NOTE: The array will only contain the RAW data from each +_source+ (meta info like '_id' or '_score' are not included)
     # @return [Array]
     def results
@@ -78,15 +84,16 @@ module ElasticsearchRecord
 
     # returns the response RAW hits hash.
     # PLEASE NOTE: Does not return the nested hits (+response['hits']['hits']+) array!
+    #
     # @return [ActiveSupport::HashWithIndifferentAccess, Hash]
     def hits
-      response.key?('hits') ? response['hits'].with_indifferent_access : {}
+      response['hits']&.with_indifferent_access || {}
     end
 
     # returns the response RAW aggregations hash.
     # @return [ActiveSupport::HashWithIndifferentAccess, Hash]
     def aggregations
-      response.key?('aggregations') ? response['aggregations'].with_indifferent_access : {}
+      response['aggregations']&.with_indifferent_access || {}
     end
 
     # returns the (nested) bucket values (and aggregated values) from the response aggregations.
@@ -101,7 +108,7 @@ module ElasticsearchRecord
     end
 
     # Returns true if this result set includes the column named +name+.
-    # used by ActiveRecord
+    # used by +ActiveRecord+
     def includes_column?(name)
       @columns&.include?(name)
     end
@@ -148,15 +155,9 @@ module ElasticsearchRecord
       computed_results[idx]
     end
 
-    # Returns the last record from the rows collection.
+    # Returns the last record(s) from the *computed_results* collection.
     def last(n = nil)
       n ? computed_results.last(n) : computed_results.last
-    end
-
-    # returns the response result string
-    # @return [String]
-    def result
-      response['result'] || ''
     end
 
     # used by ActiveRecord
@@ -198,7 +199,7 @@ module ElasticsearchRecord
                    (doc['_source'] || {}).merge(doc.slice(*ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.metadata_keys))
                  }
                else
-                 results
+                 response['hits']['hits'].map { |doc| doc['_source'] || {} }
                end
 
         rows.map do |result|
@@ -253,7 +254,8 @@ module ElasticsearchRecord
 
           # iterate through each requested column
           columns.each do |column|
-            result[column] = doc['_source'][column]
+            # in case no source was provided, it prevents an exception
+            result[column] = (doc['_source'] && doc['_source'][column])
           end
 
           result
@@ -264,7 +266,8 @@ module ElasticsearchRecord
 
         # this is the hashed result array
         response['hits']['hits'].map { |doc|
-          doc.slice(*metadata_fields).merge(doc['_source'])
+          # in case no source was provided, it prevents an exception
+          doc.slice(*metadata_fields).merge!(doc['_source'] || {})
         }
       end
     end

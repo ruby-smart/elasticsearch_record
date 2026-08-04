@@ -50,6 +50,7 @@ module ElasticsearchRecord
       end
 
       # same like +#configure!+, but on the same relation (no spawn)
+      # @return [self]
       def configure!(*args)
         check_if_method_has_arguments!(__callee__, args)
 
@@ -297,14 +298,6 @@ module ElasticsearchRecord
 
       private
 
-      # returns any provided field that is a metadata field and therefore not resolvable
-      # through a projection.
-      # @param [Array] fields
-      # @return [Array<String>]
-      def _invalid_projection_fields(fields)
-        ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.metadata_keys & fields.flatten.select{|fld| fld.is_a?(String) || fld.is_a?(Symbol)}.map(&:to_s)
-      end
-
       def build_where_clause(opts, _rest = [])
         case opts
         when Symbol, Array, String
@@ -370,6 +363,14 @@ module ElasticsearchRecord
         arel.configure(configure_value) if configure_value.present?
 
         arel
+      end
+
+      # returns any provided field that is a metadata field and therefore not resolvable
+      # through a projection.
+      # @param [Array] fields
+      # @return [Array<String>]
+      def _invalid_projection_fields(fields)
+        ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.metadata_keys & fields.flatten.select{|fld| fld.is_a?(String) || fld.is_a?(Symbol)}.map(&:to_s)
       end
     end
   end

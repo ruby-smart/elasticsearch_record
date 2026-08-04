@@ -122,7 +122,8 @@ module Arel # :nodoc: all
         # IMPORTANT: Since Elasticsearch does not store nil-values in the +_source+ / +doc+ it will NOT return
         # empty / nil columns - instead the nil columns do not exist!!!
         # This is a big mess, because those missing columns are +not+ editable or savable in any way after we initialize the record...
-        # To prevent NOT-accessible attributes, we need to provide the "full-column-definition" to the query.
+        # To prevent NOT-accessible attributes, we need to provide the "full-column-definition" to the query as +default+.
+        # This may be overwritten by the 'visit_Selects'
         resource_klass = o.source.left.instance_variable_get(:@klass)
         claim(:columns, resource_klass.source_column_names) if resource_klass.respond_to?(:source_column_names)
 
@@ -193,6 +194,12 @@ module Arel # :nodoc: all
         when '*'
           # force return all fields
           # assign(:_source, true)
+        when '!'
+          # force return NO fields (ids, etc. [metadata] are always returned)
+          assign(:_source, false)
+
+          # enforce to provide an empty set of columns
+          claim(:columns, [])
         when ::ActiveRecord::FinderMethods::ONE_AS_ONE
           # force return NO fields
           assign(:_source, false)
