@@ -8,6 +8,7 @@
 * [add] `ElasticsearchRecord::Relation::ResultMethods#meta_only!` to resolve the metadata nodes _(`_id`, `_score`, ...)_ of each hit without transferring the `_source`
 * [ref] `ElasticsearchRecord::Relation::ResultMethods#pit_results` to resolve the results through `ElasticsearchRecord::Result` _(respects the current projection - the `ids_only` argument was therefore removed in favour of `meta_only!`)_
 * [fix] `ElasticsearchRecord::Relation::ResultMethods#pit_delete` to no longer `select('_id')` _(rejected by the new metadata-projection guard)_ - it now resolves the ids through `meta_only!`
+* [add] `ElasticsearchRecord::Query::COLUMNS_NONE` constant for the `'!'` projection marker _(forces a query to return no `_source` fields)_ - replaces the bare literal in `Arel::Visitors::ElasticsearchQuery#visit_Selects` & `ElasticsearchRecord::Relation::ResultMethods#meta_only!`
 
 ## [1.8.2] - 2024-11-26
 * [fix] `ElasticsearchRecord::Relation::QueryMethods#build_query_clause` to raise an exception on `nil` assignments

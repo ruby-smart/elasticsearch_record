@@ -270,7 +270,7 @@ module ElasticsearchRecord
       # This is used to prevent resolving documents from the index and only returns "meta" information (like _id, _score, _type, ...)
       # @return [self]
       def meta_only!
-        select('!').configure!({ aggs: nil, _source: false })
+        select(::ElasticsearchRecord::Query::COLUMNS_NONE).configure!({ aggs: nil, _source: false })
       end
     end
   end

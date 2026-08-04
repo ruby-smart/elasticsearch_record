@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-# NOTE: 'support/elasticsearch' assigns ActiveRecord::Base.configurations and then
-# requires 'elasticsearch_record' - the order matters, see the comment in that file.
-require_relative "support/elasticsearch"
-require_relative "support/test_index"
+# include all spec support files
+Dir[File.dirname(__FILE__) + '/support/**/*.rb'].each do |file|
+  require file
+end
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure

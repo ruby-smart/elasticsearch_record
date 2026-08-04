@@ -74,6 +74,22 @@ module ElasticsearchRecord
       TYPE_INDEX_DELETE_ALIAS => 'indices.delete_alias'
     }.freeze
 
+    # -- PROJECTION MARKERS --------------------------------------------------------------------------------------------
+
+    # defines a projection marker that forces a query to return *no* +_source+ fields at all.
+    # metadata fields ('_id', '_score', ...) are not part of the +_source+ - they are always
+    # returned on the document level and therefore stay accessible.
+    #
+    # this is the only way to clear the columns that +visit_Arel_Nodes_SelectCore+ claims for
+    # every relation - a +configure+ can only reach the query-body, never the columns.
+    #
+    # HINT: only evaluated as the *first* projection - combining it with other fields
+    # (e.g. +select(COLUMNS_NONE, :name)+) silently discards them.
+    #
+    # see @ ElasticsearchRecord::Relation::ResultMethods#meta_only!
+    # see @ Arel::Visitors::ElasticsearchQuery#visit_Selects
+    COLUMNS_NONE = '!'
+
     # defines the index the query should be executed on
     # @!attribute String
     attr_reader :index

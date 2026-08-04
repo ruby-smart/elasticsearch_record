@@ -194,11 +194,16 @@ module Arel # :nodoc: all
         when '*'
           # force return all fields
           # assign(:_source, true)
-        when '!'
-          # force return NO fields (ids, etc. [metadata] are always returned)
+        when ::ElasticsearchRecord::Query::COLUMNS_NONE
+          # force return NO fields - metadata fields ('_id', '_score', ...) are not part of the
+          # +_source+ and are always returned on the document level, so they stay accessible.
           assign(:_source, false)
 
-          # enforce to provide an empty set of columns
+          # clears the columns claimed by +visit_Arel_Nodes_SelectCore+ - a projection is the only
+          # place that runs late enough to undo them.
+          # HINT: an empty array equals the +Query+ default, so +Result#_results_from_hits+ takes its
+          # "no columns" branch and returns the raw document. Together with the +_source: false+ above
+          # this leaves exactly the metadata fields.
           claim(:columns, [])
         when ::ActiveRecord::FinderMethods::ONE_AS_ONE
           # force return NO fields

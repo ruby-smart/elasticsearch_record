@@ -213,6 +213,39 @@ RSpec.describe 'ElasticsearchRecord::Relation::QueryMethods projections', :elast
       expect(query_for(:_id, :name).columns).to eq(%w[_id name])
       expect(query_for(:_id).columns).to eq(['_id'])
     end
+
+    # the +COLUMNS_NONE+ marker is the only way to clear the columns claimed by
+    # +visit_Arel_Nodes_SelectCore+ - a +configure+ can only reach the query-body.
+    # see @ ElasticsearchRecord::Query::COLUMNS_NONE
+    context "with the '#{ElasticsearchRecord::Query::COLUMNS_NONE}' (COLUMNS_NONE) marker" do
+      it 'disables the _source and clears the columns' do
+        query = query_for(ElasticsearchRecord::Query::COLUMNS_NONE)
+
+        expect(query.body).to eq({ _source: false })
+        # the cleared columns are the whole point - without them +Result+ would try to
+        # resolve the (never transferred) source fields
+        expect(query.columns).to eq([])
+      end
+
+      it 'builds the same query through #meta_only!' do
+        query = model.all.meta_only!.to_sql
+
+        expect(query.body).to include({ _source: false })
+        expect(query.body).not_to have_key(:aggs)
+        expect(query.columns).to eq([])
+      end
+
+      # PLEASE NOTE: +visit_Selects+ only inspects the FIRST projection, so the marker wins and
+      # any additional field is silently discarded. Pinned here as a known sharp edge.
+      it 'discards any additional field' do
+        expect(query_for(ElasticsearchRecord::Query::COLUMNS_NONE, :name).body).to eq({ _source: false })
+      end
+
+      it 'does not capture ordinary projections' do
+        expect(query_for(:name).body).to eq({ _source: ['name'] })
+        expect(query_for(:name).columns).to eq(['name'])
+      end
+    end
   end
 
   describe ElasticsearchRecord::Result do
