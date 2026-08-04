@@ -121,27 +121,70 @@ RSpec.describe ElasticsearchRecord::Relation::CalculationMethods, :elasticsearch
       end
     end
 
+    # Elasticsearch always answers a count with the FULL total, so the SQL 'LIMIT n OFFSET m'
+    # semantic is applied on the resolved total.
+    # see @ ElasticsearchRecord::Relation::CalculationMethods#_resolve_limited_count
     describe 'with a limit' do
       # a zero limit short-circuits - no query is executed at all
       it 'returns 0 for a zero limit' do
         expect(relation.limit(0).count).to eq(0)
       end
 
-      # CAVEAT: the limit is forwarded as the elasticsearch +terminate_after+ argument, which is a
-      # BEST-EFFORT per-shard early termination - the count API does not apply it to an optimized
-      # count, so the FULL total is returned. This is NOT the SQL 'LIMIT n' semantic where
-      # +Model.limit(2).count+ yields 2.
-      it 'still returns the full count for a non-zero limit' do
-        expect(relation.limit(2).count).to eq(4)
-        expect(model.where(active: true).limit(1).count).to eq(3)
+      it 'caps the count at the provided limit' do
+        expect(relation.limit(2).count).to eq(2)
+        expect(model.where(active: true).limit(1).count).to eq(1)
       end
 
-      it 'builds the terminate_after argument from the limit' do
-        arel = relation.limit(2).spawn
-                       .unscope!(:offset, :limit, :order, :configure, :aggs)
-                       .configure!(:__query__, argument: { terminate_after: 2 }).arel
+      it 'returns the total for a limit above it' do
+        expect(relation.limit(99).count).to eq(4)
+      end
 
-        expect(model.connection.to_sql(arel).arguments).to eq({ terminate_after: 2 })
+      # this is what +#count+ is expected to agree with
+      it 'agrees with the number of loaded records' do
+        expect(relation.limit(2).count).to eq(relation.limit(2).to_a.size)
+        expect(relation.limit(99).count).to eq(relation.limit(99).to_a.size)
+      end
+
+      # +#size+ resolves through +#count+ on an unloaded relation
+      it 'is what #size resolves on an unloaded relation' do
+        expect(relation.limit(2).size).to eq(2)
+      end
+
+      it 'also caps a column count' do
+        expect(relation.limit(1).count(:count)).to eq(1)
+      end
+
+      # the argument is still built - it is a (best-effort) early termination hint for the cluster
+      it 'builds the terminate_after argument from the limit' do
+        captured = nil
+        allow(model.connection).to receive(:select_count).and_wrap_original do |original, arel, *args|
+          captured = model.connection.to_sql(model.connection.send(:arel_from_relation, arel))
+          original.call(arel, *args)
+        end
+
+        relation.limit(2).count
+
+        expect(captured.arguments).to eq({ terminate_after: 2 })
+      end
+    end
+
+    describe 'with an offset' do
+      it 'subtracts the offset from the count' do
+        expect(relation.offset(1).count).to eq(3)
+      end
+
+      it 'never returns a negative count' do
+        expect(relation.offset(99).count).to eq(0)
+      end
+
+      it 'combines with a limit' do
+        expect(relation.offset(1).limit(2).count).to eq(2)
+        expect(relation.offset(3).limit(2).count).to eq(1)
+      end
+
+      it 'agrees with the number of loaded records' do
+        expect(relation.offset(1).limit(2).count).to eq(relation.offset(1).limit(2).to_a.size)
+        expect(relation.offset(3).count).to eq(relation.offset(3).to_a.size)
       end
     end
 
