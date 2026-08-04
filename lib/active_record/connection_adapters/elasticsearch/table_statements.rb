@@ -194,15 +194,27 @@ module ActiveRecord
           # The +table_name+ will be dropped, if exists.
           # The +from+ will persist, if not provided +drop_backup:true+.
           #
+          # IMPORTANT: both strategies restore through a +clone+, which inherits the settings of
+          # its source - including the 'write'-block that is required to clone at all.
+          # The restored table is therefore *open* but *read-only* until that block is released,
+          # which is what the +unblock+ flag is for.
+          # (there is no +open+ flag: a clone is always created open - even from a closed source)
+          # see @ ActiveRecord::ConnectionAdapters::Elasticsearch::CloneTableDefinition#_before_exec
+          #
           # @example
           #   restore_table('screenshots', from: 'screenshots-backup-v1')
           #
+          # @example
+          #   # keep the restored table read-only
+          #   restore_table('screenshots', from: 'screenshots-backup-v1', unblock: false)
+          #
           # @param [String] table_name
           # @param [String] from
-          # @param [String (frozen)] timeout - renaming timout (default: '30s')
-          # @param [Boolean] open - opens restored backup after creation (default: true)
-          # @return [Boolean] acknowledged status
-          def restore_table(table_name, from:, timeout: nil, open: true, drop_backup: false)
+          # @param [String (frozen)] timeout - renaming timout (default: '1m')
+          # @param [Boolean] unblock - releases the inherited 'write'-block on the restored table (default: true)
+          # @param [Boolean] drop_backup - renames instead of clones, which removes the +from+ (default: false)
+          # @return [nil] - every failing step raises instead
+          def restore_table(table_name, from:, timeout: '1m', unblock: true, drop_backup: false)
             raise ArgumentError, "unable to restore from missing target '#{from}'!" unless table_exists?(from)
             drop_table(table_name, if_exists: true)
 
@@ -213,8 +225,8 @@ module ActiveRecord
               clone_table(from, table_name)
             end
 
-            # open, if provided
-            open_table(from) if open
+            # release the inherited 'write'-block, if provided
+            unblock_table(table_name, :write) if unblock
           end
 
           # renames a table (index) by executing multiple steps:
@@ -225,13 +237,13 @@ module ActiveRecord
           #
           # @param [String] table_name
           # @param [String] target_name
-          # @param [String (frozen)] timeout (default: '30s')
+          # @param [String (frozen)] timeout (default: '1m')
           # @param [Hash] options - additional 'clone' options (like settings, alias, ...)
-          def rename_table(table_name, target_name, timeout: nil, **options)
+          def rename_table(table_name, target_name, timeout: '1m', **options)
             schema_cache.clear_data_source_cache!(table_name)
 
             clone_table(table_name, target_name, **options)
-            cluster_health(index: target_name, wait_for_status: 'green', timeout: timeout.presence || '30s')
+            cluster_health(index: target_name, wait_for_status: 'green', timeout: timeout)
             drop_table(table_name)
           end
 

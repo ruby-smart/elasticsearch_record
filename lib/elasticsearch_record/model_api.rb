@@ -39,7 +39,7 @@ module ElasticsearchRecord
     end
 
     # delegated dangerous methods with confirm parameter (created with exclamation mark)
-    # a exception will be raised, if +confirm:true+ is missing.
+    # an exception will be raised, if +confirm:true+ is missing.
     #
     # @example
     #   drop!(confirm: true)
@@ -183,12 +183,15 @@ module ElasticsearchRecord
     # @param [Boolean] close
     # @return [String] backup_name
 
-    # @!method restore!(from:, timeout: nil, open: true, drop_backup: false)
+    # @!method restore!(from:, timeout: nil, unblock: true, drop_backup: false)
     # Shortcut for restore_table
+    # PLEASE NOTE: the restore runs through a +clone+, so the restored table inherits the
+    # 'write'-block of its source - +unblock+ releases it again.
     # @param [String] from
     # @param [String (frozen)] timeout
-    # @param [Boolean] open
-    # @return [Boolean] acknowledged status
+    # @param [Boolean] unblock - releases the inherited 'write'-block (default: true)
+    # @param [Boolean] drop_backup
+    # @return [nil]
 
     # @!method reindex!(target_name, **options)
     # Shortcut for reindex_table

@@ -66,7 +66,9 @@ module ActiveRecord
           raise ArgumentError, "you cannot change an unknown mapping '#{name}'" if current_mapping.blank?
 
           # build new mapping
-          mapping = new_mapping_definition(name, current_mapping[:type], **options, &block)
+          # IMPORTANT: the received mapping is a String-keyed Hash - a symbol access would resolve
+          # nil here, which +TableMappingDefinition+ then falls back to :object / :nested
+          mapping = new_mapping_definition(name, current_mapping['type'], **options, &block)
           define! ChangeMappingDefinition, mapping
 
           # check if the mapping is assigned as new primary_key
