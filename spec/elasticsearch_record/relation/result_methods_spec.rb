@@ -255,6 +255,32 @@ RSpec.describe ElasticsearchRecord::Relation::ResultMethods, :elasticsearch do
       }.to raise_error(ArgumentError, /Batch size cannot be above the 'max_result_window'/)
     end
 
+    # PLEASE NOTE: this is the only example of this file that fakes the response.
+    # The guard cannot be provoked against a real cluster: +search_after+ is EXCLUSIVE, so a
+    # follow-up batch never repeats the previous sort values - a repetition can only be caused
+    # by a broken / missing order, which is exactly what the guard is there to catch.
+    it 'raises when a batch repeats the sort values of the previous batch' do
+      stuck = ElasticsearchRecord::Result.new({
+                                                'pit_id' => 'STUCK',
+                                                'hits'   => {
+                                                  'total' => { 'value' => 1 },
+                                                  'hits'  => [{ '_id'     => 'stuck',
+                                                                '_source' => { 'name' => 'alpha' },
+                                                                'sort'    => [1] }]
+                                                }
+                                              })
+
+      allow(model.connection).to receive(:api).and_call_original
+      # prevents a real (never closed) pit - the raise skips the +close_point_in_time+
+      allow(model.connection).to receive(:api)
+        .with(:open_point_in_time, anything, anything).and_return({ 'id' => 'STUCK' })
+      allow(model.connection).to receive(:select_all).and_return(stuck)
+
+      expect {
+        model.all.pit_results(batch_size: 1)
+      }.to raise_error(ActiveRecord::StatementInvalid, /aborted due an infinite loop error/)
+    end
+
     it 'closes the pit after resolving' do
       allow(model.connection).to receive(:api).and_call_original
 
@@ -645,6 +671,93 @@ RSpec.describe ElasticsearchRecord::Relation::ResultMethods, :elasticsearch do
       relation = model.all
 
       expect(relation.total_only!).to equal(relation)
+    end
+  end
+
+  # +meta_only!+ resolves the metadata nodes ('_id', '_index', '_score', ...) of each hit WITHOUT
+  # transferring the '_source'. It is the projection used by +#pit_delete+ to collect the ids.
+  #
+  # It cannot be built through +select('_id')+: metadata fields are not part of the '_source' node,
+  # so +QueryMethods#select+ rejects them - the +COLUMNS_NONE+ marker ('!') is used instead, which
+  # +visit_Selects+ resolves into '_source: false'.
+  #
+  # see @ ElasticsearchRecord::Query::COLUMNS_NONE
+  # see @ Arel::Visitors::ElasticsearchQuery#visit_Selects
+  # see @ ElasticsearchRecord::Relation::QueryMethods#select
+  describe '#meta_only!' do
+    it 'disables the _source of the query' do
+      expect(model.all.meta_only!.to_query[:body][:_source]).to eq(false)
+    end
+
+    it 'drops the aggs from the query' do
+      body = model.aggregate(:total, { sum: { field: :count } }).meta_only!.to_query[:body]
+
+      expect(body.to_h).not_to have_key(:aggs)
+    end
+
+    # unlike +aggs_only!+ / +total_only!+ the hits are still transferred - only their '_source' is not
+    it 'keeps the hits within the query' do
+      expect(model.all.meta_only!.to_query[:body].to_h).not_to have_key(:size)
+    end
+
+    it 'selects the COLUMNS_NONE marker' do
+      expect(model.all.meta_only!.select_values).to eq([ElasticsearchRecord::Query::COLUMNS_NONE])
+    end
+
+    # the marker is consumed by the visitor - it must NOT end up as a '_source'-filter
+    # (a filter on '!' would never match and silently return empty documents)
+    it 'does not build a _source filter from the marker' do
+      expect(model.all.meta_only!.to_sql.columns).to eq([])
+    end
+
+    it 'bypasses the metadata projection guard' do
+      expect { model.all.select('_id') }.to raise_error(ActiveRecord::UnknownAttributeReference)
+      expect { model.all.meta_only! }.not_to raise_error
+    end
+
+    it 'resolves only the metadata nodes of each hit' do
+      hits = model.all.meta_only!.hits[:hits]
+
+      expect(hits.size).to eq(4)
+      expect(hits.map(&:keys).flatten.uniq).to match_array(%w[_index _id _score])
+    end
+
+    it 'does not transfer any _source' do
+      # +Result#results+ resolves the '_source' of each hit - which does not exist here
+      expect(model.all.meta_only!.resolve('Meta').results).to eq([{}, {}, {}, {}])
+    end
+
+    # the metadata is merged into the computed results - this is what +#pit_results+ collects
+    it 'resolves the metadata through the computed results' do
+      results = model.all.meta_only!.resolve('Meta').to_ary
+
+      expect(results.map { |result| result['_id'] }).to match_array(model.all.ids)
+    end
+
+    it 'still resolves the total' do
+      expect(model.all.meta_only!.resolve('Meta').total).to eq(4)
+    end
+
+    it 'respects the current relation scope' do
+      expect(model.where(active: false).meta_only!.hits[:hits].size).to eq(1)
+    end
+
+    # PLEASE NOTE: despite the bang this method does NOT mutate the receiver - +select+ is a
+    # SPAWNING method, so the +configure!+ is applied to the spawn. This differs from
+    # +hits_only!+ / +aggs_only!+ / +total_only!+, which all return self.
+    it 'returns a new relation instead of self' do
+      relation = model.all
+
+      expect(relation.meta_only!).not_to equal(relation)
+    end
+
+    it 'does not modify the receiver' do
+      relation = model.all
+
+      relation.meta_only!
+
+      expect(relation.select_values).to eq([])
+      expect(relation.to_query[:body].to_h).not_to have_key(:_source)
     end
   end
 end

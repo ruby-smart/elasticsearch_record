@@ -48,7 +48,7 @@ module ElasticsearchRecord
                 when String # really find by SQL
                   ElasticsearchRecord::Query.new(
                     type: ElasticsearchRecord::Query::TYPE_SQL,
-                    body: { query: query_or_sql },
+                    body: { query: sql },
                     # IMPORTANT: Always provide all columns
                     columns: source_column_names)
                 when Hash
@@ -96,8 +96,7 @@ module ElasticsearchRecord
       # executes a +esql+ by provided *ES|SL* query
       # Does NOT instantiate records.
       # @param [String] esql
-      # @param [Boolean] async (default: false)
-      def esql(esql, async: false)
+      def esql(esql)
         # build new query
         query = ElasticsearchRecord::Query.new(
           type: ElasticsearchRecord::Query::TYPE_ESQL,
@@ -105,15 +104,14 @@ module ElasticsearchRecord
           # IMPORTANT: Always provide all columns
           columns: source_column_names)
 
-        connection.internal_exec_query(query, "#{name} ES|QL", async: async)
+        connection.exec_query(query, "#{name} ES|QL")
       end
 
 
       # executes a +msearch+ by provided *RAW* queries.
       # Does NOT instantiate records.
       # @param [Array<String>] queries
-      # @param [Boolean] async (default: false)
-      def msearch(queries, async: false)
+      def msearch(queries)
         # build new msearch query
         query = ElasticsearchRecord::Query.new(
           index: table_name,
@@ -122,7 +120,7 @@ module ElasticsearchRecord
           # IMPORTANT: Always provide all columns
           columns: source_column_names)
 
-        connection.internal_exec_query(query, "#{name} Msearch", async: async)
+        connection.exec_query(query, "#{name} Msearch")
       end
 
       # executes a search by provided +RAW+ query - supports +Elasticsearch::DSL+ gem if loaded

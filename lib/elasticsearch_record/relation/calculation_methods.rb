@@ -129,9 +129,17 @@ module ElasticsearchRecord
       #
       # @note returns *nil* on a *NullRelation*
       #
+      # PLEASE NOTE: the aggregation quantifies the relationship BETWEEN fields, so it requires at
+      # least two of them. A single column would additionally take the 'field'-branch of
+      # +#calculate_aggregation+ - but the metric only accepts a 'fields' node.
+      #
       # @param [Array<Symbol|String>] column_names
+      # @raise [ArgumentError] if less than two columns were provided
       # @return [Hash,nil]
       def matrix_stats(*column_names)
+        # ensure minimum number of names are provided
+        raise(ArgumentError, "Unable to build a 'matrix_stats' aggregation with less than two columns (#{column_names.size} provided) @ #{klass.name}!") if column_names.size < 2
+
         calculate_aggregation(:matrix_stats, *column_names)
       end
 

@@ -7,9 +7,8 @@ module ElasticsearchRecord
     include Enumerable
 
     # creates an empty response
-    # @return [ElasticsearchRecord::Result (frozen)]
+    # @return [ElasticsearchRecord::Result (frozen), ActiveRecord::FutureResult::Complete (frozen)]
     def self.empty(async: false)
-      # :nodoc:
       if async
         EMPTY_ASYNC
       else
@@ -58,11 +57,16 @@ module ElasticsearchRecord
     # PLEASE NOTE: The array will only contain the RAW data from each +_source+ (meta info like '_id' or '_score' are not included)
     # @return [Array]
     def results
-      return [] unless response['hits']
-
       # IMPORTANT: check against missing hits without any '_source' node.
       # This happens if the Elasticsearch query has the  +_source:false+ flag!
-      response['hits']['hits'].map { |doc| doc['_source'] || {} }
+      if response['hits']
+        response['hits']['hits'].map { |doc| doc['_source'] || {} }
+      elsif _tabular?
+        # a tabular (+SQL+ / +ES|QL+) response has no '_source' node - the row values are the data
+        _results_from_tabular
+      else
+        []
+      end
     end
 
     # returns an array of all rows.
@@ -70,6 +74,10 @@ module ElasticsearchRecord
     # The +rows+ is used by the ActiveRecord ConnectionAdapters and must not be removed!
     # @return [Array]
     def rows
+      # a tabular (+SQL+ / +ES|QL+) response is ALREADY positional - and it is positional to the
+      # response's own columns, not to the (requested) +columns+ of the query.
+      return _tabular_values if _tabular?
+
       # IMPORTANT: without provided +columns+ we cannot build positional rows - mapping over an
       # empty +columns+ array would return an empty array per hit and silently lose all data.
       # In this case we fall back to the raw +_source+ values.
@@ -114,7 +122,8 @@ module ElasticsearchRecord
     end
 
     # Returns the number of elements in the response array.
-    # Either uses the +hits+ length or the +responses+ length _(msearch)_.
+    # Either uses the +hits+ length, the +responses+ length _(msearch)_ or the length of the
+    # tabular value rows _(SQL / ES|QL)_.
     # @return [Integer]
     def length
       if response.key?('hits')
@@ -122,6 +131,9 @@ module ElasticsearchRecord
       elsif response.key?('responses')
         # used by +msearch+
         response['responses'].length
+      elsif _tabular?
+        # used by +sql+ & +esql+
+        _tabular_values.length
       else
         0
       end
@@ -223,8 +235,44 @@ module ElasticsearchRecord
       return self.response['total'] if self.response.key?('total')
       return self.response['hits']['total']['value'] if self.response.key?('hits')
       return self.response['aggregations'].count if self.response.key?('aggregations')
+      # a tabular response has no total - the transferred rows are all there is
+      return _tabular_values.length if _tabular?
 
       0
+    end
+
+    # true if the response is TABULAR - which is what the +sql+ & +esql+ APIs return instead of a
+    # (nested) 'hits' node: a flat 'columns' definition and positional value rows.
+    # @return [Boolean]
+    def _tabular?
+      response.key?('columns') && (response.key?('rows') || response.key?('values'))
+    end
+
+    # returns the column names of a tabular response.
+    # Both APIs describe their columns as a {'name' =>, 'type' =>} pair.
+    # @return [Array<String>]
+    def _tabular_columns
+      response['columns'].map { |column| column['name'] }
+    end
+
+    # returns the positional value rows of a tabular response.
+    # PLEASE NOTE: the +sql+ API names this node 'rows', the +esql+ API names it 'values'.
+    # @return [Array<Array>]
+    def _tabular_values
+      response['rows'] || response['values']
+    end
+
+    # used for +sql+ & +esql+ results
+    # IMPORTANT: the rows are positional to the RESPONSE columns - not to the (requested) +columns+
+    # of the query. A projecting query (e.g. 'SELECT name FROM ...') returns fewer columns, so
+    # zipping against the query's columns would shift every value.
+    # @return [Array]
+    def _results_from_tabular
+      # We freeze the strings to prevent them getting duped when
+      # used as keys in ActiveRecord::Base's @attributes hash.
+      keys = _tabular_columns.map(&:-@)
+
+      _tabular_values.map { |row| keys.zip(row).to_h }
     end
 
     # used for +msearch+ results
@@ -255,7 +303,7 @@ module ElasticsearchRecord
           # iterate through each requested column
           columns.each do |column|
             # in case no source was provided, it prevents an exception
-            result[column] = (doc['_source'] && doc['_source'][column])
+            result[column] = doc.dig('_source', column)
           end
 
           result
@@ -307,6 +355,9 @@ module ElasticsearchRecord
                             elsif response.key?('responses')
                               # used by +msearch+
                               _results_from_responses
+                            elsif _tabular?
+                              # used by +sql+ & +esql+
+                              _results_from_tabular
                             else
                               []
                             end

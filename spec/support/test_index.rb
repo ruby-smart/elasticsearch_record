@@ -21,45 +21,52 @@ module TestIndex
       ElasticsearchSpec.connection
     end
 
-    def exists?
-      connection.table_exists?(name)
+    def exists?(index_name = name)
+      connection.table_exists?(index_name)
     end
 
     # Drops the test index if present - refuses any name outside +ALLOWED+.
-    def drop!
-      assert_safe!
-      return false unless exists?
+    def drop!(index_name = name)
+      assert_safe!(index_name)
+      return false unless exists?(index_name)
 
-      connection.drop_table(name)
+      connection.drop_table(index_name)
       true
     end
 
     # (Re)creates the test index with a small, known mapping.
-    def create!
-      assert_safe!
-      drop!
+    #
+    # A different +index_name+ (and mapping, through the block) may be provided for specs that
+    # need a second index - it still has to match +ALLOWED+, so it stays within the test namespace.
+    def create!(index_name = name, &block)
+      assert_safe!(index_name)
+      drop!(index_name)
 
-      connection.create_table(name) do |t|
-        t.mapping :name, :keyword
-        t.mapping :count, :integer
-        t.mapping :active, :boolean
-        t.mapping :created_at, :date
+      if block
+        connection.create_table(index_name, &block)
+      else
+        connection.create_table(index_name) do |t|
+          t.mapping :name, :keyword
+          t.mapping :count, :integer
+          t.mapping :active, :boolean
+          t.mapping :created_at, :date
 
-        t.setting 'index.number_of_shards', '1'
-        t.setting 'index.number_of_replicas', '0'
+          t.setting 'index.number_of_shards', '1'
+          t.setting 'index.number_of_replicas', '0'
+        end
       end
 
-      name
+      index_name
     end
 
     private
 
     # Refuses to operate on anything that is not clearly the test index.
-    def assert_safe!
-      return if name.match?(ALLOWED)
+    def assert_safe!(index_name = name)
+      return if index_name.match?(ALLOWED)
 
       raise UnsafeIndexError,
-            "Refusing to modify index #{name.inspect} - the spec suite may only touch " \
+            "Refusing to modify index #{index_name.inspect} - the spec suite may only touch " \
             "indices matching #{ALLOWED.inspect}. Other applications share this cluster."
     end
   end

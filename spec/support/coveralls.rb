@@ -4,7 +4,7 @@ require 'coveralls'
 Coveralls.wear! do
   # exclude specs
   add_filter %r{^/spec/}
-  add_filter %r{^/patches/}
+  add_filter %r{patches}
 
   # GROUPS
   add_group "ConnectionAdapter", 'connection_adapters/elasticsearch'

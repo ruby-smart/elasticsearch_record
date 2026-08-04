@@ -92,7 +92,7 @@ module ActiveRecord
                                     :dump_schema_information
 
           def assume_migrated_upto_version(version)
-            version  = version.to_i
+            version = version.to_i
             migrated = migration_context.get_all_versions
             versions = migration_context.migrations.map(&:version)
 
@@ -186,7 +186,7 @@ module ActiveRecord
             {
               settings: response.dig(table_name, 'settings'),
               mappings: response.dig(table_name, 'mappings'),
-              aliases:  response.dig(table_name, 'aliases')
+              aliases: response.dig(table_name, 'aliases')
             }
           end
 
@@ -228,11 +228,11 @@ module ActiveRecord
               field["name"],
               field["null_value"],
               fetch_type_metadata(field["type"]),
-              meta:       field['meta'],
-              virtual:    field['virtual'],
-              fields:     field['fields'],
+              meta: field['meta'],
+              virtual: field['virtual'],
+              fields: field['fields'],
               properties: field['properties'],
-              enabled:    field['enabled']
+              enabled: field['enabled']
             )
           end
 
@@ -255,8 +255,11 @@ module ActiveRecord
 
           # @see ActiveRecord::ConnectionAdapters::AbstractMysqlAdapter#primary_keys
           # @param [String] table_name
+          # @return [Array<String>]
           def primary_keys(table_name)
-            table_metas(table_name).dig('primary_key').presence || column_definitions(table_name).
+            # IMPORTANT: the +_meta+ node stores the primary_key as a plain String - it must be
+            # wrapped, so every branch of this method returns an Array (as the API demands).
+            Array.wrap(table_metas(table_name).dig('primary_key')).presence || column_definitions(table_name).
               select { |f| f['meta'] && f['meta']['primary_key'] == 'true' }.
               # only take the last found primary key (if no custom primary_key was provided this will return +_id+ )
               map { |f| f["name"] }[-1..-1]
@@ -358,7 +361,9 @@ module ActiveRecord
           # The query will raise an ActiveRecord::StatementInvalid if the requested limit is above this value.
           # @return [Integer]
           def max_result_window(table_name)
-            table_settings(table_name).dig('index', 'max_result_window').presence || 10000
+            # IMPORTANT: the settings API returns every value as a String - without the cast the
+            # callers would compare a String against their (Integer) batch sizes.
+            table_settings(table_name).dig('index.max_result_window').presence&.to_i || 10_000
           end
 
           # returns true if the cluster option 'id_field_data' is enabled or not configured.
@@ -391,10 +396,10 @@ module ActiveRecord
                                 response = api(:info, {}, 'CLUSTER INFO')
 
                                 {
-                                  name:           response.dig('name'),
-                                  cluster_name:   response.dig('cluster_name'),
-                                  cluster_uuid:   response.dig('cluster_uuid'),
-                                  version:        Gem::Version.new(response.dig('version', 'number')),
+                                  name: response.dig('name'),
+                                  cluster_name: response.dig('cluster_name'),
+                                  cluster_uuid: response.dig('cluster_uuid'),
+                                  version: Gem::Version.new(response.dig('version', 'number')),
                                   lucene_version: response.dig('version', 'lucene_version')
                                 }
                               end
@@ -469,8 +474,8 @@ module ActiveRecord
             if prop['properties'].present?
               prop['properties'].each do |nested_key, nested_prop|
                 nested_fields, nested_properties = resolve_fields_and_properties("#{key}.#{nested_key}", nested_prop)
-                fields                           |= nested_fields
-                properties                       |= nested_properties
+                fields |= nested_fields
+                properties |= nested_properties
               end
             elsif !root # don't add the root property as sub-property
               properties << { 'name' => key, 'type' => prop['type'] }
