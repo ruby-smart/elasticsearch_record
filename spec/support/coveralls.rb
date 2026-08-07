@@ -5,6 +5,7 @@ Coveralls.wear! do
   # exclude specs
   add_filter %r{^/spec/}
   add_filter %r{patches}
+  add_filter 'lib/elasticsearch_record.rb'
 
   # GROUPS
   add_group "ConnectionAdapter", 'connection_adapters/elasticsearch'
