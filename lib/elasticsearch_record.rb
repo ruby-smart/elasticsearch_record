@@ -65,6 +65,21 @@ module ElasticsearchRecord
   # However enabling this flag will surely fail transactional tests ...
   singleton_class.attr_accessor :error_on_transaction
   self.error_on_transaction = false
+
+  ##
+  # :singleton-method:
+  # Specifies if the table (index) statements resolve their provided table name(s) with the
+  # +table_name_prefix+ & +table_name_suffix+ of the connection config.
+  # As default every statement decorates, so a migration only ever names the *base* table (index).
+  # Disabling this flag restores the former, opt-in behaviour, where the decoration had to be
+  # applied by hand through +#_env_table_name+.
+  #
+  # HINT: this only provides the DEFAULT for a statement that was not given an explicit
+  # +decorate:+ argument - a single call can always opt in or out on its own.
+  #
+  # see @ ActiveRecord::ConnectionAdapters::Elasticsearch::TableStatements
+  singleton_class.attr_accessor :decorate_table_names
+  self.decorate_table_names = true
 end
 
 ActiveSupport.on_load(:active_record) do

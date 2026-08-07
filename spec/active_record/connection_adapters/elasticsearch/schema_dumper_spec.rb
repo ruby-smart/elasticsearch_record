@@ -328,10 +328,65 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaDumper do
             ElasticsearchSpec::CONFIG.symbolize_keys.merge(table_name_suffix: '_test'))
         end
 
-        # the name is written as a +_env_table_name+ call, so a dump stays loadable in another
-        # environment (with its own prefix / suffix)
-        it 'wraps the name into _env_table_name' do
-          expect(output).to start_with(%(  create_table _env_table_name("elasticsearch_record"), force: true do |t|))
+        # every table statement decorates its name by DEFAULT, so dumping the BASE name is enough
+        # to keep the dump loadable in another environment (with its own prefix / suffix).
+        # The former +_env_table_name(...)+ wrapping is gone.
+        it 'dumps the base name' do
+          expect(output).to start_with(%(  create_table "elasticsearch_record", force: true do |t|))
+        end
+
+        it 'does not wrap the name into _env_table_name anymore' do
+          expect(output).not_to include('_env_table_name')
+        end
+
+        it 'does not switch the decoration off' do
+          expect(output).not_to include('decorate: false')
+        end
+
+        # a globally disabled decoration would leave the base name untouched while loading, so the
+        # dump has to carry the full name - written EXPLICITLY, so it also survives the switch
+        # being flipped back on before the dump is loaded
+        context 'with a globally disabled decoration' do
+          around do |example|
+            ElasticsearchRecord.decorate_table_names = false
+            example.run
+          ensure
+            ElasticsearchRecord.decorate_table_names = true
+          end
+
+          it 'dumps the full name with decorate: false' do
+            expect(output).to start_with(%(  create_table "elasticsearch_record_test", decorate: false, force: true do |t|))
+          end
+        end
+      end
+
+      # If the base name does not resolve BACK to the real index, the decoration has to be switched
+      # off - otherwise loading the dump would address a different index.
+      context 'with a base name that collides with the suffix' do
+        let(:adapter) do
+          ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.new(
+            ElasticsearchSpec::CONFIG.symbolize_keys.merge(table_name_suffix: '_test'))
+        end
+
+        # 'elasticsearch_record_test_test' strips to 'elasticsearch_record_test', which already ends
+        # with the suffix - so +_env_table_name+ would NOT append it a second time
+        # (the surrounding +before+ creates this index, the +after+ below drops it again)
+        let(:index_name) { "#{TestIndex.name}_test" }
+
+        after { TestIndex.drop!(index_name) }
+
+        it 'dumps the full name with decorate: false' do
+          expect(output).to start_with(%(  create_table "elasticsearch_record_test_test", decorate: false, force: true do |t|))
+        end
+      end
+
+      # the dumper may be built with an explicit prefix / suffix that differs from the connection -
+      # decorating the stripped name would then resolve a completely different index
+      context 'with dumper options that differ from the connection' do
+        let(:dumper) { adapter.create_schema_dumper({ table_name_suffix: '_record_test' }) }
+
+        it 'dumps the full name with decorate: false' do
+          expect(output).to start_with(%(  create_table "elasticsearch_record_test", decorate: false, force: true do |t|))
         end
       end
     end

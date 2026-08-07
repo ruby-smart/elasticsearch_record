@@ -197,7 +197,7 @@ module ElasticsearchRecord
       # @return [Integer] total amount of deleted docs
       def pit_delete(keep_alive: '1m', batch_size: 1_000, refresh: true)
         # spawns a new query with disabled results (so only ids will be resolved)
-        delete_count = spawn.meta_only!.pit_results(keep_alive:, batch_size:) do |results|
+        delete_count = spawn.meta_only!.pit_results(keep_alive: keep_alive, batch_size: batch_size) do |results|
           # skip empty results
           next unless results.any?
 

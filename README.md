@@ -617,17 +617,29 @@ end
 ```
 
 ## environment-related-table-name:
-Using the `_env_table_name`-method will resolve the table (index) name within the current environment,
-even if the environments shares the same cluster ...
+Table (index) names are resolved within the current environment, even if the environments share the
+same cluster ...
 
 This can be provided through the `database.yml` by using the `table_name_prefix/suffix` configuration keys.
-Within the migration the `_env_table_name`-method must be used in combination with the table (index) base name.
+**Every table statement applies them by default**, so a migration only ever names the table (index)
+_base_ name.
 
 **Example:**
 Production uses a index suffix with '-pro', development uses '-dev' - they share the same cluster, but different indexes.
 
-For the **settings** table:
+```yml
+production:
+  elasticsearch:
+    # ...
+    table_name_suffix: '-pro'
 
+development:
+  elasticsearch:
+    # ...
+    table_name_suffix: '-dev'
+```
+
+For the **settings** table / index this results in the following names:
 * settings-pro
 * settings-dev
 
@@ -637,7 +649,8 @@ A single migration can be created to be used within each environment:
 # Example migration
 class AddSettings < ActiveRecord::Migration[7.0]
   def up
-    create_table _env_table_name("settings"), force: true do |t|
+    # creates 'settings-pro' on production & 'settings-dev' on development
+    create_table "settings", force: true do |t|
       t.mapping :created_at, :date
       t.mapping :key, :integer do |m|
         m.primary_key = true
@@ -654,10 +667,62 @@ class AddSettings < ActiveRecord::Migration[7.0]
   end 
   
   def down
-    drop_table _env_table_name("settings")
+    drop_table "settings"
   end
 end 
 ```
+
+### opting out with `decorate: false`
+
+Provide `decorate: false` to address an index by its **literal** name:
+
+```ruby
+# addresses 'settings-pro' - even from a '-dev' suffixed connection
+drop_table "settings-pro", decorate: false
+```
+
+This is required in two cases:
+
+* the name is **already resolved** _(e.g. `Model.table_name`, or a name read back from `#tables`)_
+* the base name itself **starts with the prefix** or **ends with the suffix** - `_env_table_name`
+  keeps itself idempotent through a `start_with?` / `end_with?` check and cannot tell such a name
+  apart from an already resolved one
+
+The flag only ever applies to table (index) names - `alias`, `mapping`, `setting` & `meta` names are
+never touched. Statements taking **two** names _(`clone_table`, `rename_table`, `reindex_table`,
+`restore_table`, `backup_table`, `create_table copy_from:`)_ resolve both.
+
+The **schema statements** _(`table_exists?`, `table_schema`, `table_mappings`, `table_settings`,
+`columns`, ...)_ are deliberately **not** decorated - ActiveRecord and the schema dumper call them
+with an already resolved index name.
+
+The `_env_table_name`-method itself is still public, so existing migrations keep working - it is now
+redundant, since it resolves the very same name the statement would resolve on its own.
+
+### global kill-switch
+
+The default of a **not explicitly provided** `decorate:` argument is resolved from a global flag:
+
+```ruby
+# e.g. in an initializer
+ElasticsearchRecord.decorate_table_names = false
+```
+
+Setting it to `false` restores the former, opt-in behaviour, where the decoration had to be applied
+by hand through `_env_table_name`. A single statement can still opt in or out on its own, so
+`decorate: true` keeps working while the flag is off:
+
+```ruby
+ElasticsearchRecord.decorate_table_names = false
+
+drop_table "settings"                  # => drops 'settings'
+drop_table "settings", decorate: true  # => drops 'settings-dev'
+drop_table _env_table_name("settings") # => drops 'settings-dev' (the former syntax)
+```
+
+The schema dumper follows the flag: while the decoration is globally disabled it dumps the **full**
+index name with an explicit `decorate: false`, so a dumped schema stays correct even if the flag is
+flipped back on before it is loaded.
 
 ## Docs
 

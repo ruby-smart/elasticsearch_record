@@ -45,6 +45,25 @@ module ActiveRecord
           false
         end
 
+        # returns true if the BASE name may be dumped, which keeps the dump loadable in another
+        # environment (with its own prefix / suffix): every table statement decorates its name on
+        # its own, so the base name may only be dumped if that decoration lands on exactly this
+        # index again. Otherwise the FULL name is dumped with a +decorate: false+.
+        #
+        # see @ ActiveRecord::ConnectionAdapters::Elasticsearch::TableStatements#_env_table_name
+        def _dumps_base_name?(table, base_name)
+          # without a prefix & suffix nothing is ever decorated - the plain name IS the index
+          return true unless _has_env_table_names?
+
+          # a globally disabled decoration would leave the base name untouched while loading
+          return false unless ElasticsearchRecord.decorate_table_names
+
+          # the base name must resolve BACK to the real index. It does not if the base name itself
+          # starts with the prefix (or ends with the suffix), and not if the dumper was built with a
+          # prefix / suffix that differs from the one of the connection.
+          @connection._env_table_name(base_name) == table
+        end
+
         def table(table, stream, nested_blocks: false, **)
           begin
             self.table_name = table
@@ -57,10 +76,12 @@ module ActiveRecord
 
             tbl.print "  create_table"
 
-            if _has_env_table_names?
-              tbl.print " _env_table_name(#{remove_prefix_and_suffix(table).inspect})"
+            base_name = remove_prefix_and_suffix(table)
+
+            if _dumps_base_name?(table, base_name)
+              tbl.print " #{base_name.inspect}"
             else
-              tbl.print " #{remove_prefix_and_suffix(table).inspect}"
+              tbl.print " #{table.inspect}, decorate: false"
             end
 
             tbl.print ", force: true do |t|"

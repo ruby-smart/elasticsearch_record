@@ -263,8 +263,8 @@ module ActiveRecord # :nodoc:
 
         # PLEASE NOTE: Don't remove the +statistics+ assignment here.
         # - this is required as referenced hash for the instrumentation
-        log(gate, arguments, name, async:, statistics: (statistics = {})) do
-          with_raw_connection(allow_retry:, materialize_transactions:) do |conn|
+        log(gate, arguments, name, async: async, statistics: (statistics = {})) do
+          with_raw_connection(allow_retry: allow_retry, materialize_transactions: materialize_transactions) do |conn|
             response = ::ActiveSupport::Dependencies.interlock.permit_concurrent_loads do
               # determinate the correct target from the provided gate
               if gate.is_a?(Symbol) || !gate.include?('.')
@@ -386,11 +386,11 @@ module ActiveRecord # :nodoc:
       def log(gate, arguments, name = 'QUERY', async: false, statistics: nil, &block)
         @instrumenter.instrument(
           "query.elasticsearch_record",
-          gate:,
-          name:,
-          arguments:,
-          async:,
-          statistics:,
+          gate: gate,
+          name: name,
+          arguments: arguments,
+          async: async,
+          statistics: statistics,
           connection: self,
           &block
         )

@@ -23,7 +23,8 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::TableStatements 
     expect(adapter.internal_metadata.table_name).to eq('ar_internal_metadata')
   end
 
-  # each of the four *_tables methods filters out the two AR-internal indices
+  # the *_tables methods are plain loops - they neither resolve nor filter a name on their own,
+  # both is left to the singular statement they delegate to
   {
     open_tables:     :open_table,
     close_tables:    :close_table,
@@ -33,24 +34,130 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::TableStatements 
     describe "##{plural}" do
       before { allow(adapter).to receive(singular) }
 
-      it 'excludes the schema_migrations & internal metadata tables' do
-        adapter.public_send(plural, 'schema_migrations', 'ar_internal_metadata', 'some-index')
+      it 'maps over every provided table' do
+        adapter.public_send(plural, 'index-a', 'index-b')
 
-        expect(adapter).to have_received(singular).with('some-index')
-        expect(adapter).not_to have_received(singular).with('schema_migrations')
-        expect(adapter).not_to have_received(singular).with('ar_internal_metadata')
+        expect(adapter).to have_received(singular).with('index-a', decorate: nil)
+        expect(adapter).to have_received(singular).with('index-b', decorate: nil)
       end
 
-      it 'returns nil without calling through when only internal tables were provided' do
-        expect(adapter.public_send(plural, 'schema_migrations', 'ar_internal_metadata')).to be_nil
+      it 'returns an empty array without any provided table' do
+        expect(adapter.public_send(plural)).to eq([])
         expect(adapter).not_to have_received(singular)
       end
 
-      it 'maps over every remaining table' do
-        adapter.public_send(plural, 'index-a', 'index-b')
+      # the singular statement owns the decoration, so the RAW flag is forwarded - resolving the
+      # name here would decorate it a second time
+      it 'forwards the decorate flag untouched' do
+        adapter.public_send(plural, 'some-index', decorate: false)
 
-        expect(adapter).to have_received(singular).with('index-a')
-        expect(adapter).to have_received(singular).with('index-b')
+        expect(adapter).to have_received(singular).with('some-index', decorate: false)
+      end
+
+      it 'forwards an explicit decorate: true' do
+        adapter.public_send(plural, 'some-index', decorate: true)
+
+        expect(adapter).to have_received(singular).with('some-index', decorate: true)
+      end
+    end
+  end
+
+  # only +#truncate_table+ guards the AR-internal indices - a truncate is a 'drop & create' in
+  # elasticsearch and would wipe the migration state of the whole environment
+  describe 'the internal table guard' do
+    describe '#truncate_table' do
+      before do
+        allow(adapter).to receive(:create_table)
+        allow(adapter).to receive(:table_schema).and_return({})
+      end
+
+      it 'raises for the schema migrations table' do
+        expect { adapter.truncate_table('schema_migrations') }
+          .to raise_error(ArgumentError, /Cannot truncate internal table 'schema_migrations'/)
+
+        expect(adapter).not_to have_received(:create_table)
+      end
+
+      it 'raises for the internal metadata table' do
+        expect { adapter.truncate_table('ar_internal_metadata') }
+          .to raise_error(ArgumentError, /Cannot truncate internal table 'ar_internal_metadata'/)
+      end
+
+      it 'raises before resolving the schema of the table' do
+        expect { adapter.truncate_table('schema_migrations') }.to raise_error(ArgumentError)
+
+        expect(adapter).not_to have_received(:table_schema)
+      end
+
+      it 'passes any other table through' do
+        expect { adapter.truncate_table('some-index') }.not_to raise_error
+
+        expect(adapter).to have_received(:create_table).with('some-index', hash_including(force: true, decorate: false))
+      end
+
+      it 'aborts a #truncate_tables call on the first internal table' do
+        expect { adapter.truncate_tables('some-index', 'schema_migrations', 'other-index') }
+          .to raise_error(ArgumentError, /Cannot truncate internal table/)
+
+        expect(adapter).to have_received(:create_table).with('some-index', any_args)
+        expect(adapter).not_to have_received(:create_table).with('other-index', any_args)
+      end
+
+      # the check runs on the ALREADY resolved name and +_internal_table_names+ holds both forms -
+      # a BASE name would otherwise never match the resolved one the schema migration provides
+      context 'with a configured prefix & suffix' do
+        subject(:adapter) do
+          ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.new(
+            ElasticsearchSpec::CONFIG.symbolize_keys.merge(table_name_prefix: 'pre_', table_name_suffix: '_suf'))
+        end
+
+        before do
+          allow(adapter).to receive(:schema_migration)
+                              .and_return(instance_double(ElasticsearchRecord::SchemaMigration, table_name: 'pre_schema_migrations_suf'))
+        end
+
+        it 'raises for the base name' do
+          expect { adapter.truncate_table('schema_migrations') }
+            .to raise_error(ArgumentError, /Cannot truncate internal table 'pre_schema_migrations_suf'/)
+        end
+
+        it 'raises for the already resolved name' do
+          expect { adapter.truncate_table('pre_schema_migrations_suf') }
+            .to raise_error(ArgumentError, /Cannot truncate internal table 'pre_schema_migrations_suf'/)
+        end
+
+        # +ActiveRecord::InternalMetadata+ resolves through +ActiveRecord::Base+, so it stays
+        # undecorated while the schema migration does not - both forms have to be covered
+        it 'raises for the undecorated internal metadata table' do
+          expect { adapter.truncate_table('ar_internal_metadata', decorate: false) }
+            .to raise_error(ArgumentError, /Cannot truncate internal table 'ar_internal_metadata'/)
+        end
+
+        it 'passes a literal name through with decorate: false' do
+          allow(adapter).to receive(:create_table)
+          allow(adapter).to receive(:table_schema).and_return({})
+
+          expect { adapter.truncate_table('schema_migrations', decorate: false) }.not_to raise_error
+        end
+      end
+    end
+
+    # +ActiveRecord::SchemaMigration#drop_table+ & +ActiveRecord::InternalMetadata#drop_table+ both
+    # call +connection.drop_table(table_name, if_exists: true)+ - a guard here would break that API
+    describe '#drop_table' do
+      before do
+        allow(adapter).to receive(:api).and_return({})
+        allow(adapter).to receive(:schema_cache)
+                            .and_return(instance_double(ActiveRecord::ConnectionAdapters::BoundSchemaReflection, clear_data_source_cache!: nil))
+      end
+
+      %w[schema_migrations ar_internal_metadata].each do |internal|
+        it "drops the internal '#{internal}' table" do
+          expect { adapter.drop_table(internal, if_exists: true) }.not_to raise_error
+
+          expect(adapter).to have_received(:api)
+                               .with('indices.delete', { index: internal, ignore: 404 }, 'DROP TABLE')
+        end
       end
     end
   end
@@ -91,6 +198,251 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::TableStatements 
 
       it 'returns an unfrozen String' do
         expect(adapter._env_table_name('my-index')).not_to be_frozen
+      end
+    end
+
+    # 'table_name_prefix:' without a value is a valid yml entry and resolves to nil - which blew up
+    # the +start_with?+ check. Harmless while the method was opt-in, but it now runs on EVERY
+    # table statement.
+    context 'with a nil prefix & suffix' do
+      subject(:adapter) do
+        ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.new(
+          ElasticsearchSpec::CONFIG.symbolize_keys.merge(table_name_prefix: nil, table_name_suffix: nil))
+      end
+
+      it 'does not raise' do
+        expect { adapter._env_table_name('my-index') }.not_to raise_error
+      end
+
+      it 'returns the name unchanged' do
+        expect(adapter._env_table_name('my-index')).to eq('my-index')
+      end
+    end
+  end
+
+  # Every table statement resolves its name(s) through +#_env_table_name+ by DEFAULT - so a
+  # migration only ever names the base table. +decorate: false+ addresses an index literally.
+  describe 'the decorate flag' do
+    subject(:adapter) do
+      ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.new(
+        ElasticsearchSpec::CONFIG.symbolize_keys.merge(table_name_prefix: 'pre_', table_name_suffix: '_suf'))
+    end
+
+    # keeps these examples off the cluster - only the resolved index name is the subject here
+    before do
+      allow(adapter).to receive(:api).and_return({})
+      allow(adapter).to receive(:schema_cache).and_return(instance_double(ActiveRecord::ConnectionAdapters::BoundSchemaReflection, clear_data_source_cache!: nil))
+    end
+
+    describe '#drop_table' do
+      it 'decorates the table name by default' do
+        adapter.drop_table('my-index')
+
+        expect(adapter).to have_received(:api)
+                             .with('indices.delete', hash_including(index: 'pre_my-index_suf'), 'DROP TABLE')
+      end
+
+      it 'keeps the table name with decorate: false' do
+        adapter.drop_table('my-index', decorate: false)
+
+        expect(adapter).to have_received(:api)
+                             .with('indices.delete', hash_including(index: 'my-index'), 'DROP TABLE')
+      end
+
+      # THE case the flag exists for: the guard of +_env_table_name+ cannot tell a resolved name
+      # apart from a base name that legitimately starts with the prefix
+      it 'addresses a name that starts with the prefix literally' do
+        adapter.drop_table('pre_tools', decorate: false)
+
+        expect(adapter).to have_received(:api)
+                             .with('indices.delete', hash_including(index: 'pre_tools'), 'DROP TABLE')
+      end
+    end
+
+    # REGRESSION: +rename_table+ only forwarded the flag to the statements it calls - the
+    # +schema_cache+ and the +cluster_health+ call in between address the index directly and were
+    # left with the UNDECORATED name, so the health check waited for an index that does not exist
+    describe '#rename_table' do
+      before do
+        allow(adapter).to receive(:clone_table)
+        allow(adapter).to receive(:cluster_health)
+        allow(adapter).to receive(:drop_table)
+      end
+
+      it 'resolves both names before waiting for the cluster health' do
+        adapter.rename_table('my-index', 'my-target')
+
+        expect(adapter).to have_received(:cluster_health)
+                             .with(hash_including(index: 'pre_my-target_suf'))
+      end
+
+      it 'clears the schema cache of the resolved name' do
+        adapter.rename_table('my-index', 'my-target')
+
+        expect(adapter.schema_cache).to have_received(:clear_data_source_cache!).with('pre_my-index_suf')
+      end
+
+      # both names are resolved HERE, so the statements below must not decorate them again
+      it 'hands the resolved names down with decorate: false' do
+        adapter.rename_table('my-index', 'my-target')
+
+        expect(adapter).to have_received(:clone_table).with('pre_my-index_suf', 'pre_my-target_suf', decorate: false)
+        expect(adapter).to have_received(:drop_table).with('pre_my-index_suf', decorate: false)
+      end
+
+      it 'keeps both names with decorate: false' do
+        adapter.rename_table('my-index', 'my-target', decorate: false)
+
+        expect(adapter).to have_received(:clone_table).with('my-index', 'my-target', decorate: false)
+        expect(adapter).to have_received(:cluster_health).with(hash_including(index: 'my-target'))
+      end
+    end
+
+    describe '#refresh_table' do
+      it 'decorates the table name by default' do
+        adapter.refresh_table('my-index')
+
+        expect(adapter).to have_received(:api)
+                             .with('indices.refresh', { index: 'pre_my-index_suf' }, 'REFRESH TABLE')
+      end
+
+      it 'keeps the table name with decorate: false' do
+        adapter.refresh_table('my-index', decorate: false)
+
+        expect(adapter).to have_received(:api).with('indices.refresh', { index: 'my-index' }, 'REFRESH TABLE')
+      end
+    end
+
+    describe '#open_table' do
+      it 'decorates the table name by default' do
+        adapter.open_table('my-index')
+
+        expect(adapter).to have_received(:api).with('indices.open', { index: 'pre_my-index_suf' }, 'OPEN TABLE')
+      end
+
+      it 'keeps the table name with decorate: false' do
+        adapter.open_table('my-index', decorate: false)
+
+        expect(adapter).to have_received(:api).with('indices.open', { index: 'my-index' }, 'OPEN TABLE')
+      end
+    end
+
+    describe '#close_table' do
+      it 'decorates the table name by default' do
+        adapter.close_table('my-index')
+
+        expect(adapter).to have_received(:api).with('indices.close', { index: 'pre_my-index_suf' }, 'CLOSE TABLE')
+      end
+    end
+
+    describe '#block_table' do
+      it 'decorates the table name by default' do
+        adapter.block_table('my-index')
+
+        expect(adapter).to have_received(:api)
+                             .with('indices.add_block', { index: 'pre_my-index_suf', block: :write }, 'BLOCK WRITE TABLE')
+      end
+
+      it 'keeps the table name with decorate: false' do
+        adapter.block_table('my-index', :read, decorate: false)
+
+        expect(adapter).to have_received(:api)
+                             .with('indices.add_block', { index: 'my-index', block: :read }, 'BLOCK READ TABLE')
+      end
+    end
+
+    # a statement with TWO names - both are decorated (or both left alone)
+    describe '#reindex_table' do
+      it 'decorates both table names by default' do
+        adapter.reindex_table('source', 'target')
+
+        expect(adapter).to have_received(:api).with(
+          :reindex,
+          { body: { source: { index: 'pre_source_suf' }, dest: { index: 'pre_target_suf' } } },
+          'REINDEX TABLE')
+      end
+
+      it 'keeps both table names with decorate: false' do
+        adapter.reindex_table('source', 'target', decorate: false)
+
+        expect(adapter).to have_received(:api).with(
+          :reindex,
+          { body: { source: { index: 'source' }, dest: { index: 'target' } } },
+          'REINDEX TABLE')
+      end
+    end
+
+    # the flag reaches +change_table+ through +_exec_change_table_with+
+    describe 'the mapping / setting / alias statements' do
+      before { allow(adapter).to receive(:change_table) }
+
+      # nil forwards the GLOBAL default - only an explicitly provided flag is passed through
+      it 'forwards decorate: nil by default' do
+        adapter.add_mapping('my-index', :name, :keyword)
+
+        expect(adapter).to have_received(:change_table).with('my-index', recreate: false, decorate: nil)
+      end
+
+      it 'forwards a provided decorate: false' do
+        adapter.add_mapping('my-index', :name, :keyword, decorate: false)
+
+        expect(adapter).to have_received(:change_table).with('my-index', recreate: false, decorate: false)
+      end
+
+      it 'does not leak the flag into the mapping options' do
+        adapter.change_setting('my-index', 'index.blocks.write', nil, decorate: false)
+
+        expect(adapter).to have_received(:change_table).with('my-index', recreate: false, decorate: false)
+      end
+    end
+
+    # the global kill-switch only provides the DEFAULT for a statement that was not given an
+    # explicit +decorate:+ argument
+    describe 'ElasticsearchRecord.decorate_table_names' do
+      around do |example|
+        ElasticsearchRecord.decorate_table_names = false
+        example.run
+      ensure
+        ElasticsearchRecord.decorate_table_names = true
+      end
+
+      it 'defaults to true' do
+        ElasticsearchRecord.decorate_table_names = true
+
+        expect(ElasticsearchRecord.decorate_table_names).to be(true)
+      end
+
+      it 'stops the decoration of a statement without the flag' do
+        adapter.refresh_table('my-index')
+
+        expect(adapter).to have_received(:api).with('indices.refresh', { index: 'my-index' }, 'REFRESH TABLE')
+      end
+
+      it 'is still overruled by an explicit decorate: true' do
+        adapter.refresh_table('my-index', decorate: true)
+
+        expect(adapter).to have_received(:api).with('indices.refresh', { index: 'pre_my-index_suf' }, 'REFRESH TABLE')
+      end
+
+      # the plural statement forwards the RAW flag - the global default is resolved by the singular
+      # one it delegates to, so the kill-switch reaches through
+      it 'also stops the decoration of the *_tables statements' do
+        adapter.refresh_tables('my-index')
+
+        expect(adapter).to have_received(:api).with('indices.refresh', { index: 'my-index' }, 'REFRESH TABLE')
+      end
+
+      it 'reaches the statements behind _exec_change_table_with' do
+        adapter.add_mapping('my-index', :name, :keyword)
+
+        expect(adapter).to have_received(:api)
+                             .with('indices.put_mapping', hash_including(index: 'my-index'), 'ADD MAPPING', any_args)
+      end
+
+      # +_env_table_name+ is the raw resolver - it stays unaffected, so existing migrations that
+      # call it by hand keep working while the automatic decoration is off
+      it 'does not disable the _env_table_name method itself' do
+        expect(adapter._env_table_name('my-index')).to eq('pre_my-index_suf')
       end
     end
   end
@@ -306,11 +658,11 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::TableStatements 
     ####################
 
     describe '#rename_table' do
-      # PLEASE NOTE: +rename_table+ is part of the +define_unsupported_method+ list, but the real
-      # implementation is defined AFTER it - so it overwrites the raising one.
+      # +rename_table+ used to sit in the +define_unsupported_method+ list while the real
+      # implementation was defined AFTER it - this pins that the implemented one is in place.
       it 'is implemented (and not the unsupported placeholder)' do
         expect(adapter.method(:rename_table).parameters)
-          .to eq([[:req, :table_name], [:req, :target_name], [:key, :timeout], [:keyrest, :options]])
+          .to eq([[:req, :table_name], [:req, :target_name], [:key, :timeout], [:key, :decorate], [:keyrest, :options]])
       end
 
       it 'moves the table to the target name' do
@@ -791,6 +1143,147 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::TableStatements 
           adapter.remove_alias(index_name, 'alias-b')
 
           expect(aliases).to eq({})
+        end
+      end
+    end
+  end
+
+  # END-TO-END proof of the default decoration: a migration only ever names the BASE table and
+  # every statement resolves it against the prefix / suffix of the connection config.
+  #
+  # SAFETY: the decorated name stays within +TestIndex::ALLOWED+, so it can never wipe a real index.
+  context 'against a real index with a configured suffix', :elasticsearch do
+    subject(:adapter) do
+      ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.new(
+        ElasticsearchSpec::CONFIG.symbolize_keys.merge(table_name_suffix: '_suffixed'))
+    end
+
+    # the name a migration would use ...
+    let(:base_name) { TestIndex.name }
+
+    # ... and the index it actually resolves to
+    let(:decorated_name) { "#{TestIndex.name}_suffixed" }
+
+    let(:target_name) { "#{TestIndex.name}-target" }
+
+    # 0 replicas, so a clone can reach the 'green' state +#rename_table+ waits for on a single node
+    let(:table_definition) do
+      proc do |t|
+        t.mapping :name, :keyword
+
+        t.setting 'index.number_of_shards', '1'
+        t.setting 'index.number_of_replicas', '0'
+      end
+    end
+
+    after do
+      [base_name, decorated_name, target_name, "#{target_name}_suffixed"].each { |name| TestIndex.drop!(name) }
+      # the auto-generated backup names carry a timestamp - resolve & drop them
+      ElasticsearchSpec.connection.tables.grep(/-snapshot-\d+\z/).each { |name| TestIndex.drop!(name) }
+    end
+
+    describe '#create_table' do
+      it 'creates the decorated index from a base name' do
+        adapter.create_table(base_name, force: true, &table_definition)
+
+        expect(TestIndex.exists?(decorated_name)).to be(true)
+      end
+
+      it 'does not create the undecorated index' do
+        adapter.create_table(base_name, force: true, &table_definition)
+
+        expect(TestIndex.exists?(base_name)).to be(false)
+      end
+
+      it 'creates the literal index with decorate: false' do
+        adapter.create_table(base_name, force: true, decorate: false) { |t| t.mapping :name, :keyword }
+
+        expect(TestIndex.exists?(base_name)).to be(true)
+        expect(TestIndex.exists?(decorated_name)).to be(false)
+      end
+    end
+
+    context 'with an existing table' do
+      before { adapter.create_table(base_name, force: true, &table_definition) }
+
+      # the SCHEMA statements are deliberately NOT decorated - they are called by ActiveRecord &
+      # the schema dumper with an already resolved index name
+      describe '#table_exists?' do
+        it 'is not decorated' do
+          expect(adapter.table_exists?(decorated_name)).to be(true)
+          expect(adapter.table_exists?(base_name)).to be(false)
+        end
+      end
+
+      describe '#add_mapping' do
+        it 'reaches the decorated index through the base name' do
+          adapter.add_mapping(base_name, :added, :integer)
+
+          expect(adapter.table_mappings(decorated_name)['properties']).to include('added')
+        end
+      end
+
+      describe '#change_setting' do
+        it 'reaches the decorated index through the base name' do
+          adapter.change_setting(base_name, 'index.number_of_replicas', 0)
+
+          expect(adapter.table_settings(decorated_name)['index.number_of_replicas']).to eq('0')
+        end
+      end
+
+      describe '#refresh_table' do
+        it 'reaches the decorated index through the base name' do
+          expect(adapter.refresh_table(base_name)).to be(true)
+        end
+      end
+
+      describe '#rename_table' do
+        it 'decorates BOTH names' do
+          adapter.rename_table(base_name, target_name)
+
+          expect(TestIndex.exists?("#{target_name}_suffixed")).to be(true)
+          expect(TestIndex.exists?(decorated_name)).to be(false)
+        end
+      end
+
+      describe '#backup_table' do
+        # REGRESSION: the auto-generated name is built from the ALREADY resolved name - building it
+        # from the raw argument would append the suffix BEHIND the '-snapshot-' part
+        it 'builds the auto-generated target from the decorated name' do
+          expect(adapter.backup_table(base_name)).to match(/\A#{Regexp.escape(decorated_name)}-snapshot-\d+\z/)
+        end
+
+        it 'decorates a provided target' do
+          adapter.backup_table(base_name, to: target_name)
+
+          expect(TestIndex.exists?("#{target_name}_suffixed")).to be(true)
+        end
+      end
+
+      describe '#restore_table' do
+        it 'restores the decorated index from a decorated backup' do
+          adapter.backup_table(base_name, to: target_name)
+          adapter.drop_table(base_name)
+          adapter.restore_table(base_name, from: target_name)
+
+          expect(TestIndex.exists?(decorated_name)).to be(true)
+        end
+      end
+
+      describe '#truncate_table' do
+        it 'keeps the decorated index (and its mappings) in place' do
+          adapter.truncate_table(base_name)
+
+          expect(TestIndex.exists?(decorated_name)).to be(true)
+          expect(adapter.table_mappings(decorated_name)['properties']).to include('name')
+        end
+      end
+
+      describe '#drop_table' do
+        it 'drops the decorated index through the base name' do
+          adapter.drop_table(base_name)
+
+          expect(TestIndex.exists?(decorated_name)).to be(false)
         end
       end
     end
