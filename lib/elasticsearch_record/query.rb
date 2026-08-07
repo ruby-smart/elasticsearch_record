@@ -17,6 +17,10 @@ module ElasticsearchRecord
     # (the +esql+ API namespace does not exist before that)
     TYPE_ESQL = :esql
 
+    # the minimum cluster version that provides the +esql+ API namespace.
+    # see @ ElasticsearchRecord::Querying::ClassMethods#esql
+    ESQL_MIN_VERSION = Gem::Version.new('8.11')
+
     # -- DOCUMENT TYPES ------------------------------------------------------------------------------------------------
     TYPE_CREATE = :create
     TYPE_UPDATE = :update

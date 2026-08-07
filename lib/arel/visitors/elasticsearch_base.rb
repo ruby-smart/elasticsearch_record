@@ -47,6 +47,10 @@ module Arel # :nodoc: all
         @nested      = false
         @nested_args = []
 
+        # required to tell a +query_clause+ visit apart from a +where_clause+ visit.
+        # see @ Arel::Visitors::ElasticsearchQuery#visit_Arel_Nodes_Or
+        @within_query_clause = false
+
         # we don't need to forward the collector each time - we just set it and always access it, when we need.
         self.collector = collector
 

@@ -47,10 +47,62 @@ module ElasticsearchRecord
 
     # returns the response total value.
     # either chops the +total+ value directly from response, from hits or aggregations.
-    # @return [Integer]
+    #
+    # IMPORTANT: this is not necessarily an EXACT count. Elasticsearch stops counting at 10.000
+    # hits by default and then reports the total as a lower bound - check +total_exact?+ (or
+    # +total_relation+) before presenting this number as "the" amount of records.
+    # Returns +nil+ if the query explicitly opted out of counting ('track_total_hits: false').
+    # @return [Integer, nil]
     def total
       # chop total from response and not from the generated data
       @total ||= _total
+    end
+
+    # returns the relation of the resolved +total+:
+    # * +'eq'+  - the total is exact
+    # * +'gte'+ - the total is a LOWER BOUND (elasticsearch stopped counting)
+    # * +nil+   - the response carries no relation _(aggregations, tabular, ...)_
+    #
+    # see @ https://www.elastic.co/guide/en/elasticsearch/reference/8.19/search-your-data.html#track-total-hits
+    # @return [String, nil]
+    def total_relation
+      return nil unless response.key?('hits')
+
+      total = response['hits']['total']
+
+      total.is_a?(Hash) ? total['relation'] : nil
+    end
+
+    # true unless elasticsearch reported the +total+ as a lower bound.
+    # @return [Boolean]
+    def total_exact?
+      total_relation != 'gte'
+    end
+
+    # true if the response only carries PARTIAL results.
+    #
+    # Since Elasticsearch 8.19 an +ES|QL+ query does not fail anymore when a shard is unavailable
+    # or the query times out - it answers with whatever it could gather and sets this flag.
+    # A +search+ response signals the very same situation through +timed_out+ / +_shards.failed+.
+    #
+    # see @ ElasticsearchRecord.error_on_partial_results
+    # @return [Boolean]
+    def is_partial?
+      !!response['is_partial']
+    end
+
+    # the number of documents elasticsearch had to read to answer a +ES|QL+ query.
+    # PLEASE NOTE: only reported since Elasticsearch 8.19.
+    # @return [Integer, nil]
+    def documents_found
+      response['documents_found']
+    end
+
+    # the number of values elasticsearch had to load to answer a +ES|QL+ query.
+    # PLEASE NOTE: only reported since Elasticsearch 8.19.
+    # @return [Integer, nil]
+    def values_loaded
+      response['values_loaded']
     end
 
     # Returns the RAW +_source+ data from each hit.
@@ -230,15 +282,33 @@ module ElasticsearchRecord
     end
 
     # resolves total value from response
-    # @return [Integer]
+    # @return [Integer, nil]
     def _total
       return self.response['total'] if self.response.key?('total')
-      return self.response['hits']['total']['value'] if self.response.key?('hits')
+      return _hits_total if self.response.key?('hits')
       return self.response['aggregations'].count if self.response.key?('aggregations')
       # a tabular response has no total - the transferred rows are all there is
       return _tabular_values.length if _tabular?
 
       0
+    end
+
+    # resolves the total from the 'hits' node.
+    #
+    # PLEASE NOTE: 'hits.total' is a {'value' =>, 'relation' =>} Hash since Elasticsearch 7 - but
+    # it is a plain Integer if the request was sent with 'rest_total_hits_as_int', and it is
+    # ABSENT entirely for a 'track_total_hits: false' query.
+    # @return [Integer, nil]
+    def _hits_total
+      total = self.response['hits']['total']
+
+      case total
+      when Hash    then total['value']
+      when Integer then total
+      else
+        # the caller explicitly opted out of counting - there is no total to report
+        nil
+      end
     end
 
     # true if the response is TABULAR - which is what the +sql+ & +esql+ APIs return instead of a

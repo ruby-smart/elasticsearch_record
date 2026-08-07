@@ -5,6 +5,19 @@ module Arel # :nodoc: all
     module ElasticsearchQuery
       extend ActiveSupport::Concern
 
+      # maps a +bool+ occurrence to its opposite - used to invert a nested +Not+ node.
+      # see @ #visit_Arel_Nodes_Not
+      INVERTED_ASSIGN_KEYS = {
+        filter:   :must_not,
+        must:     :must_not,
+        must_not: :filter
+      }.freeze
+
+      # the two halves a +range+ can be build from - two bounds of the SAME half must never be merged.
+      # see @ #_mergeable_range?
+      RANGE_LOWER_BOUNDS = %i[gt gte].freeze
+      RANGE_UPPER_BOUNDS = %i[lt lte].freeze
+
       private
 
       ######################
@@ -273,7 +286,20 @@ module Arel # :nodoc: all
         #   assign(:filter, []) ...
         assign(visit(o.left), []) do
           # assign(terms: ...)
-          assign(visit(o.right))
+          _within_query_clause { assign(visit(o.right)) }
+        end
+      end
+
+      # CUSTOM node by elasticsearch_record
+      # a +QueryClause+ only reaches the visitor through a grouped +Or+ - anywhere else it is already
+      # unwrapped into a +SelectQuery+ node by +QueryClauseTree#ast+.
+      # see @ ElasticsearchRecord::Relation::QueryClause#ast
+      # see @ Arel::Visitors::ElasticsearchQuery#visit_Arel_Nodes_Or
+      def visit_ElasticsearchRecord_Relation_QueryClause(o)
+        key, predicates, _opts = o.ast
+
+        assign(visit(key), []) do
+          assign(visit(predicates))
         end
       end
 
@@ -364,9 +390,92 @@ module Arel # :nodoc: all
         end
       end
 
-      # DIRECT FAIL
+      # DIRECT ASSIGNMENT
+      # transforms an inclusive range _(+year: 2020..2021+)_ into a +range+ query.
+      # ActiveRecord provides this as a +Between+ node, which nests both bounds within a +And+ node.
+      # see @ ActiveRecord::PredicateBuilder::RangeHandler
+      def visit_Arel_Nodes_Between(o)
+        left, right = o.right.children.map { |child| visit(child) }
+
+        return failed! if _unusable_range_bound?(left) || _unusable_range_bound?(right)
+
+        assign(:filter, [{ range: { visit(o.left) => { gte: left, lte: right } } }])
+      end
+
+      # DIRECT ASSIGNMENT
+      #
+      # IMPORTANT: only the modern +gt+, +gte+, +lt+ & +lte+ keys are generated here.
+      # Elasticsearch deprecated the legacy +from+, +to+, +include_lower+ & +include_upper+ keys
+      # with 8.16 _(they still resolve correctly, but emit a deprecation warning)_.
+      # This also keeps the write-direction symmetric to the read-direction
+      # (see @ ActiveRecord::ConnectionAdapters::Elasticsearch::Type::Range).
+      def visit_Arel_Nodes_GreaterThan(o)
+        _assign_range(o, :gt)
+      end
+
+      # DIRECT ASSIGNMENT
+      def visit_Arel_Nodes_GreaterThanOrEqual(o)
+        _assign_range(o, :gte)
+      end
+
+      # DIRECT ASSIGNMENT
+      def visit_Arel_Nodes_LessThan(o)
+        _assign_range(o, :lt)
+      end
+
+      # DIRECT ASSIGNMENT
+      def visit_Arel_Nodes_LessThanOrEqual(o)
+        _assign_range(o, :lte)
+      end
+
+      # DIRECT ASSIGNMENT
+      # inverts all assignments of the nested node - a +where.not+ on anything but a simple
+      # value _(e.g. +where.not(year: 2020..2021)+)_ arrives as a +Not+ node.
+      # PLEASE NOTE: a simple +where.not(year: 2020)+ does +not+ create a +Not+ node,
+      # but a +NotEqual+ node.
+      def visit_Arel_Nodes_Not(o)
+        args = _merge_range_assignments(_capture_assignments { visit(o.expr) })
+
+        return if args.blank?
+
+        # IMPORTANT: a nested node may resolve to SEVERAL clauses, and those are AND-ed.
+        # Inverting each of them individually would produce 'NOT a AND NOT b' - but negating a
+        # conjunction must produce 'NOT (a AND b)' _(De Morgan)_. So anything that is not a
+        # single clause gets wrapped into one nested +bool+ clause before being negated.
+        if args.length == 1 && args[0][1].is_a?(Array) && args[0][1].length == 1
+          key, value = args[0]
+          assign(INVERTED_ASSIGN_KEYS.fetch(key, key), value)
+        else
+          assign(:must_not, [{ bool: args.to_h }])
+        end
+
+        nil
+      end
+
+      # DIRECT ASSIGNMENT
+      def visit_Arel_Nodes_NotIn(o)
+        self.collector.preparable = false
+
+        attr, values = o.left, o.right
+
+        if Array === values
+          values.delete_if { |value| unboundable?(value) } unless values.empty?
+
+          # a 'NOT IN ()' does not restrict anything - opposite to a 'IN ()', which never matches.
+          # This is provided by a totally unbounded range (+year: nil..nil+).
+          return if values.empty?
+        end
+
+        assign(:must_not, [{ terms: { visit(attr) => visit(values) } }])
+      end
+
+      # DIRECT ASSIGNMENT
+      # a +Grouping+ only ever wraps a +Or+ here - ActiveRecord builds it in
+      # +ActiveRecord::Relation::WhereClause#or+.
+      # Every other grouped expression is NOT supported and will force to fail the query.
       def visit_Arel_Nodes_Grouping(o)
-        # grouping is NOT supported and will force to fail the query
+        return visit(o.expr) if o.expr.is_a?(::Arel::Nodes::Or)
+
         failed!
       end
 
@@ -413,30 +522,44 @@ module Arel # :nodoc: all
       end
 
       def visit_Arel_Nodes_And(o)
-        collect(o.children)
+        # An exclusive range (+year: 2020...2021+) does not arrive as a +Between+ node, but as
+        # +And[GreaterThanOrEqual, LessThan]+. Visiting the children individually would emit one
+        # +range+ clause per bound - which is a valid _(and correctly AND-ed)_ query, but reads as
+        # '{range: {year: {gte: 2020}}}, {range: {year: {lt: 2021}}}'.
+        # We therefore capture the children's assignments and merge +range+ clauses that address
+        # the same field into a single clause.
+        _merge_range_assignments(_capture_assignments { collect(o.children) })
+          .each { |key, value| assign(key, value) }
+
+        nil
       end
 
-      # # toDo: doesn't work properly - maybe restructure OR-assignments
-      # def visit_Arel_Nodes_Or(o)
-      #   # If the bool query includes at least one should clause and no must or filter clauses, the default value is 1.
-      #   # Otherwise, the default value is 0.
-      #   assign(:should, []) do
-      #     assign(nil, {}) do
+      # DIRECT ASSIGNMENT
+      # resolves each side of the OR into an own, nested +bool+ and assigns them as +should+.
       #
-      #     stack = [o.right, o.left]
-      #
-      #     while o = stack.pop
-      #       if o.is_a?(Arel::Nodes::Or)
-      #         stack.push o.right, o.left
-      #       elsif o.is_a?(ElasticsearchRecord::Relation::QueryClause)
-      #         assign(visit(o.ast[1]))
-      #       else
-      #         visit o
-      #       end
-      #     end
-      #   end
-      #   end
-      # end
+      # IMPORTANT: +minimum_should_match+ MUST be provided explicitly. Elasticsearch only defaults it
+      # to 1 if the +bool+ carries no +must+ or +filter+ clause - as soon as a +where+ is chained
+      # alongside the +or+, the default becomes 0 and every +should+ turns into a pure scoring hint
+      # that does not restrict anything.
+      # see @ ActiveRecord::Relation::WhereClause#or
+      def visit_Arel_Nodes_Or(o)
+        clause = {
+          bool: {
+            should:               _flatten_or(o).map { |node|
+              { bool: _merge_range_assignments(_capture_assignments { visit(node) }).to_h }
+            },
+            minimum_should_match: 1
+          }
+        }
+
+        # a +query_clause+ OR is visited from within an already opened +assign(key, [])+ block
+        # (see @ #visit_Arel_Nodes_SelectQuery), which appends whatever the visit RETURNS.
+        # A +where_clause+ OR on the other hand is resolved directly below the +bool+ node, where
+        # nothing picks up a return value - so it has to assign itself.
+        return clause if @within_query_clause
+
+        assign(:filter, [clause])
+      end
 
       def visit_Arel_Nodes_JoinSource(o)
         visit(o.left) if o.left
@@ -528,6 +651,139 @@ module Arel # :nodoc: all
 
       def visit_Arel_Nodes_False(o)
         false
+      end
+
+      ###########
+      # HELPERS #
+      ###########
+
+      # assigns a single-bounded +range+ query for the provided comparison node.
+      # @param [Arel::Nodes::Binary] o
+      # @param [Symbol] operator - one of +:gt+, +:gte+, +:lt+, +:lte+
+      def _assign_range(o, operator)
+        right = visit(o.right)
+
+        return failed! if _unusable_range_bound?(right)
+
+        assign(:filter, [{ range: { visit(o.left) => { operator => right } } }])
+      end
+
+      # returns true if the provided range bound can never resolve a valid query.
+      # @param [Object] value
+      # @return [Boolean]
+      def _unusable_range_bound?(value)
+        unboundable?(value) || invalid?(value)
+      end
+
+      # collects all assignments the provided block would have claimed - without claiming them.
+      # This reuses the +@nested+ mechanic of +#assign+, so nested assignments are gathered
+      # within +@nested_args+ instead of being sent to the collector.
+      # @return [Array] - array of +[key, value]+ assignment args
+      def _capture_assignments
+        old_nested, @nested           = @nested, true
+        old_nested_args, @nested_args = @nested_args, []
+
+        yield
+
+        captured    = @nested_args
+        @nested     = old_nested
+        @nested_args = old_nested_args
+
+        captured
+      end
+
+      # merges assignments of the same key and, within those, +range+ clauses of the same field.
+      # Sibling nodes each claim their own assignment, so a exclusive range arrives as two
+      # separate +[:filter, [...]]+ args that have to be joined before they can be merged.
+      # @param [Array] args - array of +[key, value]+ assignment args
+      # @return [Array]
+      def _merge_range_assignments(args)
+        joined = args.each_with_object([]) do |(key, value), result|
+          existing = value.is_a?(Array) && result.find { |item| item[0] == key && item[1].is_a?(Array) }
+
+          if existing
+            existing[1] += value
+          else
+            result << [key, value]
+          end
+        end
+
+        joined.map do |key, value|
+          next [key, value] unless value.is_a?(Array)
+
+          [key, _merge_range_clauses(value)]
+        end
+      end
+
+      # merges +range+ clauses of the same field within a single clause list.
+      #
+      # IMPORTANT: this is DELIBERATELY strict - only a LOWER bound may be merged with an UPPER
+      # bound. Two bounds of the same half must stay separate, since merging them would keep just
+      # one and silently WIDEN the query:
+      #   +where(year: 2022..).where(year: 2020..)+ must stay 'gte 2022 AND gte 2020'
+      #   - merging it down to 'gte 2020' would resolve way too many records.
+      # @param [Array] clauses
+      # @return [Array]
+      def _merge_range_clauses(clauses)
+        clauses.each_with_object([]) do |clause, result|
+          field = _sole_range_field(clause)
+          other = field && result.find { |item| _mergeable_range?(item, clause, field) }
+
+          if other
+            other[:range][field] = other[:range][field].merge(clause[:range][field])
+          else
+            result << clause
+          end
+        end
+      end
+
+      # returns true if both clauses address the provided field with opposite - and non-overlapping -
+      # range bounds, so they can be merged into a single clause.
+      # @param [Object] clause
+      # @param [Object] other
+      # @param [String, Symbol] field
+      # @return [Boolean]
+      def _mergeable_range?(clause, other, field)
+        return false unless _sole_range_field(clause) == field
+
+        bounds       = clause[:range][field].keys
+        other_bounds = other[:range][field].keys
+
+        return false if bounds.intersect?(other_bounds)
+
+        (bounds + other_bounds).intersect?(RANGE_LOWER_BOUNDS) &&
+          (bounds + other_bounds).intersect?(RANGE_UPPER_BOUNDS)
+      end
+
+      # marks the provided block as running within a +query_clause+ assignment, where a visit
+      # RETURNS its clause instead of assigning it.
+      # see @ #visit_Arel_Nodes_SelectQuery / #visit_Arel_Nodes_Or
+      def _within_query_clause
+        old, @within_query_clause = @within_query_clause, true
+
+        yield
+      ensure
+        @within_query_clause = old
+      end
+
+      # flattens nested OR nodes into a single list of operands, so a chained
+      # +a.or(b).or(c)+ resolves into three sibling +should+ clauses instead of nested ones.
+      # @param [Object] node
+      # @return [Array]
+      def _flatten_or(node)
+        return [node] unless node.is_a?(::Arel::Nodes::Or)
+
+        _flatten_or(node.left) + _flatten_or(node.right)
+      end
+
+      # returns the field name, if the provided clause is a +range+ clause of exactly one field.
+      # @param [Object] clause
+      # @return [String, Symbol, nil]
+      def _sole_range_field(clause)
+        return nil unless clause.is_a?(Hash) && clause.keys == [:range]
+        return nil unless clause[:range].is_a?(Hash) && clause[:range].size == 1
+
+        clause[:range].keys.first
       end
     end
   end

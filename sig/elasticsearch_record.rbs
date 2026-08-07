@@ -1,4 +1,94 @@
+# Signatures for the parts of the gem an application configures or calls directly.
+#
+# PLEASE NOTE: this is deliberately NOT a full description of the gem. The adapter overrides a large
+# amount of private ActiveRecord & Arel internals, and typing those would pin the signatures of
+# another gem's private API. Only the surface an application actually touches is declared here.
 module ElasticsearchRecord
-  VERSION: String
-  # See the writing guide of rbs: https://github.com/ruby/rbs#guides
+  VERSION: untyped
+
+  def self.version: () -> Gem::Version
+
+  # raise instead of silently swallowing a transaction
+  attr_accessor self.error_on_transaction: bool
+
+  # resolve table names with the configured +table_name_prefix+ / +table_name_suffix+
+  attr_accessor self.decorate_table_names: bool
+
+  # raise instead of returning a PARTIAL (ES|QL) result
+  attr_accessor self.error_on_partial_results: bool
+
+  class Result
+    include Enumerable[untyped]
+
+    attr_reader response: Hash[untyped, untyped]
+    attr_reader columns: Array[untyped]
+    attr_reader column_types: Hash[untyped, untyped]
+
+    def self.empty: (?columns: Array[untyped], ?column_types: Hash[untyped, untyped]) -> Result
+
+    def initialize: (untyped response, ?Array[untyped] columns, ?Hash[untyped, untyped] column_types) -> void
+
+    # nil if the query opted out of counting ('track_total_hits: false')
+    def total: () -> Integer?
+
+    # 'eq' (exact), 'gte' (lower bound) or nil
+    def total_relation: () -> String?
+    def total_exact?: () -> bool
+
+    def is_partial?: () -> bool
+    def documents_found: () -> Integer?
+    def values_loaded: () -> Integer?
+
+    def results: () -> Array[untyped]
+    def hits: () -> untyped
+    def aggregations: () -> untyped
+    def buckets: () -> untyped
+  end
+
+  module Relation
+    module QueryMethods
+      def kind: (untyped value) -> untyped
+      def configure: (*untyped args) -> untyped
+      def aggregate: (*untyped args) -> untyped
+      def refresh: (?bool value) -> untyped
+
+      # an elasticsearch time value ('30s', '1m', 0, -1); nil removes it again
+      def timeout: (String | Integer | nil | false value) -> untyped
+
+      def query: (*untyped args) -> untyped
+      def filter: (*untyped args) -> untyped
+      def must: (*untyped args) -> untyped
+      def must_not: (*untyped args) -> untyped
+      def should: (*untyped args) -> untyped
+
+      def knn: (Hash[untyped, untyped] | Array[Hash[untyped, untyped]] value) -> untyped
+
+      def restrict: (?includes: untyped?, ?excludes: untyped?, ?exclude_vectors: bool?) -> untyped
+    end
+
+    module ResultMethods
+      def point_in_time: (?keep_alive: String) { (String) -> void } -> nil
+                       | (?keep_alive: String) -> String
+      def pit_results: (?keep_alive: String, ?batch_size: Integer) -> untyped
+      def pit_delete: (?keep_alive: String, ?batch_size: Integer, ?refresh: bool) -> Integer
+
+      def response: () -> untyped
+      def aggregations: () -> untyped
+      def buckets: () -> untyped
+      def hits: () -> untyped
+      def results: () -> Array[untyped]
+
+      def total: () -> Integer?
+      def total_relation: () -> String?
+      def total_exact?: () -> bool
+    end
+  end
+
+  module Querying
+    module ClassMethods
+      def esql: (String esql, ?allow_partial_results: bool?) -> Result
+      def find_by_esql: (String esql, ?allow_partial_results: bool?) -> untyped
+      def msearch: (Array[untyped] queries) -> Result
+    end
+  end
 end

@@ -80,6 +80,25 @@ module ElasticsearchRecord
   # see @ ActiveRecord::ConnectionAdapters::Elasticsearch::TableStatements
   singleton_class.attr_accessor :decorate_table_names
   self.decorate_table_names = true
+
+  ##
+  # :singleton-method:
+  # Specifies if a exception should be raised for a PARTIAL result.
+  #
+  # Since Elasticsearch 8.19 an +ES|QL+ query no longer fails when a shard is unavailable or the
+  # query times out - it returns whatever it could gather and flags the response as +is_partial+.
+  # A caller that ignores the flag silently works with incomplete data.
+  #
+  # As default the flag is only reported _(through +ElasticsearchRecord::Result#is_partial?+)_ to
+  # not break existing applications. Enabling this raises an +ActiveRecord::StatementInvalid+
+  # instead.
+  #
+  # HINT: a single query can also opt out on the cluster side through the
+  # +allow_partial_results: false+ argument.
+  #
+  # see @ ElasticsearchRecord::Result#is_partial?
+  singleton_class.attr_accessor :error_on_partial_results
+  self.error_on_partial_results = false
 end
 
 ActiveSupport.on_load(:active_record) do

@@ -81,30 +81,24 @@ module ElasticsearchRecord
       # Returns search results for an ES|QL (Elasticsearch query language) query.
       #
       # @param [String] esql
+      # @param [Boolean, nil] allow_partial_results - see @ #esql
       # @param [Proc] block
-      def find_by_esql(esql, &block)
-        # build new query
-        query = ElasticsearchRecord::Query.new(
-          type: ElasticsearchRecord::Query::TYPE_ESQL,
-          body: { query: esql },
-          # IMPORTANT: Always provide all columns
-          columns: source_column_names)
-
-        _load_from_sql(_query_by_sql(query), &block)
+      def find_by_esql(esql, allow_partial_results: nil, &block)
+        _load_from_sql(_query_by_sql(_esql_query(esql, allow_partial_results)), &block)
       end
 
       # executes a +esql+ by provided *ES|SL* query
       # Does NOT instantiate records.
+      #
+      # PLEASE NOTE: since Elasticsearch 8.19 a ES|QL query answers with PARTIAL results instead of
+      # failing, whenever a shard is unavailable or the query times out. Provide
+      # +allow_partial_results: false+ to restore the former "fail loudly" behaviour for a single
+      # query - or set +ElasticsearchRecord.error_on_partial_results+ to raise on the client side.
+      #
       # @param [String] esql
-      def esql(esql)
-        # build new query
-        query = ElasticsearchRecord::Query.new(
-          type: ElasticsearchRecord::Query::TYPE_ESQL,
-          body: { query: esql },
-          # IMPORTANT: Always provide all columns
-          columns: source_column_names)
-
-        connection.exec_query(query, "#{name} ES|QL")
+      # @param [Boolean, nil] allow_partial_results
+      def esql(esql, allow_partial_results: nil)
+        connection.exec_query(_esql_query(esql, allow_partial_results), "#{name} ES|QL")
       end
 
 
@@ -141,6 +135,31 @@ module ElasticsearchRecord
       # execute query by msearch
       def _query_by_msearch(queries, async: false)
         connection.select_multiple(queries, "#{name} Msearch", async: async)
+      end
+
+      private
+
+      # builds the +ES|QL+ query and validates that the cluster can actually run it.
+      # @param [String] esql
+      # @param [Boolean, nil] allow_partial_results
+      # @return [ElasticsearchRecord::Query]
+      def _esql_query(esql, allow_partial_results = nil)
+        # the 'esql' API namespace simply does not exist before 8.11 - without this guard the call
+        # fails deep inside the client with a hardly readable NoMethodError
+        if connection.cluster_info[:version] < ElasticsearchRecord::Query::ESQL_MIN_VERSION
+          raise ::ActiveRecord::StatementInvalid,
+                "ES|QL requires Elasticsearch >= #{ElasticsearchRecord::Query::ESQL_MIN_VERSION} " \
+                "(this cluster runs #{connection.cluster_info[:version]})"
+        end
+
+        arguments = allow_partial_results.nil? ? {} : { allow_partial_results: allow_partial_results }
+
+        ElasticsearchRecord::Query.new(
+          type:      ElasticsearchRecord::Query::TYPE_ESQL,
+          body:      { query: esql },
+          arguments: arguments,
+          # IMPORTANT: Always provide all columns
+          columns:   source_column_names)
       end
     end
   end

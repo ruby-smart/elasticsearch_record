@@ -15,10 +15,13 @@ _ElasticsearchRecord is a ActiveRecord adapter and provides similar functionalit
 **PLEASE NOTE:**
 
 - This is the `main`-branch, which currently supports rails **7.1** _(see section 'Rails_Versions' for supported versions)_
-- supports ActiveRecord ~> 7.1 + Elasticsearch >= 7.17
-- added features up to Elasticsearch `8.17.1`
+- supports ActiveRecord ~> 7.1 + Elasticsearch >= 8.0, < 9
+- added features up to Elasticsearch `8.19`
+- tested against Elasticsearch `8.19.14`
 - _ES|QL_ queries _(`TYPE_ESQL` / the `esql.query` gate)_ require **Elasticsearch >= 8.11**, where the feature became
-  generally available. All other features remain available from Elasticsearch `7.17`.
+  generally available - the adapter raises for an older cluster.
+- the `elasticsearch` client is locked to the **8.x** line: a 7.x client cannot address an 8.x server outside of the
+  compatibility mode, and the 9.x client sends a `compatible-with=9` header that every 8.x server rejects.
 
 -----
 
@@ -47,7 +50,7 @@ https://github.com/ruby-smart/elasticsearch_record/tree/rails-7-0-stable
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'elasticsearch_record', '~> 1.8'
+gem 'elasticsearch_record', '~> 2.0'
 
 # alternative
 gem 'elasticsearch_record', git: 'https://github.com/ruby-smart/elasticsearch_record', branch: 'rails-7-1-stable'
@@ -222,12 +225,37 @@ Search.where(name: ['A nice object','or other object'])
 Search.where(name: nil)
 # > must_not: { exists: { field: 'name' } }
 
+# use it with a range
+Search.where(amount: 10..20)
+# > filter: {range: {amount: {gte: 10, lte: 20}}}
+
+Search.where(amount: 10...20)
+# > filter: {range: {amount: {gte: 10, lt: 20}}}
+
+# endless & beginless ranges
+Search.where(amount: 10..)
+# > filter: {range: {amount: {gte: 10}}}
+Search.where(amount: ..20)
+# > filter: {range: {amount: {lte: 20}}}
+
+# negated
+Search.where.not(amount: 10..20)
+# > must_not: [{range: {amount: {gte: 10, lte: 20}}}]
+
 # -------------------------------------------------------------------
 
 # use it with a prefix
 Search.where(:should, term: {name: 'Mano'})
 # > should: {term: {name: 'Mano'}}
+
+# combine two scopes with OR
+Search.where(name: 'A').or(Search.where(name: 'B'))
+# > filter: [{bool: {should: [{bool: {filter: [{term: {name: 'A'}}]}},
+# >                          {bool: {filter: [{term: {name: 'B'}}]}}], minimum_should_match: 1}}]
 ```
+
+_PLEASE NOTE: only the modern `gte` / `gt` / `lte` / `lt` range keys are generated - Elasticsearch deprecated
+`from`, `to`, `include_lower` & `include_upper` with 8.16._
 
 ### Result methods:
 You can simply return RAW data without instantiating ActiveRecord objects:
@@ -236,7 +264,7 @@ You can simply return RAW data without instantiating ActiveRecord objects:
 
 # returns the response RAW hits hash.
 hits = Search.where(name: 'A nice object').hits
-# > {"total"=>{"value"=>5, "relation"=>"eq"}, "max_score"=>1.0, "hits"=>[{ "_index": "search", "_type": "_doc", "_id": "abc123", "_score": 1.0, "_source": { "name": "A nice object", ...
+# > {"total"=>{"value"=>5, "relation"=>"eq"}, "max_score"=>1.0, "hits"=>[{ "_index": "search", "_id": "abc123", "_score": 1.0, "_source": { "name": "A nice object", ...
 
 # Returns the RAW +_source+ data from each hit - aka. +rows+.
 results = Search.where(name: 'A nice object').results
@@ -287,11 +315,14 @@ _(also see @ [github](https://github.com/ruby-smart/elasticsearch_record/blob/ma
 - must_not
 - must
 - should
-- aggregate
-- restrict 
+- knn
+- restrict
+- select
+- joins
 - hits_only!
 - aggs_only!
 - total_only!
+- meta_only!
 
 _see simple documentation about these methods @ {ElasticsearchRecord::Relation::QueryMethods rubydoc}_
 

@@ -14,7 +14,7 @@ DESC
 
   spec.homepage              = "https://github.com/ruby-smart/elasticsearch_record"
   spec.license               = "MIT"
-  spec.required_ruby_version = ">= 2.7.0"
+  spec.required_ruby_version = ">= 3.1.0"
 
   spec.metadata["allowed_push_host"] = "https://rubygems.org"
   spec.metadata["homepage_uri"]      = spec.homepage
@@ -33,7 +33,12 @@ DESC
   spec.require_paths = ["lib"]
 
   spec.add_dependency 'activerecord', '~> 7.1.0'
-  spec.add_dependency 'elasticsearch', '>= 7.17'
+
+  # IMPORTANT: the client is locked to the 8.x line.
+  # A 7.x client cannot address an 8.x server outside of the compatibility mode, and the 9.x client
+  # sends an 'Accept: application/vnd.elasticsearch+json; compatible-with=9' header that every 8.x
+  # server rejects with a media_type_header_exception (HTTP 400).
+  spec.add_dependency 'elasticsearch', '>= 8.0', '< 9'
 
   spec.add_development_dependency 'coveralls_reborn', '~> 0.25'
   spec.add_development_dependency 'rspec', '~> 3.0'

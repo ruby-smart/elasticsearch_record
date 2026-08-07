@@ -33,7 +33,8 @@ RSpec.describe 'Elasticsearch connection', :elasticsearch do
       expect(info).to include(:cluster_name, :version)
       # the adapter parses the reported version into a Gem::Version
       expect(info[:version]).to be_a(Gem::Version)
-      expect(info[:version]).to be >= Gem::Version.new('7.17')
+      # the gemspec locks the client to the 8.x line, so the server has to be 8.x too
+      expect(info[:version]).to be >= Gem::Version.new('8.0')
     end
   end
 

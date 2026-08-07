@@ -70,11 +70,27 @@ module ElasticsearchRecord
 
         return initial_pit_id unless block_given?
 
-        # block provided, so yield with id
-        yield initial_pit_id
+        begin
+          # block provided, so yield with id
+          yield initial_pit_id
+        rescue ::Exception
+          # IMPORTANT: the PIT must be closed even if the block raised - it holds open search
+          # contexts on EVERY shard until its +keep_alive+ expires, and a loop that dies halfway
+          # through (see @ #pit_results) would otherwise leak one per attempt.
+          #
+          # A failure of the close itself is swallowed here on purpose: raising from this path
+          # would REPLACE the exception that actually caused the abort with a follow-up error.
+          begin
+            _close_point_in_time(initial_pit_id)
+          rescue ::StandardError
+            nil
+          end
+
+          raise
+        end
 
         # close PIT
-        klass.connection.api(:close_point_in_time, { body: { id: initial_pit_id } }, "#{klass} Close Pit")
+        _close_point_in_time(initial_pit_id)
 
         # return nil if everything was ok
         nil
@@ -161,8 +177,21 @@ module ElasticsearchRecord
             # we ran out of data
             break if current_results_length < batch_size
 
+            # the cursor of the NEXT batch: the sort values of the last hit, plus the (possibly
+            # refreshed) pit id.
+            # IMPORTANT: both are read defensively - a response without a 'sort' (the order was
+            # silently dropped) or without a 'pit_id' would raise a bare NoMethodError deep inside
+            # the loop, which says nothing about the actual cause.
+            next_search_after = current_result.response.dig('hits', 'hits', -1, 'sort')
+            next_pit_id       = current_result.response['pit_id']
+
+            if next_search_after.blank? || next_pit_id.blank?
+              raise(::ActiveRecord::StatementInvalid,
+                    "'pit_results' aborted - the response carries no #{next_search_after.blank? ? "'sort' values (missing order)" : "'pit_id'"}")
+            end
+
             # additional security - prevents infinite loops
-            if current_pit_hash[:search_after] == current_result.response['hits']['hits'][-1]['sort'] && current_pit_hash[:pit][:id] == current_result.response['pit_id']
+            if current_pit_hash[:search_after] == next_search_after && current_pit_hash[:pit][:id] == next_pit_id
               raise(::ActiveRecord::StatementInvalid, "'pit_results' aborted due an infinite loop error (invalid or missing order)")
             end
 
@@ -172,7 +201,7 @@ module ElasticsearchRecord
             results_offset -= current_results_length
 
             # assign new pit
-            current_pit_hash = { search_after: current_result.response['hits']['hits'][-1]['sort'], pit: { id: current_result.response['pit_id'], keep_alive: keep_alive } }
+            current_pit_hash = { search_after: next_search_after, pit: { id: next_pit_id, keep_alive: keep_alive } }
 
             # we need to justify the +batch_size+ if the query reaches over the limit
             batch_size = results_limit - results_total if results_offset < batch_size && (results_total + batch_size) > results_limit
@@ -244,8 +273,26 @@ module ElasticsearchRecord
       end
 
       # returns the total value
+      #
+      # IMPORTANT: elasticsearch stops counting at +index.max_result_window+ (10.000 by default) and
+      # then reports a LOWER BOUND instead of an exact count - so a returned 10.000 may well mean
+      # "10.000 or more". Use +total_exact?+ to tell the two apart, or +count+, which resolves the
+      # real number through the +_count+ API.
+      # see @ ElasticsearchRecord::Result#total
       def total
         loaded? ? @total : spawn.total_only!.resolve('Total').total
+      end
+
+      # true unless the resolved +total+ is only a lower bound.
+      # see @ ElasticsearchRecord::Result#total_exact?
+      def total_exact?
+        spawn.total_only!.resolve('Total').total_exact?
+      end
+
+      # returns the relation of the resolved +total+ - either 'eq', 'gte' or nil.
+      # see @ ElasticsearchRecord::Result#total_relation
+      def total_relation
+        spawn.total_only!.resolve('Total').total_relation
       end
 
       # sets query as "hits"-only query (drops the aggs from the query)
@@ -271,6 +318,15 @@ module ElasticsearchRecord
       # @return [self]
       def meta_only!
         select(::ElasticsearchRecord::Query::COLUMNS_NONE).configure!({ aggs: nil, _source: false })
+      end
+
+      private
+
+      # closes the provided point in time.
+      # see @ #point_in_time
+      # @param [String] pit_id
+      def _close_point_in_time(pit_id)
+        klass.connection.api(:close_point_in_time, { body: { id: pit_id } }, "#{klass} Close Pit")
       end
     end
   end

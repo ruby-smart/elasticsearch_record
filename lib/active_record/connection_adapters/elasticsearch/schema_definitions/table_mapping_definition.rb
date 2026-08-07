@@ -11,10 +11,36 @@ module ActiveRecord
 
         # available mapping properties
         # - see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-params.html
+        #
+        # PLEASE NOTE: this list is only enforced for a +strict: true+ definition - every other
+        # definition forwards unknown parameters to the cluster untouched. It therefore has to stay
+        # in sync with the field types +ColumnMethods+ exposes, or +strict+ becomes unusable for
+        # them (which is exactly what happened for +dense_vector+, +semantic_text+ & friends).
         ATTRIBUTES = [:analyzer, :coerce, :copy_to, :doc_values, :dynamic, :eager_global_ordinals, :enabled,
                       :fielddata, :fields, :format, :ignore_above, :ignore_malformed, :index_options, :index_phrases,
                       :index_prefixes, :index, :meta, :normalizer, :norms, :null_value, :position_increment_gap,
-                      :properties, :search_analyzer, :similarity, :subobjects, :store, :term_vector].freeze
+                      :properties, :search_analyzer, :similarity, :subobjects, :store, :term_vector,
+
+                      # -- vectors (dense_vector, sparse_vector) --------------------------------------
+                      :dims, :element_type,
+
+                      # -- semantic_text (>= 8.15) -----------------------------------------------------
+                      :inference_id, :search_inference_id, :chunking_settings,
+
+                      # -- aggregate_metric_double -----------------------------------------------------
+                      :metrics, :default_metric,
+
+                      # -- constant_keyword ------------------------------------------------------------
+                      :value,
+
+                      # -- time series (TSDS) ----------------------------------------------------------
+                      :time_series_dimension, :time_series_metric,
+
+                      # -- remaining type specific parameters ------------------------------------------
+                      :depth_limit, :scaling_factor, :max_input_length, :positive_score_impact,
+                      :relations, :path, :orientation, :ignore_z_value, :boost, :locale,
+                      :null_value_as_boolean, :preserve_position_increments, :split_queries_on_whitespace,
+                      :max_shingle_size, :script, :on_script_error, :dynamic_templates].freeze
 
         # define virtual attributes, that must be assigned due a special logic
         ASSIGNABLE_ATTRIBUTES = [:comment, :primary_key, :auto_increment, :meta].freeze

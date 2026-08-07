@@ -35,6 +35,20 @@ module ActiveRecord
                          'routing.rebalance.enable', 'gc_deletes', 'default_pipeline', 'final_pipeline',
                          'hidden', 'blocks',
 
+                         # index lifecycle management
+                         'lifecycle',
+
+                         # mapping limits, and the 8.15+ home of the synthetic '_source' mode
+                         # ('mapping.source.mode' replaced the deprecated '_source.mode' mapping node)
+                         'mapping',
+
+                         # time series data streams (TSDS)
+                         'time_series', 'look_ahead_time', 'look_back_time',
+
+                         # write / caching behaviour
+                         'write.wait_for_active_shards', 'priority', 'max_slices_per_scroll',
+                         'queries.cache.enabled', 'requests.cache.enable',
+
                          # modules
                          'translog'].freeze
 

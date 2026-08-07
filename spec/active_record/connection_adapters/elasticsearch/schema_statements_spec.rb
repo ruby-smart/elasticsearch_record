@@ -322,11 +322,11 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaStatements
 
       # no mapping ever returns these - they are prepended so the virtual columns stay accessible
       it 'prepends the metadata fields' do
-        expect(definitions.first(5).map { |d| d['name'] }).to eq(%w[_id _index _score _type _ignored])
+        expect(definitions.first(4).map { |d| d['name'] }).to eq(%w[_id _index _score _ignored])
       end
 
       it 'returns every mapped property' do
-        expect(definitions.map { |d| d['name'] }).to eq(%w[_id _index _score _type _ignored count name user uuid])
+        expect(definitions.map { |d| d['name'] }).to eq(%w[_id _index _score _ignored count name user uuid])
       end
 
       # +resolve_fields_and_properties+ flattens the multi-fields into a dotted name
@@ -358,7 +358,7 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaStatements
         create_plain_index! { |_t| }
 
         expect(adapter.column_definitions(plain_index_name).map { |d| d['name'] })
-          .to eq(%w[_id _index _score _type _ignored])
+          .to eq(%w[_id _index _score _ignored])
       end
     end
 

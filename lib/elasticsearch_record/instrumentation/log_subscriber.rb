@@ -7,6 +7,18 @@ module ElasticsearchRecord
 
       IGNORE_PAYLOAD_NAMES = %w[SCHEMA EXPLAIN EXCLUDE]
 
+      # every deprecation message that was already written to the log.
+      # see @ #log_warnings
+      # @return [Set<String>]
+      def self.logged_warnings
+        @logged_warnings ||= Set.new
+      end
+
+      # forgets all already logged deprecation messages, so they are reported again.
+      def self.reset_logged_warnings
+        @logged_warnings = Set.new
+      end
+
       def self.runtime=(value)
         Thread.current["elasticsearch_record_runtime"] = value
       end
@@ -24,9 +36,14 @@ module ElasticsearchRecord
       def query(event)
         self.class.runtime += event.duration
 
-        return unless logger.debug?
-
         payload = event.payload
+
+        # IMPORTANT: deprecation warnings are logged INDEPENDENTLY of the log level and of
+        # +IGNORE_PAYLOAD_NAMES+ - they announce a syntax the cluster is going to remove, which
+        # would otherwise stay completely invisible until a major upgrade breaks the application.
+        log_warnings(payload)
+
+        return unless logger.debug?
         return if IGNORE_PAYLOAD_NAMES.include?(payload[:name])
 
         # build name from several payload data
@@ -54,6 +71,27 @@ module ElasticsearchRecord
       end
 
       private
+
+      # logs every deprecation warning the cluster reported for this request.
+      #
+      # PLEASE NOTE: each distinct message is only logged ONCE per process. A deprecated query that
+      # runs in a loop would otherwise flood the log with the very same line, and the point here is
+      # to make the message noticeable - not to count its occurrences.
+      # see @ ActiveRecord::ConnectionAdapters::ElasticsearchAdapter#_response_warnings
+      # @param [Hash] payload
+      def log_warnings(payload)
+        return unless payload[:statistics].is_a?(Hash)
+
+        warnings = payload[:statistics][:warnings]
+        return if warnings.blank?
+
+        warnings.each do |warning|
+          next unless self.class.logged_warnings.add?(warning)
+
+          message = "  [elasticsearch] DEPRECATION: #{warning}"
+          warn(colorize_logging ? color(message, RED, bold: true) : message)
+        end
+      end
 
       def name_color(name)
         if name.blank? || name.match(/^[\p{Lu}\ ]+$/) # uppercase letters only : API, DROP, CREATE, ...

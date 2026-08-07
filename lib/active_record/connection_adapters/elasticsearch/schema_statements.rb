@@ -406,10 +406,15 @@ module ActiveRecord
           end
 
           # returns a hash of current set, none-default settings in flat
+          #
+          # PLEASE NOTE: both nodes are read defensively. They are present on every version tested
+          # so far, but a missing one would raise a bare NoMethodError on nil - and a cluster that
+          # answers without them is not worth crashing over.
           # @return [Hash]
           def cluster_settings
             settings = api('cluster.get_settings', { flat_settings: true }, 'CLUSTER SETTINGS')
-            settings['persistent'].merge(settings['transient'])
+
+            (settings['persistent'] || {}).merge(settings['transient'] || {})
           end
 
           # returns the cluster health

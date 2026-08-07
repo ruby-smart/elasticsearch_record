@@ -227,12 +227,33 @@ RSpec.describe ElasticsearchRecord::Relation::QueryMethods, :elasticsearch do
       expect(relation.timeout('1m').to_sql.timeout).to eq('1m')
     end
 
-    it 'defaults to true' do
-      expect(relation.timeout.to_sql.timeout).to be(true)
-    end
-
     it 'does not write into the body' do
       expect(body_for(relation.timeout('1m'))).to eq({})
+    end
+
+    it 'accepts the special "wait indefinitely" and "abort immediately" values' do
+      # since Elasticsearch 8.15 '-1' waits indefinitely (it used to abort immediately)
+      expect(relation.timeout('-1').to_sql.timeout).to eq('-1')
+      expect(relation.timeout(0).to_sql.timeout).to eq(0)
+    end
+
+    it 'removes the timeout again for nil' do
+      expect(relation.timeout('1m').timeout(nil).to_sql.timeout).to be_nil
+    end
+
+    # REGRESSION: the former 'timeout(value = true)' default sent '?timeout=true', which every
+    # elasticsearch version rejects with a 400 illegal_argument_exception - so the method was
+    # unusable without an explicit value. It is now required and validated up front.
+    it 'requires a value' do
+      expect { relation.timeout }.to raise_error(ArgumentError, /wrong number of arguments/)
+    end
+
+    it 'raises for a value that is not an elasticsearch time value' do
+      expect { relation.timeout(true) }
+        .to raise_error(ArgumentError, /Unsupported timeout value true/)
+
+      expect { relation.timeout('soon') }
+        .to raise_error(ArgumentError, /Unsupported timeout value "soon"/)
     end
   end
 
@@ -535,22 +556,43 @@ RSpec.describe ElasticsearchRecord::Relation::QueryMethods, :elasticsearch do
   # OR #
   ######
 
-  # CAVEAT: +QueryClauseTree#or+ builds an +Arel::Nodes::Grouping+, and the ES visitor FAILS every
-  # grouping (there is no Elasticsearch equivalent, see the commented-out +visit_Arel_Nodes_Or+).
-  # So an +#or+ silently compiles into a query that matches NOTHING - pinned here as the current
-  # behaviour, not as a desired one.
-  # see @ Arel::Visitors::ElasticsearchQuery#visit_Arel_Nodes_Grouping
+  # +QueryClauseTree#or+ builds an +Arel::Nodes::Grouping+ around an +Arel::Nodes::Or+, which the
+  # visitor resolves into a nested +bool+ with +minimum_should_match: 1+.
+  #
+  # PLEASE NOTE: +minimum_should_match+ is NOT optional. Elasticsearch defaults it to 1 only while
+  # the +bool+ carries neither +must+ nor +filter+ - and this +bool+ is always assigned INTO a
+  # +filter+, so without it every +should+ would degrade to a pure scoring hint and the +or+ would
+  # stop restricting anything.
+  # see @ Arel::Visitors::ElasticsearchQuery#visit_Arel_Nodes_Or
   describe '#or' do
-    it 'compiles into a failed query for two query clauses' do
+    it 'compiles two query clauses into a should' do
       rel = relation.filter({ term: { name: 'x' } }).or(relation.filter({ term: { name: 'y' } }))
 
-      expect(rel.to_sql.status).to eq(ElasticsearchRecord::Query::STATUS_FAILED)
+      expect(rel.to_sql.status).to eq(ElasticsearchRecord::Query::STATUS_VALID)
+      expect(rel.to_sql.body[:query][:bool][:filter][0]).to eq({
+                                                                 bool: {
+                                                                   should:               [
+                                                                     { bool: { filter: [{ term: { name: 'x' } }] } },
+                                                                     { bool: { filter: [{ term: { name: 'y' } }] } }
+                                                                   ],
+                                                                   minimum_should_match: 1
+                                                                 }
+                                                               })
     end
 
-    it 'compiles into a failed query for two where clauses' do
+    it 'compiles two where clauses into a should' do
       rel = relation.where(name: 'x').or(relation.where(name: 'y'))
 
-      expect(rel.to_sql.status).to eq(ElasticsearchRecord::Query::STATUS_FAILED)
+      expect(rel.to_sql.status).to eq(ElasticsearchRecord::Query::STATUS_VALID)
+      expect(rel.to_sql.body[:query][:bool][:filter][0]).to eq({
+                                                                 bool: {
+                                                                   should:               [
+                                                                     { bool: { filter: [{ term: { 'name' => 'x' } }] } },
+                                                                     { bool: { filter: [{ term: { 'name' => 'y' } }] } }
+                                                                   ],
+                                                                   minimum_should_match: 1
+                                                                 }
+                                                               })
     end
 
     it 'wraps the clauses into a grouped Or node' do

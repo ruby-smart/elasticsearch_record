@@ -103,14 +103,84 @@ module ElasticsearchRecord
         configure!(:__query__, refresh: value)
       end
 
-      # sets the query's +timeout+ value.
-      # @param [Boolean] value (default: true)
-      def timeout(value = true)
+      # sets the query's +timeout+ value - the period each shard may spend on the search before
+      # returning whatever it gathered so far.
+      #
+      # The value must be an elasticsearch time value, e.g. +'30s'+, +'1m'+ or +'500ms'+.
+      # Two values behave special:
+      # * +0+  aborts immediately
+      # * +-1+ waits indefinitely _(since Elasticsearch 8.15 - it used to mean "abort immediately")_
+      #
+      # Providing +nil+ or +false+ removes a previously set timeout.
+      #
+      # PLEASE NOTE: a timed out search is NOT an error - elasticsearch answers with partial results
+      # and a +timed_out+ flag, which the adapter raises as +ActiveRecord::StatementTimeout+.
+      #
+      # @example
+      #   timeout('30s')
+      #
+      # @param [String, Integer, nil, false] value
+      def timeout(value)
         spawn.timeout!(value)
       end
 
-      def timeout!(value = true)
-        configure!(:__query__, timeout: value)
+      def timeout!(value)
+        configure!(:__query__, timeout: _validated_timeout(value))
+      end
+
+      # sets the query's +knn+ node - an approximate nearest neighbour search on a +dense_vector+
+      # field. Since Elasticsearch 8.12 this is a regular part of the search body, so it combines
+      # with the +query+ / +filter+ chain instead of replacing it.
+      #
+      # PLEASE NOTE: the provided structure is forwarded UNVALIDATED - the adapter does not try to
+      # keep up with the vector-search options of every release.
+      #
+      # @example
+      #   knn(field: :embedding, query_vector: [0.1, 0.2], k: 10, num_candidates: 100)
+      #
+      # @example several vector searches at once
+      #   knn([{field: :title_vector, ...}, {field: :body_vector, ...}])
+      #
+      # @param [Hash, Array<Hash>] value
+      def knn(value)
+        spawn.knn!(value)
+      end
+
+      def knn!(value)
+        configure!(knn: value)
+      end
+
+      # restricts the +_source+ fields that are transferred back for each hit.
+      #
+      # This is the counterpart of +select+: +select+ names the fields to KEEP _(and builds a
+      # projection ActiveRecord knows about)_, while +restrict+ addresses the raw +_source+ filter
+      # directly - which is the only way to EXCLUDE something.
+      #
+      # +exclude_vectors+ (Elasticsearch 8.19+) drops every +dense_vector+ / +sparse_vector+ field
+      # without having to name them. Vectors dominate the transferred payload of a hit, so this is
+      # usually the single most effective option on a vector-carrying index.
+      #
+      # @example
+      #   restrict(excludes: [:embedding])
+      #   restrict(includes: [:name, :count])
+      #   restrict(exclude_vectors: true)
+      #
+      # @param [Array, String, Symbol, nil] includes
+      # @param [Array, String, Symbol, nil] excludes
+      # @param [Boolean, nil] exclude_vectors
+      def restrict(includes: nil, excludes: nil, exclude_vectors: nil)
+        spawn.restrict!(includes: includes, excludes: excludes, exclude_vectors: exclude_vectors)
+      end
+
+      def restrict!(includes: nil, excludes: nil, exclude_vectors: nil)
+        source = {}
+        source[:includes]        = Array.wrap(includes) unless includes.nil?
+        source[:excludes]        = Array.wrap(excludes) unless excludes.nil?
+        source[:exclude_vectors] = exclude_vectors unless exclude_vectors.nil?
+
+        raise ArgumentError, 'Provide at least one of includes:, excludes: or exclude_vectors:' if source.empty?
+
+        configure!(_source: source)
       end
 
       # add a whole query 'node' to the query.
@@ -297,6 +367,28 @@ module ElasticsearchRecord
       end
 
       private
+
+      # elasticsearch time value: a number with an optional unit.
+      # see @ https://www.elastic.co/guide/en/elasticsearch/reference/8.19/api-conventions.html#time-units
+      TIMEOUT_PATTERN = /\A-?\d+(d|h|m|s|ms|micros|nanos)?\z/
+
+      # validates the provided +timeout+ value and returns it unchanged.
+      #
+      # This guard exists because elasticsearch rejects anything it cannot parse as a time value with
+      # a +400 illegal_argument_exception+ - which used to happen for EVERY call of the former
+      # 'timeout(value = true)' default, since 'timeout=true' is not a time value.
+      # @param [Object] value
+      # @return [String, Integer, nil, false]
+      def _validated_timeout(value)
+        # explicitly removes the timeout again
+        return value if value.nil? || value == false
+
+        return value if value.to_s.match?(TIMEOUT_PATTERN)
+
+        raise ArgumentError,
+              "Unsupported timeout value #{value.inspect}. Provide an elasticsearch time value " \
+              "(e.g. '30s', '1m', '500ms'), or nil to remove it."
+      end
 
       def build_where_clause(opts, _rest = [])
         case opts

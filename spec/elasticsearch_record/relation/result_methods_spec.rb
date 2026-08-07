@@ -271,14 +271,47 @@ RSpec.describe ElasticsearchRecord::Relation::ResultMethods, :elasticsearch do
                                               })
 
       allow(model.connection).to receive(:api).and_call_original
-      # prevents a real (never closed) pit - the raise skips the +close_point_in_time+
       allow(model.connection).to receive(:api)
         .with(:open_point_in_time, anything, anything).and_return({ 'id' => 'STUCK' })
+      # the faked pit id does not exist on the cluster, so closing it would answer with a 400 -
+      # +#point_in_time+ closes even on the error path (and swallows a failing close, so the
+      # original exception survives)
+      allow(model.connection).to receive(:api)
+        .with(:close_point_in_time, anything, anything).and_return({ 'succeeded' => true })
       allow(model.connection).to receive(:select_all).and_return(stuck)
 
       expect {
         model.all.pit_results(batch_size: 1)
       }.to raise_error(ActiveRecord::StatementInvalid, /aborted due an infinite loop error/)
+    end
+
+    # REGRESSION: the close used to sit AFTER the yield without any protection, so every exception
+    # inside the loop leaked a pit - which keeps search contexts open on every shard until its
+    # +keep_alive+ expires.
+    it 'closes the pit even when the block raises' do
+      allow(model.connection).to receive(:api).and_call_original
+      allow(model.connection).to receive(:api)
+        .with(:open_point_in_time, anything, anything).and_return({ 'id' => 'LEAKY' })
+
+      expect(model.connection).to receive(:api)
+                                    .with(:close_point_in_time, { body: { id: 'LEAKY' } }, anything)
+                                    .and_return({ 'succeeded' => true })
+
+      expect {
+        model.all.point_in_time { raise ArgumentError, 'boom' }
+      }.to raise_error(ArgumentError, 'boom')
+    end
+
+    it 'does not let a failing close replace the original exception' do
+      allow(model.connection).to receive(:api).and_call_original
+      allow(model.connection).to receive(:api)
+        .with(:open_point_in_time, anything, anything).and_return({ 'id' => 'LEAKY' })
+      allow(model.connection).to receive(:api)
+        .with(:close_point_in_time, anything, anything).and_raise(ActiveRecord::StatementInvalid, 'close failed')
+
+      expect {
+        model.all.point_in_time { raise ArgumentError, 'boom' }
+      }.to raise_error(ArgumentError, 'boom')
     end
 
     it 'closes the pit after resolving' do

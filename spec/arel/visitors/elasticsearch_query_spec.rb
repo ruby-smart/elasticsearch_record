@@ -791,6 +791,49 @@ RSpec.describe Arel::Visitors::Elasticsearch do
     end
   end
 
+  describe '#visit_Arel_Nodes_Or' do
+    # +minimum_should_match+ is what makes the OR restrict at all: Elasticsearch only defaults it
+    # to 1 while the +bool+ carries no +must+/+filter+ - and this one always sits inside a +filter+.
+    it 'resolves each side into a nested bool and requires one of them to match' do
+      manager = Arel::SelectManager.new(table)
+      manager.where(Arel::Nodes::Grouping.new(Arel::Nodes::Or.new(
+                                                Arel::Nodes::Equality.new(table['a'], query_attribute('a', '1')),
+                                                Arel::Nodes::Equality.new(table['b'], query_attribute('b', '2'))
+                                              )))
+
+      expect(visitor.compile(manager.ast).body).to eq({
+                                                        query: {
+                                                          bool: {
+                                                            filter: [{
+                                                                       bool: {
+                                                                         should:               [
+                                                                           { bool: { filter: [{ term: { 'a' => '1' } }] } },
+                                                                           { bool: { filter: [{ term: { 'b' => '2' } }] } }
+                                                                         ],
+                                                                         minimum_should_match: 1
+                                                                       }
+                                                                     }]
+                                                          }
+                                                        }
+                                                      })
+    end
+
+    it 'flattens a chained Or into sibling should clauses' do
+      manager = Arel::SelectManager.new(table)
+      manager.where(Arel::Nodes::Grouping.new(Arel::Nodes::Or.new(
+                                                Arel::Nodes::Or.new(
+                                                  Arel::Nodes::Equality.new(table['a'], query_attribute('a', '1')),
+                                                  Arel::Nodes::Equality.new(table['b'], query_attribute('b', '2'))
+                                                ),
+                                                Arel::Nodes::Equality.new(table['c'], query_attribute('c', '3'))
+                                              )))
+
+      should = visitor.compile(manager.ast).body[:query][:bool][:filter][0][:bool][:should]
+
+      expect(should.length).to eq(3)
+    end
+  end
+
   #########################
   # SOURCE / TABLE VISITS #
   #########################
@@ -918,15 +961,14 @@ RSpec.describe Arel::Visitors::Elasticsearch do
         .to raise_error(Arel::Visitors::ElasticsearchBase::UnsupportedVisitError, /visit_Arel_Nodes_Casted/)
     end
 
-    it 'raises for a grouped OR (Arel::Nodes::Or is not implemented)' do
+    # a grouping that does NOT wrap an Or has no Elasticsearch equivalent and still fails the query
+    it 'fails the query for a grouping of anything but an Or' do
       manager = Arel::SelectManager.new(table)
-      manager.where(Arel::Nodes::Or.new(
-                      Arel::Nodes::Equality.new(table['a'], query_attribute('a', '1')),
-                      Arel::Nodes::Equality.new(table['b'], query_attribute('b', '2'))
+      manager.where(Arel::Nodes::Grouping.new(
+                      Arel::Nodes::Equality.new(table['a'], query_attribute('a', '1'))
                     ))
 
-      expect { visitor.compile(manager.ast) }
-        .to raise_error(Arel::Visitors::ElasticsearchBase::UnsupportedVisitError, /visit_Arel_Nodes_Or/)
+      expect(visitor.compile(manager.ast).status).to eq(ElasticsearchRecord::Query::STATUS_FAILED)
     end
 
     # +method_missing+ only guards +visit_*+ - everything else keeps the regular NoMethodError

@@ -47,12 +47,15 @@ module ActiveRecord # :nodoc:
 
       # defines the Elasticsearch 'base' structure, which is always included but cannot be resolved through mappings ...
       # - see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-fields.html
+      #
+      # PLEASE NOTE: '_type' is NOT part of this anymore. Elasticsearch removed mapping types with
+      # 7.0 and stopped returning the field entirely with 8.0 - so it only ever resolved to +nil+,
+      # while making every model carry a dead attribute that cannot be filtered or sorted on.
       # @return [Hash]
       METADATA_FIELDS = [
         { 'name' => '_id', 'type' => 'keyword', 'meta' => { 'primary_key' => 'true' } },
         { 'name' => '_index', 'type' => 'keyword', 'virtual' => true },
         { 'name' => '_score', 'type' => 'float', 'virtual' => true },
-        { 'name' => '_type', 'type' => 'keyword', 'virtual' => true },
         { 'name' => '_ignored', 'type' => 'boolean', 'virtual' => true }
       ].freeze
 
@@ -283,8 +286,25 @@ module ActiveRecord # :nodoc:
               # this works, since we use a referenced hash ...
               statistics[:took] = response['took']
 
+              # ... the same way for any deprecation warning the cluster reported.
+              # PLEASE NOTE: this must happen HERE - the +Elasticsearch::API::Response+ wrapper (and
+              # with it the headers) is lost as soon as the response is handed to a +Result+.
+              statistics[:warnings] = _response_warnings(response)
+
               # raise timeouts
               raise(::ActiveRecord::StatementTimeout, "Elasticsearch api request failed due a timeout") if response['timed_out']
+
+              # An +ES|QL+ query does not fail on an unavailable shard since Elasticsearch 8.19 -
+              # it answers with PARTIAL results instead. Silently returning those would hand
+              # incomplete data to the caller as if it were complete.
+              # see @ ElasticsearchRecord.error_on_partial_results
+              if response['is_partial']
+                message = "Elasticsearch api request returned PARTIAL results (#{gate})"
+
+                raise(::ActiveRecord::StatementInvalid, message) if ElasticsearchRecord.error_on_partial_results
+
+                statistics[:warnings] = Array(statistics[:warnings]) + [message]
+              end
             end
 
             # return response
@@ -353,6 +373,11 @@ module ActiveRecord # :nodoc:
         when ::Elastic::Transport::Transport::Errors::Unauthorized
           ::ActiveRecord::DatabaseConnectionError.username_error(@config[:username])
           # must be last 'Elastic' error
+          #
+          # PLEASE NOTE: EVERY +Elastic::Transport+ status error inherits from +ServerError+ - the
+          # 4xx ones too. So this branch is not only about 5xx: it also catches +NotFound+ (404),
+          # +Forbidden+ (403, which is what a license-gated feature answers) and +TooManyRequests+
+          # (429), and turns them into a +StatementInvalid+ carrying the original message.
         when ::Elastic::Transport::Transport::ServerError
           ::ActiveRecord::StatementInvalid.new(message, sql: sql, binds: binds, connection_pool: @pool)
         else
@@ -396,6 +421,33 @@ module ActiveRecord # :nodoc:
         )
       rescue => e
         raise translate_exception_class(e, arguments, [])
+      end
+
+      # matches the quoted message of a HTTP 'Warning' header entry.
+      # Elasticsearch sends deprecations as
+      #   299 Elasticsearch-8.19.14-<build-hash> "Deprecated field [from] used, ..."
+      # and joins SEVERAL of them into one comma-separated header value - so only the quoted
+      # messages can be split apart reliably.
+      WARNING_MESSAGE_PATTERN = /"((?:[^"\\]|\\.)*)"/
+
+      # extracts the deprecation warnings of a response.
+      #
+      # Elasticsearch announces every deprecated syntax through a 'Warning' header long before it
+      # removes it - surfacing those is the cheapest way to find out what a major upgrade will break.
+      # @param [Elasticsearch::API::Response] response
+      # @return [Array<String>, nil]
+      def _response_warnings(response)
+        return nil unless response.respond_to?(:headers)
+
+        headers = response.headers
+        return nil if headers.blank?
+
+        warning = headers['warning'] || headers['Warning']
+        return nil if warning.blank?
+
+        Array.wrap(warning)
+             .flat_map { |entry| entry.to_s.scan(WARNING_MESSAGE_PATTERN).flatten }
+             .presence
       end
 
       # returns a new collector for the Arel visitor.

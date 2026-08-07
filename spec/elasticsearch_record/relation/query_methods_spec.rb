@@ -32,7 +32,7 @@ RSpec.describe 'ElasticsearchRecord::Relation::QueryMethods projections', :elast
   end
 
   # every metadata field except '_id'
-  let(:metadata_fields) { %w[_index _score _type _ignored] }
+  let(:metadata_fields) { %w[_index _score _ignored] }
 
   describe '#select' do
     it 'raises for every metadata field' do
