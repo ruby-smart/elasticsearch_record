@@ -6,6 +6,8 @@
 [![Gem Version](https://badge.fury.io/rb/elasticsearch_record.svg)](https://badge.fury.io/rb/elasticsearch_record)
 [![License](https://img.shields.io/github/license/ruby-smart/elasticsearch_record)](docs/LICENSE)
 
+[![Coverage Status](https://coveralls.io/repos/github/ruby-smart/elasticsearch_record/badge.svg?branch=main&kill_cache=1)](https://coveralls.io/github/ruby-smart/elasticsearch_record?branch=main)
+
 ActiveRecord adapter for Elasticsearch
 
 _ElasticsearchRecord is a ActiveRecord adapter and provides similar functionality for Elasticsearch._
@@ -16,7 +18,7 @@ _ElasticsearchRecord is a ActiveRecord adapter and provides similar functionalit
 
 - This is the `main`-branch, which currently supports rails **7.1** _(see section 'Rails_Versions' for supported versions)_
 - supports ActiveRecord ~> 7.1 + Elasticsearch >= 7.17
-- added features up to Elasticsearch `8.17.1`
+- added features up to Elasticsearch `8.17.1` _(tested against `8.19.14`)_
 - _ES|QL_ queries _(`TYPE_ESQL` / the `esql.query` gate)_ require **Elasticsearch >= 8.11**, where the feature became
   generally available. All other features remain available from Elasticsearch `7.17`.
 
@@ -47,7 +49,7 @@ https://github.com/ruby-smart/elasticsearch_record/tree/rails-7-0-stable
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'elasticsearch_record', '~> 1.8'
+gem 'elasticsearch_record'
 
 # alternative
 gem 'elasticsearch_record', git: 'https://github.com/ruby-smart/elasticsearch_record', branch: 'rails-7-1-stable'
@@ -63,6 +65,78 @@ Or install it yourself as:
 
     $ gem install elasticsearch_record
 
+-----
+
+## Upgrading to 2.0
+
+Version **2.0** contains breaking changes. Coming from **1.8.x**, check the following:
+
+### 1. Table (index) names are resolved by default
+
+Every table statement now resolves its name through `#_env_table_name`, so the
+`table_name_prefix` / `table_name_suffix` no longer have to be applied by hand in migrations or database statements
+_(which silently wrote into another environment's index)_.
+
+```ruby
+# 1.8.x - the prefix / suffix had to be applied manually
+drop_table _env_table_name("settings")
+
+# 2.0 - resolved on its own
+drop_table "settings"
+```
+
+Existing migrations keep working - `_env_table_name` is idempotent and still public, so a
+hand-resolved name resolves to the very same index. A new `decorate:`-argument opts out per
+call, and `ElasticsearchRecord.decorate_table_names` acts as a global kill-switch.
+
+_see @ [environment-related-table-name](#environment-related-table-name), [opting out with `decorate: false`](#opting-out-with-decorate-false) & [global kill-switch](#global-kill-switch)_
+
+### 2. `select` raises on metadata fields
+
+Metadata fields _(`_id`, `_score`, `_index`, ...)_ are not part of the `_source` node, so they
+could never be resolved through the `_source`-filter this method builds - providing them
+silently created a filter that never matched.
+
+```ruby
+Search.select(:_id)
+# => ActiveRecord::UnknownAttributeReference
+```
+
+They are returned anyway and accessible on each record _(`Search.first._id`)_. To resolve the
+metadata **without** transferring the `_source`, use the new `#meta_only!` method.
+
+### 3. `restore_table` replaces its `open:`-argument with `unblock:`
+
+A restore runs through a `clone`, so the restored table **inherits** the 'write'-block of its
+source - the table was open, but read-only. `unblock:` _(default: `true`)_ releases it again.
+`ModelApi#restore!` follows along.
+
+```ruby
+# 1.8.x
+restore_table 'settings', from: 'settings-snapshot-2024', open: true
+
+# 2.0
+restore_table 'settings', from: 'settings-snapshot-2024', unblock: true
+```
+
+### 4. The plural table statements no longer skip AR-internal indices
+
+`#open_tables`, `#close_tables`, `#refresh_tables` & `#truncate_tables` no longer subtract the
+ActiveRecord-internal indices _(`schema_migrations` & `ar_internal_metadata`)_ - an explicitly
+named index was silently dropped from the list. They now return an `Array` with an entry for
+**every** provided name.
+
+### 5. `truncate_table` raises for AR-internal indices
+
+The statement runs a `drop` & `create` and would wipe the migration state.
+`#drop_table` stays unguarded by design _(ActiveRecord resets both tables through it)_.
+
+### 6. `esql` & `msearch` dropped their `async:`-argument
+
+Both dispatch through the public `exec_query` now, since rails 7.1 made `internal_exec_query`
+private - the `async:`-argument was dropped along with it.
+
+-----
 
 ## Features
 * ActiveRecord's `create, read, update & delete` behaviours
@@ -72,6 +146,8 @@ Or install it yourself as:
   * additional relation methods to find records with `filter, must, must_not, should`
   * aggregated queries with Elasticsearch `aggregation` methods
   * resolve search response `hits`, `aggregations`, `buckets`, ... instead of ActiveRecord objects
+  * `SQL` & `ES|QL` queries resolve their **tabular** response into records _(`find_by_sql` with a String query, `find_by_esql`)_
+  * table (index) names are resolved within the current environment _(`table_name_prefix` / `table_name_suffix`)_
 * Third-party gem support
   * access `elasticsearch-dsl` query builder through `model.search{ ... }`
 * Schema
@@ -255,6 +331,11 @@ buckets = Search.where(name: 'A nice object').aggregate(:total, {sum: {field: :a
 results = Search.where(name: 'A nice object').pit_results
 # > [{ "_id": "abc123", "name": "A nice object", ...
 
+# resolves ONLY the metadata nodes of each hit - the '_source' is not transferred at all.
+# (this is the replacement for a - no longer supported - 'select(:_id)')
+metas = Search.where(name: 'A nice object').meta_only!.results
+# > [{ "_id": "abc123", "_index": "search", "_score": 1.0 }, ...
+
 # returns the total value of the query without querying again (it uses the total value from the response)
 scope = Search.where(name: 'A nice object').limit(5)
 results_count = scope.count
@@ -288,10 +369,7 @@ _(also see @ [github](https://github.com/ruby-smart/elasticsearch_record/blob/ma
 - must
 - should
 - aggregate
-- restrict 
-- hits_only!
-- aggs_only!
-- total_only!
+- select _(raises on metadata fields - see @ [Upgrading to 2.0](#2-select-raises-on-metadata-fields))_
 
 _see simple documentation about these methods @ {ElasticsearchRecord::Relation::QueryMethods rubydoc}_
 
@@ -308,13 +386,20 @@ _(also see @ [github](https://github.com/ruby-smart/elasticsearch_record/blob/ma
 - boxplot
 - stats
 - string_stats
-- matrix_stats
+- matrix_stats _(requires at least two columns)_
 - median_absolute_deviation
 - calculate
 
 _see simple documentation about these methods @ {ElasticsearchRecord::Relation::CalculationMethods rubydoc}_
 
 _(also see @ [github](https://github.com/ruby-smart/elasticsearch_record/blob/main/lib/elasticsearch_record/relation/calculation_methods.rb) )_
+
+### Available query configuration methods
+
+- hits_only! _(prevents to resolve aggs)_
+- aggs_only! _(prevents to resolve hits / source data)_
+- total_only! _(prevents to resolve aggs, hits / source data)_
+- meta_only! _(resolves the metadata nodes (`_id`, `_score`, ...) of each hit without transferring the `_source`)_
 
 ### Available result methods
 - aggregations
@@ -544,7 +629,7 @@ Access these methods through the model's connection or within any `Migration`.
 **Example migration:**
 
 ```ruby
-class AddTests < ActiveRecord::Migration[7.0]
+class AddTests < ActiveRecord::Migration[7.1]
   def up
     create_table "assignments", if_not_exists: true do |t|
       t.string :key, primary_key: true
@@ -647,7 +732,7 @@ A single migration can be created to be used within each environment:
 
 ```ruby
 # Example migration
-class AddSettings < ActiveRecord::Migration[7.0]
+class AddSettings < ActiveRecord::Migration[7.1]
   def up
     # creates 'settings-pro' on production & 'settings-dev' on development
     create_table "settings", force: true do |t|
