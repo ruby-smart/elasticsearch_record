@@ -131,24 +131,6 @@ module ActiveRecord
 
           private
 
-          # Executes the query object in the context of this connection and returns the raw result
-          # from the connection adapter.
-          # @param [ElasticsearchRecord::Query] query
-          # @param [String (frozen),nil] name
-          # @param [Boolean] async (default: false)
-          # @param [Boolean] allow_retry (default: false)
-          # @return [ElasticsearchRecord::Result]
-          def internal_execute(query, name = nil, async: false, allow_retry: false, materialize_transactions: nil)
-            # validate the query
-            raise ActiveRecord::StatementInvalid, 'Unable to execute! Provided query is not a "ElasticsearchRecord::Query".' unless query.is_a?(ElasticsearchRecord::Query)
-            raise ActiveRecord::StatementInvalid, 'Unable to execute! Provided query is invalid.' unless query.valid?
-
-            # checks for write query - raises an exception if connection is locked to readonly ...
-            check_if_write_query(query)
-
-            api(*query.gate, query.query_arguments, name, async: async)
-          end
-
           # gets called for all queries - a +ElasticsearchRecord::Query+ must be provided.
           # @param [ElasticsearchRecord::Query] query
           # @param [String (frozen),nil] name
@@ -161,6 +143,25 @@ module ActiveRecord
               internal_execute(query, name, async: async),
               columns: query.columns
             )
+          end
+
+          # Executes the query object in the context of this connection and returns the raw result
+          # from the connection adapter.
+          # @param [ElasticsearchRecord::Query] query
+          # @param [String (frozen),nil] name
+          # @param [Boolean] async (default: false) - NOT supported!
+          # @param [Boolean] allow_retry (default: false)
+          # @param [Boolean] materialize_transactions (default: false) - NOT supported!
+          # @return [ElasticsearchRecord::Result]
+          def internal_execute(query, name = nil, async: false, allow_retry: false, materialize_transactions: false)
+            # validate the query
+            raise ActiveRecord::StatementInvalid, 'Unable to execute! Provided query is not a "ElasticsearchRecord::Query".' unless query.is_a?(ElasticsearchRecord::Query)
+            raise ActiveRecord::StatementInvalid, 'Unable to execute! Provided query is invalid.' unless query.valid?
+
+            # checks for write query - raises an exception if connection is locked to readonly ...
+            check_if_write_query(query)
+
+            api(query.gate, query.query_arguments, name, async: async, allow_retry: allow_retry, materialize_transactions: materialize_transactions)
           end
         end
       end

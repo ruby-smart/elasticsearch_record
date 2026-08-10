@@ -8,6 +8,12 @@ module ElasticsearchRecord
       #
       #   Person.all.count(:age)
       #   => returns the total count of all people whose age is present in database
+      #
+      #   Person.all.limit(10).count
+      #   => returns at most 10 - the SQL 'LIMIT n OFFSET m' semantic is applied on the resolved total
+      #
+      # @param [Symbol, String, nil] column_name
+      # @return [Integer, Hash]
       def count(column_name = nil)
         # fallback to default
         return super() if block_given?
@@ -36,12 +42,12 @@ module ElasticsearchRecord
           # HINT: +:__query__+ directly interacts with the query-object and sets the 'terminate_after' argument
           # see @ ElasticsearchRecord::Query#arguments & Arel::Collectors::ElasticsearchQuery#assign
           arel = spawn.unscope!(:offset, :limit, :order, :configure, :aggs).configure!(:__query__, argument: { terminate_after: limit_value }).arel
-          klass.connection.select_count(arel, "#{klass.name} Count")
+          _resolve_limited_count(klass.connection.select_count(arel, "#{klass.name} Count"))
         else
           # since total will be limited to 10000 results, we need to resolve the real values by a custom query.
           # This query is called through +#select_count+.
           arel = spawn.unscope!(:offset, :limit, :order, :configure, :aggs)
-          klass.connection.select_count(arel, "#{klass.name} Count")
+          _resolve_limited_count(klass.connection.select_count(arel, "#{klass.name} Count"))
         end
       end
 
@@ -129,9 +135,17 @@ module ElasticsearchRecord
       #
       # @note returns *nil* on a *NullRelation*
       #
+      # PLEASE NOTE: the aggregation quantifies the relationship BETWEEN fields, so it requires at
+      # least two of them. A single column would additionally take the 'field'-branch of
+      # +#calculate_aggregation+ - but the metric only accepts a 'fields' node.
+      #
       # @param [Array<Symbol|String>] column_names
+      # @raise [ArgumentError] if less than two columns were provided
       # @return [Hash,nil]
       def matrix_stats(*column_names)
+        # ensure minimum number of names are provided
+        raise(ArgumentError, "Unable to build a 'matrix_stats' aggregation with less than two columns (#{column_names.size} provided) @ #{klass.name}!") if column_names.size < 2
+
         calculate_aggregation(:matrix_stats, *column_names)
       end
 
@@ -316,6 +330,28 @@ module ElasticsearchRecord
       end
 
       alias_method :calculate, :calculate_aggregation
+
+      private
+
+      # applies the SQL +LIMIT n OFFSET m+ semantic onto an already resolved total.
+      #
+      # IMPORTANT: Elasticsearch always answers a count with the FULL total. The +terminate_after+
+      # argument (see @ +#count+) cannot provide this semantic on its own:
+      # - it limits the *collected* documents, but a count query collects none - so it never fires
+      # - and it acts PER SHARD, which would resolve +limit * shards+ on a multi-shard index
+      #
+      # Clamping the resolved total is exact either way: a per-shard early termination can only
+      # return a value between +min(limit, total)+ and +total+, so the minimum stays the same.
+      #
+      # @param [Integer] total - the resolved (full) total
+      # @return [Integer]
+      def _resolve_limited_count(total)
+        # the offset is subtracted first - it can never result in a negative count
+        total -= offset_value if offset_value
+        return 0 if total < 0
+
+        limit_value ? [total, limit_value].min : total
+      end
     end
   end
 end

@@ -10,7 +10,7 @@ module ActiveRecord
         include ActiveModel::Validations
 
         # exclude settings, that are provided through the API but are not part of the index-settings API
-        IGNORE_NAMES = ['provided_name', 'creation_date', 'uuid', 'version','routing.allocation.initial_recovery','resize'].freeze
+        IGNORE_NAMES = ['provided_name', 'creation_date', 'uuid', 'version', 'routing.allocation.initial_recovery', 'resize'].freeze
 
         # available setting names
         # - see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules.html#index-modules-settings
@@ -19,13 +19,12 @@ module ActiveRecord
         FINAL_NAMES = ['number_of_shards', 'routing_partition_size', 'soft_deletes.enabled'].freeze
 
         # static names can only be set during index creation or closed
-        STATIC_NAMES = ['number_of_routing_shards', 'codec',
+        STATIC_NAMES = ['number_of_routing_shards', 'codec', 'mode',
                         'soft_deletes.retention_lease.period',
                         'load_fixed_bitset_filters_eagerly', 'shard.check_on_startup',
 
                         # modules
-                        'analysis', 'routing', 'unassigned', 'merge', 'similarity', 'search', 'store', 'translog',
-                        'indexing_pressure'].freeze
+                        'analysis', 'routing', 'unassigned', 'merge', 'similarity', 'search', 'store', 'indexing_pressure'].freeze
 
         # dynamic names can always be changed
         DYNAMIC_NAMES = ['number_of_replicas', 'auto_expand_replicas', "search.idle.after", 'refresh_interval',
@@ -34,7 +33,10 @@ module ActiveRecord
                          'max_refresh_listeners', 'analyze.max_token_count', 'highlight.max_analyzed_offset',
                          'max_terms_count', 'max_regex_length', 'query.default_field', 'routing.allocation.enable',
                          'routing.rebalance.enable', 'gc_deletes', 'default_pipeline', 'final_pipeline',
-                         'hidden', 'blocks'].freeze
+                         'hidden', 'blocks',
+
+                         # modules
+                         'translog'].freeze
 
         VALID_NAMES = (FINAL_NAMES + STATIC_NAMES + DYNAMIC_NAMES).freeze
 

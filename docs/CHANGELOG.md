@@ -1,5 +1,43 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [2.0.0] - 2026-08-10
+* [add] `ElasticsearchRecord.decorate_table_names` _(default: `true`)_ as global kill-switch for the table name decoration - only provides the default for an omitted `decorate:`-argument, `#_env_table_name` stays unaffected
+* [add] `TableStatements#truncate_table` raises an `ArgumentError` for AR-internal indices - the statement runs a `drop` & `create` and would wipe the migration state. `#drop_table` stays unguarded by design _(AR resets both tables through it)_
+* [add] `QueryMethods#select` raises on metadata fields _(`_id`, `_score`, ...)_ - they are always returned anyway
+* [add] `ElasticsearchRecord::Result` now resolves **tabular** responses _(`sql`: columns + rows, `esql`: columns + values)_, so `find_by_sql` _(String)_ & `find_by_esql` instantiate records - rows are zipped against the **response** columns
+* [add] `CalculationMethods#matrix_stats` raises an `ArgumentError` for less than two columns - the metric quantifies the relationship **between** fields
+* [add] `ResultMethods#meta_only!` to resolve the metadata nodes _(`_id`, `_score`, ...)_ of each hit without transferring the `_source`
+* [add] `Query::COLUMNS_NONE` constant for the `'!'` projection marker - replaces the bare literal in `visit_Selects` & `meta_only!`
+* [add] specs for `ElasticsearchRecord::Persistence`, `ModelApi`, `SchemaMigration`, `Querying::ClassMethods`, the `Relation` methods _(Core, Query, Calculation & Result)_, the `Elasticsearch::SchemaStatements`, `TableStatements` & `SchemaDumper`, every class of the `Elasticsearch::Type` namespace _(incl. its `TYPE_MAP` registration)_, `Arel::Collectors::ElasticsearchQuery` and all three `Arel::Visitors::Elasticsearch*` visitors - incl. the 1.8.1 "only ten migrations" and 1.8.2 nested-reset regressions and a `TestIndexWithAutoIncrement` support that builds a model against a real `auto_increment` schema _(destructive calls still run through `TestIndex` and its name guard)_. Behaviours pinned as-is:
+  * `#or` compiles into a **failed** query _(the visitor fails every `Arel::Nodes::Grouping`)_, and AR's blank-arg stripping silently drops `configure(key, nil)` _(only the Hash form removes a key)_
+  * an index **alias** is dumped as a mapping of the elasticsearch 'alias' field type, which makes the `t.alias` branch of the dumper unreachable
+  * opposed nil-handling of metas _(deleted)_ and settings _(kept through `:__force__`)_
+  * a failed `create` has no `FAILED_BODIES` entry and falls back to an empty body; a multi-column `order` keeps only the last sort
+  * `SchemaMigration#count` and `#delete_version` / `#delete_all_versions` cannot be served by elasticsearch
+  * `_update_record` / `_delete_record` always return `0` _(a document-API response carries no `total`)_, and an auto-incremented id is only written as document `_id`, never into the mapped primary-key field
+  * `meta_only!` **spawns** instead of mutating the receiver _(unlike the other bang methods)_ and pins the `COLUMNS_NONE` projection; `pit_results` pins its infinite-loop guard
+* [ref] **BREAKING**: every table statement resolves its table (index) name through `#_env_table_name` **by default** - the `table_name_prefix` / `table_name_suffix` no longer have to be applied by hand, which silently wrote into another environment's index. A new `decorate:`-argument _(default: `true`)_ switches it off per call for already resolved names. Only TABLE names are decorated; schema statements stay undecorated
+* [ref] `SchemaDumper#table` dumps the **base** name instead of a `_env_table_name(...)` call - if that name would not resolve back, the full name is dumped with an explicit `decorate: false`
+* [ref] **BREAKING**: `#open_tables`, `#close_tables`, `#refresh_tables` & `#truncate_tables` no longer subtract the AR-internal indices _(an explicitly named index was silently dropped)_ - plain loops now, forwarding `decorate:` to their singular statement and returning an `Array` for every provided name
+* [ref] `TableStatements` drops the stale `:rename_table` entry from `define_unsupported_method` - the real implementation overwrote it anyway
+* [ref] `#restore_table` replaces its `open`-argument with `unblock:` _(default: true)_ - a restore clones and inherits the 'write'-block, so the table was open but **read-only**. `ModelApi#restore!` follows along
+* [ref] `ResultMethods#pit_results` resolves through `ElasticsearchRecord::Result` and respects the current projection _(`ids_only` removed in favour of `meta_only!`)_
+* [ref] `TestIndex` spec support to optionally create/drop a second index _(still guarded by the `ALLOWED` name check)_
+* [fix] `#rename_table` to resolve both names **itself** - the `clear_data_source_cache!` and `cluster_health` calls in between were left with the undecorated name
+* [fix] `#backup_table` to build the auto-generated target from the **already resolved** name _(the suffix landed behind the `-snapshot-` part)_
+* [fix] `#_env_table_name` to cast prefix & suffix - an empty `table_name_prefix:` yml entry resolves to `nil` and raised a `TypeError`
+* [fix] `Result#cast_values` to resolve values from the `_source` node, metadata fields from the document level
+* [fix] `visit_Selects` to no longer provide metadata fields to the `_source`-filter _(never matched)_ - projects `_source: false` if only metadata is selected
+* [fix] `Querying::ClassMethods#esql` & `#msearch` to dispatch through the public `exec_query` _(rails 7.1 made `internal_exec_query` private)_ - the `async:`-argument was dropped along with it
+* [fix] `Querying::ClassMethods#find_by_sql` to reference the provided `sql` for `String` queries _(undefined `query_or_sql` raised a `NameError`)_
+* [fix] `SchemaStatements#max_result_window` to resolve the **flat** setting key and cast it to an `Integer` _(always fell back to 10000 and broke the batch_size guards)_
+* [fix] `SchemaStatements#primary_keys` to always return an `Array` _(the `_meta` branch returned a raw String)_
+* [fix] `CalculationMethods#count` to apply the SQL `LIMIT n OFFSET m` semantic on the resolved total - `terminate_after` alone acts **per shard** and never fires on a count query. `#size` on an unloaded relation was affected as well
+* [fix] `UpdateTableDefinition#change_mapping_attributes` to resolve the current mapping type with a **String** key _(fell back to `:object` / `:nested`, so elasticsearch rejected every mapping parameter)_
+* [fix] `#restore_table` to no longer touch the backup after a `drop_backup: true` _(it no longer exists at that point)_
+* [fix] `_insert_with_auto_increment` to write the **plain, integer** id into `_meta.auto_increment` - the block returns an Array of the `returning` values, which was stored as-is and raised on the NEXT insert. Now unwraps Array / Hash / plain and casts to `Integer`
+* [fix] `ResultMethods#pit_delete` to no longer `select('_id')` _(rejected by the new metadata guard)_ - resolves the ids through `meta_only!`
+
 ## [1.8.2] - 2024-11-26
 * [fix] `ElasticsearchRecord::Relation::QueryMethods#build_query_clause` to raise an exception on `nil` assignments
 * [fix] `Arel::Visitors::ElasticsearchBase#compile` to always reset temporary assignments _(causes missing assignments after a query-build-exception)_
@@ -17,6 +55,24 @@
 * [ref] major method & dependency refactoring for `rails 7.1` - _(Does **NOT** work with rails 7.0)_
 * [add] new repository branch `rails-7-1-stable` to support different rails version
 * [ref] gemspec to lock on rails 7.1
+
+## [1.7.5] - 2024-11-26 _(no gem release)_
+* [ref] `ElasticsearchRecord::Relation::QueryMethods#build_query_clause` to raise an exception instead of building an empty `QueryClause`
+
+## [1.7.4] - 2024-11-25 _(no gem release)_
+* [fix] `Arel::Visitors::ElasticsearchBase#compile` to always reset temporary assignments _(causes missing assignments after a query-build-exception)_
+* [fix] `Arel::Nodes::SelectAgg` to not merge nil-values
+* [fix] `ElasticsearchRecord::Relation::QueryMethods#build_query_clause` to prevent nil-Array assignment _(e.g. `[nil]` causes q query exception)_
+
+## [1.7.3] - 2024-05-07 _(no gem release)_
+* [add] new elasticsearch mapping types _(percolator, geo, vector, texts, ...)_
+* [ref] `ElasticsearchRecord::Relation#limit` to detect `Float::INFINITY` to also set the **max_result_window**
+* [fix] `ElasticsearchRecord::SchemaMigration` only returning the first ten migrations (broke migrated migrations)
+* [fix] `ElasticsearchRecord::Relation::CalculationMethods#calculate` method incompatibility - renamed to `#calculate_aggregation` (+ alias to `#calculate`)
+* [fix] `ElasticsearchRecord::ModelApi#bulk` method not correctly generating data for 'delete'
+
+## [1.7.2] - 2024-01-10
+* [ref] gemspec to lock on rails 7.0
 
 ## [1.7.1] - 2024-01-09
 * [fix] `ElasticsearchRecord::Relation` calculation methods return with different nodes

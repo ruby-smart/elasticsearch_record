@@ -45,7 +45,7 @@ module ElasticsearchRecord
       # so this is a array of real document (+_source+) attributes of the index.
       # @return [Array<String>]
       def source_column_names
-        @source_column_names ||= columns.reject(&:virtual?).map(&:name) - ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.base_structure_keys
+        @source_column_names ||= columns.reject(&:virtual?).map(&:name) - ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.metadata_keys
       end
 
       # returns an array with columns names, that are searchable (also includes nested fields & properties )

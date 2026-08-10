@@ -1,36 +1,39 @@
 module ElasticsearchRecord
   class Query
     # STATUS CONSTANTS
-    STATUS_VALID  = :valid
+    STATUS_VALID = :valid
     STATUS_FAILED = :failed
 
     # -- UNDEFINED TYPE ------------------------------------------------------------------------------------------------
     TYPE_UNDEFINED = :undefined
 
     # -- QUERY TYPES ---------------------------------------------------------------------------------------------------
-    TYPE_COUNT   = :count
-    TYPE_SEARCH  = :search
+    TYPE_COUNT = :count
+    TYPE_SEARCH = :search
     TYPE_MSEARCH = :msearch
-    TYPE_SQL     = :sql
-    TYPE_ESQL    = :esql
+    TYPE_SQL = :sql
+
+    # PLEASE NOTE: ES|QL requires Elasticsearch >= 8.11
+    # (the +esql+ API namespace does not exist before that)
+    TYPE_ESQL = :esql
 
     # -- DOCUMENT TYPES ------------------------------------------------------------------------------------------------
-    TYPE_CREATE          = :create
-    TYPE_UPDATE          = :update
+    TYPE_CREATE = :create
+    TYPE_UPDATE = :update
     TYPE_UPDATE_BY_QUERY = :update_by_query
-    TYPE_DELETE          = :delete
+    TYPE_DELETE = :delete
     TYPE_DELETE_BY_QUERY = :delete_by_query
 
     # -- INDEX TYPES ---------------------------------------------------------------------------------------------------
     TYPE_INDEX_CREATE = :index_create
-    TYPE_INDEX_CLONE  = :index_clone
+    TYPE_INDEX_CLONE = :index_clone
     # INDEX update is not implemented by Elasticsearch
     # - this is handled through individual updates of +mappings+, +settings+ & +aliases+.
     # INDEX delete is handled directly as API-call
     TYPE_INDEX_UPDATE_MAPPING = :index_update_mapping
     TYPE_INDEX_UPDATE_SETTING = :index_update_setting
-    TYPE_INDEX_UPDATE_ALIAS   = :index_update_alias
-    TYPE_INDEX_DELETE_ALIAS   = :index_delete_alias
+    TYPE_INDEX_UPDATE_ALIAS = :index_update_alias
+    TYPE_INDEX_DELETE_ALIAS = :index_delete_alias
 
     # includes valid types only
     TYPES = [
@@ -54,21 +57,38 @@ module ElasticsearchRecord
     # acts like the SQL-query "where('1=0')"
     FAILED_BODIES = {
       TYPE_SEARCH => { size: 0, query: { bool: { filter: [{ term: { _id: '_' } }] } } },
-      TYPE_COUNT  => { query: { bool: { filter: [{ term: { _id: '_' } }] } } }
+      TYPE_COUNT => { query: { bool: { filter: [{ term: { _id: '_' } }] } } }
     }.freeze
 
     # defines special api gates to be used per type.
     # if no special type is defined, it simply uses +[:core,self.type]+
-    GATES = {
-      TYPE_SQL                  => [:sql, :query],
-      TYPE_ESQL                 => [:esql, :query],
-      TYPE_INDEX_CREATE         => [:indices, :create],
-      TYPE_INDEX_CLONE          => [:indices, :clone],
-      TYPE_INDEX_UPDATE_MAPPING => [:indices, :put_mapping],
-      TYPE_INDEX_UPDATE_SETTING => [:indices, :put_settings],
-      TYPE_INDEX_UPDATE_ALIAS   => [:indices, :put_alias],
-      TYPE_INDEX_DELETE_ALIAS   => [:indices, :delete_alias],
+    # @return [Hash<Symbol=>String>]
+    GATES_MAP = {
+      TYPE_SQL => 'sql.query',
+      TYPE_ESQL => 'esql.query',
+      TYPE_INDEX_CREATE => 'indices.create',
+      TYPE_INDEX_CLONE => 'indices.clone',
+      TYPE_INDEX_UPDATE_MAPPING => 'indices.put_mapping',
+      TYPE_INDEX_UPDATE_SETTING => 'indices.put_settings',
+      TYPE_INDEX_UPDATE_ALIAS => 'indices.put_alias',
+      TYPE_INDEX_DELETE_ALIAS => 'indices.delete_alias'
     }.freeze
+
+    # -- PROJECTION MARKERS --------------------------------------------------------------------------------------------
+
+    # defines a projection marker that forces a query to return *no* +_source+ fields at all.
+    # metadata fields ('_id', '_score', ...) are not part of the +_source+ - they are always
+    # returned on the document level and therefore stay accessible.
+    #
+    # this is the only way to clear the columns that +visit_Arel_Nodes_SelectCore+ claims for
+    # every relation - a +configure+ can only reach the query-body, never the columns.
+    #
+    # HINT: only evaluated as the *first* projection - combining it with other fields
+    # (e.g. +select(COLUMNS_NONE, :name)+) silently discards them.
+    #
+    # see @ ElasticsearchRecord::Relation::ResultMethods#meta_only!
+    # see @ Arel::Visitors::ElasticsearchQuery#visit_Selects
+    COLUMNS_NONE = '!'
 
     # defines the index the query should be executed on
     # @!attribute String
@@ -101,14 +121,14 @@ module ElasticsearchRecord
     attr_reader :columns
 
     def initialize(index: nil, type: TYPE_UNDEFINED, status: STATUS_VALID, body: nil, refresh: nil, timeout: nil, arguments: {}, columns: [])
-      @index     = index
-      @type      = type
-      @status    = status
-      @refresh   = refresh
-      @timeout   = timeout
-      @body      = body
+      @index = index
+      @type = type
+      @status = status
+      @refresh = refresh
+      @timeout = timeout
+      @body = body
       @arguments = arguments
-      @columns   = columns
+      @columns = columns
     end
 
     # sets the failed status for this query.
@@ -136,9 +156,9 @@ module ElasticsearchRecord
     # returns the API gate to be called to execute the query.
     # each query type needs a different endpoint.
     # @see Elasticsearch::API
-    # @return [Array<Symbol, Symbol>] - API gate [<namespace>,<action>]
+    # @return [Symbol, String] - API gate "<namespace>.<action>" | <:action>
     def gate
-      GATES[self.type].presence || [:core, self.type]
+      GATES_MAP[self.type].presence || self.type
     end
 
     # returns true if this is a write query
@@ -161,13 +181,13 @@ module ElasticsearchRecord
     # Also used possible PRE-defined arguments to be merged with those mentioned attributes.
     # @return [Hash]
     def query_arguments
-      args           = @arguments.deep_dup
+      args = @arguments.deep_dup
 
       # set index, if present
-      args[:index]   = self.index if self.index.present?
+      args[:index] = self.index if self.index.present?
 
       # set body, if present
-      args[:body]    = self.body if self.body.present?
+      args[:body] = self.body if self.body.present?
 
       # set refresh, if defined (also includes false value)
       args[:refresh] = self.refresh unless self.refresh.nil?

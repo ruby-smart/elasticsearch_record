@@ -66,7 +66,7 @@ module ElasticsearchRecord
       # @return [nil, String] - either returns the pit_id (no block given) or nil
       def point_in_time(keep_alive: '1m')
         # resolve a initial PIT id
-        initial_pit_id = klass.connection.api(:core, :open_point_in_time, { index: klass.table_name, keep_alive: keep_alive }, "#{klass} Open Pit").dig('id')
+        initial_pit_id = klass.connection.api(:open_point_in_time, { index: klass.table_name, keep_alive: keep_alive }, "#{klass} Open Pit").dig('id')
 
         return initial_pit_id unless block_given?
 
@@ -74,7 +74,7 @@ module ElasticsearchRecord
         yield initial_pit_id
 
         # close PIT
-        klass.connection.api(:core, :close_point_in_time, { body: { id: initial_pit_id } }, "#{klass} Close Pit")
+        klass.connection.api(:close_point_in_time, { body: { id: initial_pit_id } }, "#{klass} Close Pit")
 
         # return nil if everything was ok
         nil
@@ -90,13 +90,12 @@ module ElasticsearchRecord
       #
       # @param [String] keep_alive - how long to keep alive (for each single request) - default: '1m'
       # @param [Integer] batch_size - how many results per query (default: 1000 - this means at least 10 queries before reaching the +max_result_window+)
-      # @param [Boolean] ids_only - resolve ids only from results
       # @return [Integer, Array] either returns the results-array (no block provided) or the total amount of results
-      def pit_results(keep_alive: '1m', batch_size: 1000, ids_only: false)
-        raise(ArgumentError, "Batch size cannot be above the 'max_result_window' (#{klass.max_result_window}) !") if batch_size > klass.max_result_window
+      def pit_results(keep_alive: '1m', batch_size: 1000)
+        raise(ArgumentError, "Batch size cannot be above the 'max_result_window' (#{batch_size} > #{klass.max_result_window}) !") if batch_size > klass.max_result_window
 
         # check if limit or offset values where provided
-        results_limit  = limit_value ? limit_value : Float::INFINITY
+        results_limit = limit_value ? limit_value : Float::INFINITY
         results_offset = offset_value ? offset_value : 0
 
         # search_after requires a order - we resolve a order either from provided value or by default ...
@@ -107,9 +106,6 @@ module ElasticsearchRecord
         # see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/paginate-search-results.html
         relation.order!(_shard_doc: :asc) if relation.order_values.empty? && klass.connection.access_shard_doc?
 
-        # resolve ids only
-        relation.reselect!('_id') if ids_only
-
         # clear limit & offset
         relation.offset!(nil).limit!(nil)
 
@@ -117,47 +113,47 @@ module ElasticsearchRecord
         relation.configure!(:__query__, { index: nil })
 
         # we store the results in this array
-        results       = []
+        results = []
         results_total = 0
 
         # resolve a new pit and auto-close after we finished
         point_in_time(keep_alive: keep_alive) do |pit_id|
+          # set the initial pit hash, used to configure the ES query
           current_pit_hash = { pit: { id: pit_id, keep_alive: keep_alive } }
 
           # resolve new data until we got all we need
           loop do
             # change pit settings & limit (spawn is required, since a +resolve+ will make the relation immutable)
-            current_response = relation.spawn.configure!(current_pit_hash).limit!(batch_size).resolve('Pit Results').response
+            # @type [ElasticsearchRecord::Result]
+            current_result = relation.spawn.configure!(current_pit_hash).limit!(batch_size).resolve('Pit Results')
 
-            # resolve only data from hits->hits[{_source}]
-            current_results        = if ids_only
-                                       current_response['hits']['hits'].map { |result| result['_id'] }
-                                     else
-                                       current_response['hits']['hits'].map { |result| result['_source'].merge('_id' => result['_id']) }
-                                     end
+            # resolve all results, depending on the existing query (select, ...)
+            current_results = current_result.to_ary
 
+            # temporary store the absolute length - used for pagination or stop
             current_results_length = current_results.length
 
             # check if we reached the required offset
             if results_offset < current_results_length
               # check for parts
-              # (maybe a offset 6300 was provided but the batch size is 1000 - so we need to skip a part ...)
+              # (maybe an offset of 6300 was provided but the batch size is 1000 - so we need to skip a part ...)
               results_from = results_offset > 0 ? results_offset : 0
-              results_to   = (results_total + current_results_length - results_from) > results_limit ? results_limit - results_total + results_from - 1 : -1
+              results_to = (results_total + current_results_length - results_from) > results_limit ? results_limit - results_total + results_from - 1 : -1
 
-              ranged_results = current_results[results_from..results_to]
+              # reduce the *current_results* by calculated +from..to+ range
+              current_results = current_results[results_from..results_to] if results_from != 0 || results_to != -1
 
               if block_given?
-                yield ranged_results
+                yield current_results
               else
-                results += ranged_results
+                results += current_results
               end
 
               # add to total
-              results_total += ranged_results.length
+              results_total += current_results.length
             end
 
-            # -------- BREAK conditions --------
+            # -- BREAK conditions --------------------------------------------------------------------------------------
 
             # we reached our maximum value
             break if results_total >= results_limit
@@ -166,22 +162,24 @@ module ElasticsearchRecord
             break if current_results_length < batch_size
 
             # additional security - prevents infinite loops
-            raise(::ActiveRecord::StatementInvalid, "'pit_results' aborted due an infinite loop error (invalid or missing order)") if current_pit_hash[:search_after] == current_response['hits']['hits'][-1]['sort'] && current_pit_hash[:pit][:id] == current_response['pit_id']
+            if current_pit_hash[:search_after] == current_result.response['hits']['hits'][-1]['sort'] && current_pit_hash[:pit][:id] == current_result.response['pit_id']
+              raise(::ActiveRecord::StatementInvalid, "'pit_results' aborted due an infinite loop error (invalid or missing order)")
+            end
 
-            # -------- NEXT LOOP changes --------
+            # -- NEXT LOOP changes -------------------------------------------------------------------------------------
 
             # reduce the offset
             results_offset -= current_results_length
 
             # assign new pit
-            current_pit_hash = { search_after: current_response['hits']['hits'][-1]['sort'], pit: { id: current_response['pit_id'], keep_alive: keep_alive } }
+            current_pit_hash = { search_after: current_result.response['hits']['hits'][-1]['sort'], pit: { id: current_result.response['pit_id'], keep_alive: keep_alive } }
 
-            # we need to justify the +batch_size+ if the query will reach over the limit
-            batch_size       = results_limit - results_total if results_offset < batch_size && (results_total + batch_size) > results_limit
+            # we need to justify the +batch_size+ if the query reaches over the limit
+            batch_size = results_limit - results_total if results_offset < batch_size && (results_total + batch_size) > results_limit
           end
         end
 
-        # return results array or total value
+        # returns either to total number of +pit+ results or an array of all collected results
         if block_given?
           results_total
         else
@@ -193,17 +191,19 @@ module ElasticsearchRecord
 
       # executes a delete query in a +point_in_time+ scope.
       # this will provide the possibility to delete more than the +max_result_window+ (default: 10000) docs in a batched process.
-      # @param [String] keep_alive
-      # @param [Integer] batch_size
-      # @param [Boolean] refresh index after delete finished (default: true)
+      # @param [String] keep_alive - defines the keep alive time per +pit+ (not in total) - should be relative to *batch_size*
+      # @param [Integer] batch_size - the size of entries to delete per +pit+
+      # @param [Boolean] refresh - auto-refresh index after delete finished (default: true)
       # @return [Integer] total amount of deleted docs
-      def pit_delete(keep_alive: '1m', batch_size: 1000, refresh: true)
-        delete_count = select('_id').pit_results(keep_alive: keep_alive, batch_size: batch_size, ids_only: true) do |ids|
+      def pit_delete(keep_alive: '1m', batch_size: 1_000, refresh: true)
+        # spawns a new query with disabled results (so only ids will be resolved)
+        delete_count = spawn.meta_only!.pit_results(keep_alive: keep_alive, batch_size: batch_size) do |results|
           # skip empty results
-          next unless ids.any?
+          next unless results.any?
 
-          # delete all IDs, but do not refresh index, yet
-          klass.connection.api(:core, :bulk, { index: klass.table_name, body: ids.map { |id| { delete: { _id: id } } }, refresh: false }, "#{klass} Pit Delete")
+          # delete all IDs through +API+
+          # does not refresh index at this point (this is done below, if not disabled)
+          klass.connection.api(:bulk, { index: klass.table_name, body: results.map { |result| { delete: { _id: result['_id'] } } }, refresh: false }, "#{klass} Pit Delete")
         end
 
         # refresh index
@@ -249,24 +249,28 @@ module ElasticsearchRecord
       end
 
       # sets query as "hits"-only query (drops the aggs from the query)
+      # @return [self]
       def hits_only!
         configure!({ aggs: nil })
-
-        self
       end
 
       # sets query as "aggs"-only query (drops the size & sort options - so no hits will return)
+      # @return [self]
       def aggs_only!
         configure!({ size: 0, from: nil, sort: nil, _source: false })
-
-        self
       end
 
       # sets query as "total"-only query (drops the size, sort & aggs options - so no hits & aggs will be returned)
+      # @return [self]
       def total_only!
         configure!({ size: 0, from: nil, aggs: nil, sort: nil, _source: false })
+      end
 
-        self
+      # sets query as "meta"-only query (drops aggs and source).
+      # This is used to prevent resolving documents from the index and only returns "meta" information (like _id, _score, _type, ...)
+      # @return [self]
+      def meta_only!
+        select(::ElasticsearchRecord::Query::COLUMNS_NONE).configure!({ aggs: nil, _source: false })
       end
     end
   end

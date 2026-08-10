@@ -122,7 +122,8 @@ module Arel # :nodoc: all
         # IMPORTANT: Since Elasticsearch does not store nil-values in the +_source+ / +doc+ it will NOT return
         # empty / nil columns - instead the nil columns do not exist!!!
         # This is a big mess, because those missing columns are +not+ editable or savable in any way after we initialize the record...
-        # To prevent NOT-accessible attributes, we need to provide the "full-column-definition" to the query.
+        # To prevent NOT-accessible attributes, we need to provide the "full-column-definition" to the query as +default+.
+        # This may be overwritten by the 'visit_Selects'
         resource_klass = o.source.left.instance_variable_get(:@klass)
         claim(:columns, resource_klass.source_column_names) if resource_klass.respond_to?(:source_column_names)
 
@@ -193,22 +194,54 @@ module Arel # :nodoc: all
         when '*'
           # force return all fields
           # assign(:_source, true)
+        when ::ElasticsearchRecord::Query::COLUMNS_NONE
+          # force return NO fields - metadata fields ('_id', '_score', ...) are not part of the
+          # +_source+ and are always returned on the document level, so they stay accessible.
+          assign(:_source, false)
+
+          # clears the columns claimed by +visit_Arel_Nodes_SelectCore+ - a projection is the only
+          # place that runs late enough to undo them.
+          # HINT: an empty array equals the +Query+ default, so +Result#_results_from_hits+ takes its
+          # "no columns" branch and returns the raw document. Together with the +_source: false+ above
+          # this leaves exactly the metadata fields.
+          claim(:columns, [])
         when ::ActiveRecord::FinderMethods::ONE_AS_ONE
           # force return NO fields
           assign(:_source, false)
+
+          # also clear the columns in the query (which will be forwarded to +ElasticsearchRecord::Result+)
+          # HINT: If future changes rely on the first column value (in this case '1' -> SELECT 1 AS one) this must be fixed within the +ElasticsearchRecord::Result+.
+          # Maybe check on the columns[0] value within the #rows method ...
+          claim(:columns, %w[one])
         else
-          assign(:_source, fields)
-          # also overwrite the columns in the query
+          # IMPORTANT: metadata fields (like '_id' or '_score') are NOT part of the +_source+ node - they
+          # are always returned on the document level. Providing them to the +_source+-filter would create
+          # a filter that never matches, so they must be removed here.
+          source_fields = fields - ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.metadata_keys
+
+          # if ONLY metadata fields were provided we must not resolve any +_source+ at all.
+          assign(:_source, source_fields.presence || false)
+
+          # also overwrite the columns in the query (which will be forwarded to +ElasticsearchRecord::Result+)
+          # HINT: metadata fields must stay within the columns - they are resolved from the document level.
           claim(:columns, fields)
         end
       end
 
       # CUSTOM node by elasticsearch_record
       def visit_Create(o)
-        # sets values
-        if o.values
-          values = collect(o.values) # visit_Arel_Nodes_ValuesList
-          claim(:body, values) if values.present?
+        # detect, if *columns* where provided.
+        # This happens through the +::Arel::InsertManager#insert+ by splitting up the columns & values.
+        values = if o.columns.present?
+                   # IMPORTANT: we do not "visit" the columns & rows here but directly build a final hash.
+                   # o.values.rows.*first* (first) is correct here, since +::Arel::InsertManager#create_values+ will provide all values in a nested Array
+                   collect(Hash[o.columns.map(&:name).zip(o.values.rows.first)])
+                 elsif o.values.present?
+                   collect(o.values)
+                 end
+
+        if values.present?
+          claim(:body, values)
         else
           failed!
         end
@@ -356,9 +389,9 @@ module Arel # :nodoc: all
         self.collector.add_binds(values, o.proc_for_binds)
 
         if o.type == :in
-          assign(:filter, [{ terms: { o.column_name => o.casted_values } }])
+          assign(:filter, [{ terms: { visit(o.left) => o.casted_values } }])
         else
-          assign(:must_not, [{ terms: { o.column_name => o.casted_values } }])
+          assign(:must_not, [{ terms: { visit(o.left) => o.casted_values } }])
         end
       end
 
@@ -454,6 +487,7 @@ module Arel # :nodoc: all
 
       # alias for ATTRIBUTE returns
       alias :visit_Arel_Attributes_Attribute :visit_Struct_Attribute
+      alias :visit_Arel_Attribute :visit_Struct_Attribute
       alias :visit_Arel_Nodes_UnqualifiedColumn :visit_Struct_Attribute
       alias :visit_ActiveModel_Attribute_FromUser :visit_Struct_Attribute
 
@@ -487,6 +521,14 @@ module Arel # :nodoc: all
 
       # alias for ARRAY returns
       alias :visit_Set :visit_Array
+
+      def visit_Arel_Nodes_True(o)
+        true
+      end
+
+      def visit_Arel_Nodes_False(o)
+        false
+      end
     end
   end
 end

@@ -5,7 +5,7 @@ RSpec.describe ElasticsearchRecord do
     expect(ElasticsearchRecord::VERSION).not_to be nil
   end
 
-  it "does something useful" do
-    expect(false).to eq(true)
+  it "exposes a gem_version" do
+    expect(ElasticsearchRecord.gem_version).to be_a(Gem::Version)
   end
 end

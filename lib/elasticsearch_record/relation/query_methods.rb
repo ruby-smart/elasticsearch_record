@@ -50,6 +50,7 @@ module ElasticsearchRecord
       end
 
       # same like +#configure!+, but on the same relation (no spawn)
+      # @return [self]
       def configure!(*args)
         check_if_method_has_arguments!(__callee__, args)
 
@@ -274,6 +275,27 @@ module ElasticsearchRecord
         self
       end
 
+      # overwrite to prevent metadata fields within the projection.
+      # Metadata fields (like '_id' or '_score') are NOT part of the +_source+ node, so they cannot be
+      # resolved through the +_source+-filter this method builds - providing them would silently create
+      # a filter that never matches.
+      # HINT: This is different to the +pluck+-method which allows to resolve meta keys directly.
+      # see @ Arel::Visitors::ElasticsearchQuery#visit_Selects
+      # @param [Array] fields
+      def select(*fields)
+        # IMPORTANT: +select+ can also be called with a block (and without any fields) - in this case
+        # ActiveRecord directly forwards to +super()+, so we must not interfere here.
+        if fields.any? && (invalid = _invalid_projection_fields(fields)).present?
+          raise(ActiveRecord::UnknownAttributeReference,
+                "Unable to select metadata attributes: #{invalid.map(&:inspect).join(", ")}. " \
+                "Metadata fields are not part of the '_source' node but are always returned and accessible within the record. " \
+                "(e.g. #{klass.name}.first.#{invalid.first})."
+          )
+        end
+
+        super
+      end
+
       private
 
       def build_where_clause(opts, _rest = [])
@@ -341,6 +363,14 @@ module ElasticsearchRecord
         arel.configure(configure_value) if configure_value.present?
 
         arel
+      end
+
+      # returns any provided field that is a metadata field and therefore not resolvable
+      # through a projection.
+      # @param [Array] fields
+      # @return [Array<String>]
+      def _invalid_projection_fields(fields)
+        ActiveRecord::ConnectionAdapters::ElasticsearchAdapter.metadata_keys & fields.flatten.select{|fld| fld.is_a?(String) || fld.is_a?(Symbol)}.map(&:to_s)
       end
     end
   end
