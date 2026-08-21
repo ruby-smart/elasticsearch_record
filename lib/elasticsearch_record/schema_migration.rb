@@ -14,9 +14,12 @@ module ElasticsearchRecord
       sm = Arel::SelectManager.new(arel_table)
       sm.project(arel_table[primary_key])
       sm.order(arel_table[primary_key].asc)
-      sm.take(connection.max_result_window(table_name))
 
-      connection.select_values(sm, "#{self.class} Load")
+      @pool.with_connection do |connection|
+        sm.take(connection.max_result_window(table_name))
+
+        connection.select_values(sm, "#{self.class} Load")
+      end
     end
   end
 end

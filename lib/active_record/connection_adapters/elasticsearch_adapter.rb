@@ -22,16 +22,6 @@ gem 'elasticsearch'
 require 'elasticsearch'
 
 module ActiveRecord # :nodoc:
-  module ConnectionHandling # :nodoc:
-    def elasticsearch_adapter_class
-      ConnectionAdapters::ElasticsearchAdapter
-    end
-
-    def elasticsearch_connection(config)
-      elasticsearch_adapter_class.new(config)
-    end
-  end
-
   module ConnectionAdapters # :nodoc:
     class ElasticsearchAdapter < AbstractAdapter
       include Elasticsearch::UnsupportedImplementation
@@ -168,7 +158,17 @@ module ActiveRecord # :nodoc:
       end
 
       def schema_migration # :nodoc:
-        ElasticsearchRecord::SchemaMigration.new(self)
+        ElasticsearchRecord::SchemaMigration.new(pool)
+      end
+
+      def internal_metadata # :nodoc:
+        ElasticsearchRecord::InternalMetadata.new(pool)
+      end
+
+      # since rails 7.2 the migration context is resolved through the connection pool -
+      # provided here as connection method again (used by +#assume_migrated_upto_version+)
+      def migration_context # :nodoc:
+        pool.migration_context
       end
 
       # provide a table_name_prefix from the configuration to create & restrict schema creation
@@ -430,3 +430,11 @@ module ActiveRecord # :nodoc:
     end
   end
 end
+
+# since rails 7.2 an adapter has to register itself - the former load-by-convention
+# through +ConnectionHandling#elasticsearch_connection+ is gone
+ActiveRecord::ConnectionAdapters.register(
+  'elasticsearch',
+  'ActiveRecord::ConnectionAdapters::ElasticsearchAdapter',
+  'active_record/connection_adapters/elasticsearch_adapter'
+)

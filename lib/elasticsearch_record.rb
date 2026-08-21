@@ -22,6 +22,7 @@ module ElasticsearchRecord
   eager_autoload do
     autoload :Base
     autoload :Core
+    autoload :InternalMetadata
     autoload :ModelSchema
     autoload :ModelApi
     autoload :Persistence
@@ -84,6 +85,7 @@ end
 
 ActiveSupport.on_load(:active_record) do
   # load patches
+  require 'elasticsearch_record/patches/active_record/connection_pool_patch'
   require 'elasticsearch_record/patches/active_record/relation_merger_patch'
   require 'elasticsearch_record/patches/arel/select_core_patch'
   require 'elasticsearch_record/patches/arel/select_manager_patch'

@@ -32,7 +32,7 @@ RSpec.describe ElasticsearchRecord::SchemaMigration, :elasticsearch do
     TestIndex.drop!(migrations_table_name)
   end
 
-  subject(:migration) { described_class.new(connection) }
+  subject(:migration) { described_class.new(connection.pool) }
 
   let(:connection) { ElasticsearchRecord::Base.connection }
 
