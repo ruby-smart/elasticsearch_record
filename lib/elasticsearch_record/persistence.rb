@@ -5,14 +5,15 @@ module ElasticsearchRecord
     module ClassMethods
       # insert a new record into the Elasticsearch index
       # NOTICE: We don't want to mess up with the Arel-builder - so we send new data directly to the API
+      # @param [ActiveRecord::ConnectionAdapters::ElasticsearchAdapter] connection
       # @param [ActiveModel::Attribute] values
       # @return [Object] id
-      def _insert_record(values, returning)
+      def _insert_record(connection, values, returning)
         # values is not a "key=>values"-Hash, but a +ActiveModel::Attribute+ - so the casted values gets resolved here
         values = values.transform_values(&:value)
 
         # resolve & update a auto_increment value, if configured
-        _insert_with_auto_increment(values) do |arguments|
+        _insert_with_auto_increment(connection, values) do |arguments|
           # build new query
           query = ElasticsearchRecord::Query.new(
             index: table_name,
@@ -62,7 +63,7 @@ module ElasticsearchRecord
       private
 
       # Resolves the +auto_increment+ status from the tables +_meta+ attributes.
-      def _insert_with_auto_increment(values)
+      def _insert_with_auto_increment(connection, values)
         # check, if the primary_key's value is provided.
         # so, no need to resolve a +auto_increment+ value, but provide the id directly
         if (id = values[self.primary_key]).present?

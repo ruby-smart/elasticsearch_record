@@ -42,8 +42,9 @@ module ElasticsearchRecord
       # @param [String, Hash, ElasticsearchRecord::Query] sql
       # @param [Array] binds
       # @param [nil] preparable
+      # @param [Boolean] allow_retry
       # @param [Proc] block
-      def find_by_sql(sql, binds = [], preparable: nil, &block)
+      def find_by_sql(sql, binds = [], preparable: nil, allow_retry: false, &block)
         query = case sql
                 when String # really find by SQL
                   ElasticsearchRecord::Query.new(
@@ -61,7 +62,11 @@ module ElasticsearchRecord
                   sql
                 end
 
-        _load_from_sql(_query_by_sql(query, binds), &block)
+        result = with_connection do |c|
+          _query_by_sql(c, query, binds, preparable: preparable, allow_retry: allow_retry)
+        end
+
+        _load_from_sql(result, &block)
       end
 
       # finds records by query arguments
@@ -74,7 +79,11 @@ module ElasticsearchRecord
           # IMPORTANT: Always provide all columns to prevent unknown attributes that should be nil ...
           columns: source_column_names)
 
-        _load_from_sql(_query_by_sql(query), &block)
+        result = with_connection do |c|
+          _query_by_sql(c, query)
+        end
+
+        _load_from_sql(result, &block)
       end
 
       # ES|QL query API
@@ -90,7 +99,11 @@ module ElasticsearchRecord
           # IMPORTANT: Always provide all columns
           columns: source_column_names)
 
-        _load_from_sql(_query_by_sql(query), &block)
+        result = with_connection do |c|
+          _query_by_sql(c, query)
+        end
+
+        _load_from_sql(result, &block)
       end
 
       # executes a +esql+ by provided *ES|SL* query

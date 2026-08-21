@@ -57,14 +57,14 @@ RSpec.describe ElasticsearchRecord::Persistence::ClassMethods, :elasticsearch do
     after { TestIndex.drop! }
 
     it 'creates the document' do
-      model._insert_record(attributes_for(name: 'alpha', count: 1), nil)
+      model._insert_record(model.connection, attributes_for(name: 'alpha', count: 1), nil)
 
       expect(model.count).to eq(1)
       expect(model.first.name).to eq('alpha')
     end
 
     it 'builds a create query against the table_name' do
-      query = capture_query(:insert) { model._insert_record(attributes_for(name: 'alpha'), nil) }
+      query = capture_query(:insert) { model._insert_record(model.connection, attributes_for(name: 'alpha'), nil) }
 
       expect(query.type).to eq(ElasticsearchRecord::Query::TYPE_CREATE)
       expect(query.index).to eq(model.table_name)
@@ -75,7 +75,7 @@ RSpec.describe ElasticsearchRecord::Persistence::ClassMethods, :elasticsearch do
     it 'resolves the casted value of each provided attribute' do
       values = { 'count' => ActiveModel::Attribute.from_user('count', '42', ActiveRecord::Type::Integer.new) }
 
-      query = capture_query(:insert) { model._insert_record(values, nil) }
+      query = capture_query(:insert) { model._insert_record(model.connection, values, nil) }
 
       expect(query.body).to eq({ 'count' => 42 })
     end
@@ -86,7 +86,7 @@ RSpec.describe ElasticsearchRecord::Persistence::ClassMethods, :elasticsearch do
     # (and is coerced by elasticsearch itself).
     # see @ ActiveRecord::ConnectionAdapters::Elasticsearch::Type::MulticastValue
     it 'does not cast against the column type' do
-      query = capture_query(:insert) { model._insert_record(attributes_for(count: '42', active: 'true'), nil) }
+      query = capture_query(:insert) { model._insert_record(model.connection, attributes_for(count: '42', active: 'true'), nil) }
 
       expect(query.body).to eq({ 'count' => '42', 'active' => 'true' })
       expect(model.first.count).to eq(42)
@@ -94,28 +94,28 @@ RSpec.describe ElasticsearchRecord::Persistence::ClassMethods, :elasticsearch do
 
     # a nil attribute is NOT chopped - it must reach the document, so a mapped field is not missing
     it 'keeps a nil value in the body' do
-      query = capture_query(:insert) { model._insert_record(attributes_for(name: 'alpha', count: nil), nil) }
+      query = capture_query(:insert) { model._insert_record(model.connection, attributes_for(name: 'alpha', count: nil), nil) }
 
       expect(query.body).to eq({ 'name' => 'alpha', 'count' => nil })
     end
 
     # the +_id+ is a VIRTUAL metadata column - it is the document id and must never be part of the doc
     it 'excludes the _id from the body' do
-      query = capture_query(:insert) { model._insert_record(attributes_for(_id: 'a1', name: 'alpha'), nil) }
+      query = capture_query(:insert) { model._insert_record(model.connection, attributes_for(_id: 'a1', name: 'alpha'), nil) }
 
       expect(query.body).to eq({ 'name' => 'alpha' })
       expect(query.arguments).to eq({ id: 'a1' })
     end
 
     it 'writes the document under a provided _id' do
-      model._insert_record(attributes_for(_id: 'a1', name: 'alpha'), nil)
+      model._insert_record(model.connection, attributes_for(_id: 'a1', name: 'alpha'), nil)
 
       expect(model.find_by_id('a1').name).to eq('alpha')
     end
 
     # without a provided id elasticsearch generates one - the arguments stay empty
     it 'sends no id argument without a provided _id' do
-      query = capture_query(:insert) { model._insert_record(attributes_for(name: 'alpha'), nil) }
+      query = capture_query(:insert) { model._insert_record(model.connection, attributes_for(name: 'alpha'), nil) }
 
       expect(query.arguments).to eq({})
       expect(model.first._id).to be_present
@@ -123,7 +123,7 @@ RSpec.describe ElasticsearchRecord::Persistence::ClassMethods, :elasticsearch do
 
     # the refresh is what makes the written document instantly resolvable
     it 'refreshes the index' do
-      query = capture_query(:insert) { model._insert_record(attributes_for(name: 'alpha'), nil) }
+      query = capture_query(:insert) { model._insert_record(model.connection, attributes_for(name: 'alpha'), nil) }
 
       expect(query.refresh).to be(true)
       expect(model.count).to eq(1)
@@ -132,7 +132,7 @@ RSpec.describe ElasticsearchRecord::Persistence::ClassMethods, :elasticsearch do
     it 'instruments the query with the model name' do
       allow(model.connection).to receive(:insert).and_call_original
 
-      model._insert_record(attributes_for(name: 'alpha'), nil)
+      model._insert_record(model.connection, attributes_for(name: 'alpha'), nil)
 
       expect(model.connection).to have_received(:insert).with(anything, "#{model} Create", returning: nil)
     end
@@ -140,19 +140,19 @@ RSpec.describe ElasticsearchRecord::Persistence::ClassMethods, :elasticsearch do
     # ActiveRecord always provides the primary_key as +returning+ column
     # see @ ActiveRecord::ModelSchema::ClassMethods#_returning_columns_for_insert
     it 'returns the returning column values as an Array' do
-      expect(model._insert_record(attributes_for(name: 'alpha'), ['_id'])).to eq([model.first._id])
+      expect(model._insert_record(model.connection, attributes_for(name: 'alpha'), ['_id'])).to eq([model.first._id])
     end
 
     it 'returns the plain id without any returning columns' do
-      expect(model._insert_record(attributes_for(name: 'alpha'), nil)).to eq(model.first._id)
+      expect(model._insert_record(model.connection, attributes_for(name: 'alpha'), nil)).to eq(model.first._id)
     end
 
     # +TYPE_CREATE+ maps to the 'create' operation - it must NOT overwrite an existing document
     it 'raises for an already existing _id' do
-      model._insert_record(attributes_for(_id: 'a1', name: 'alpha'), nil)
+      model._insert_record(model.connection, attributes_for(_id: 'a1', name: 'alpha'), nil)
 
       expect {
-        model._insert_record(attributes_for(_id: 'a1', name: 'again'), nil)
+        model._insert_record(model.connection, attributes_for(_id: 'a1', name: 'again'), nil)
       }.to raise_error(ActiveRecord::RecordNotUnique)
 
       expect(model.find_by_id('a1').name).to eq('alpha')
@@ -160,7 +160,7 @@ RSpec.describe ElasticsearchRecord::Persistence::ClassMethods, :elasticsearch do
 
     it 'raises for a value the mapping cannot hold' do
       expect {
-        model._insert_record(attributes_for(count: 'not-a-number'), nil)
+        model._insert_record(model.connection, attributes_for(count: 'not-a-number'), nil)
       }.to raise_error(ActiveRecord::StatementInvalid)
     end
   end
@@ -173,7 +173,7 @@ RSpec.describe ElasticsearchRecord::Persistence::ClassMethods, :elasticsearch do
     before do
       TestIndex.create!
 
-      model._insert_record(attributes_for(_id: 'a1', name: 'alpha', count: 1, active: true), nil)
+      model._insert_record(model.connection, attributes_for(_id: 'a1', name: 'alpha', count: 1, active: true), nil)
     end
 
     after { TestIndex.drop! }
@@ -255,8 +255,8 @@ RSpec.describe ElasticsearchRecord::Persistence::ClassMethods, :elasticsearch do
     before do
       TestIndex.create!
 
-      model._insert_record(attributes_for(_id: 'a1', name: 'alpha'), nil)
-      model._insert_record(attributes_for(_id: 'a2', name: 'beta'), nil)
+      model._insert_record(model.connection, attributes_for(_id: 'a1', name: 'alpha'), nil)
+      model._insert_record(model.connection, attributes_for(_id: 'a2', name: 'beta'), nil)
     end
 
     after { TestIndex.drop! }
@@ -350,7 +350,7 @@ RSpec.describe ElasticsearchRecord::Persistence::ClassMethods, :elasticsearch do
 
     # yields the resolved arguments & returns them, so the RESOLUTION can be asserted without a write
     def resolve_arguments(klass = settings, values = {})
-      klass.send(:_insert_with_auto_increment, values) { |arguments| arguments }
+      klass.send(:_insert_with_auto_increment, klass.connection, values) { |arguments| arguments }
     end
 
     describe 'the schema it rests on' do
@@ -444,7 +444,7 @@ RSpec.describe ElasticsearchRecord::Persistence::ClassMethods, :elasticsearch do
       # must be updated with the PLAIN id - the raw result would break the +.to_i+ of the NEXT insert.
       # see @ ActiveRecord::Persistence#_create_record
       it 'writes the first value of a returning Array into the meta' do
-        settings.send(:_insert_with_auto_increment, {}) { |_arguments| ['77'] }
+        settings.send(:_insert_with_auto_increment, settings.connection, {}) { |_arguments| ['77'] }
 
         expect(TestIndexWithAutoIncrement.auto_increment).to eq(77)
       end
@@ -453,7 +453,7 @@ RSpec.describe ElasticsearchRecord::Persistence::ClassMethods, :elasticsearch do
       it 'writes the id of a returning Hash into the meta' do
         expect(TestIndexWithAutoIncrement.auto_increment).to eq(10)
 
-        settings.send(:_insert_with_auto_increment, {}) { |arguments|
+        settings.send(:_insert_with_auto_increment, settings.connection, {}) { |arguments|
           # check the AutoIncrement value
           expect(arguments).to eq({ id: 11 })
 
@@ -464,17 +464,17 @@ RSpec.describe ElasticsearchRecord::Persistence::ClassMethods, :elasticsearch do
       end
 
       it 'also accepts a plain id from the block' do
-        settings.send(:_insert_with_auto_increment, {}) { |_arguments| '77' }
+        settings.send(:_insert_with_auto_increment, settings.connection, {}) { |_arguments| '77' }
 
         expect(TestIndexWithAutoIncrement.auto_increment).to eq(77)
       end
 
       it 'returns the block result unchanged' do
-        expect(settings.send(:_insert_with_auto_increment, {}) { |_arguments| ['77'] }).to eq(['77'])
+        expect(settings.send(:_insert_with_auto_increment, settings.connection, {}) { |_arguments| ['77'] }).to eq(['77'])
       end
 
       it 'does not touch the meta if the block resolved no id' do
-        settings.send(:_insert_with_auto_increment, {}) { |_arguments| nil }
+        settings.send(:_insert_with_auto_increment, settings.connection, {}) { |_arguments| nil }
 
         expect(TestIndexWithAutoIncrement.auto_increment).to eq(10)
       end

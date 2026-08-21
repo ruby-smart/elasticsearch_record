@@ -96,7 +96,7 @@ module ElasticsearchRecord
       # used to create a cacheable statement.
       # This is a 1:1 copy, except that we use our own class +ElasticsearchRecord::StatementCache+
       # see @ ActiveRecord::Core::ClassMethods#cached_find_by_statement
-      def cached_find_by_statement(key, &block)
+      def cached_find_by_statement(connection, key, &block)
         cache = @find_by_statement_cache[connection.prepared_statements]
         cache.compute_if_absent(key) { ElasticsearchRecord::StatementCache.create(connection, &block) }
       end

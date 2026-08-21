@@ -137,10 +137,11 @@ module ActiveRecord
           # @param [Array] binds - not supported on the top-level and therefore ignored!
           # @param [Boolean] prepare - used by the default AbstractAdapter - but not supported and therefore never ignored!
           # @param [Boolean] async
+          # @param [Boolean] allow_retry
           # @return [ElasticsearchRecord::Result]
-          def internal_exec_query(query, name = "QUERY", binds = [], prepare: false, async: false)
+          def internal_exec_query(query, name = "QUERY", binds = [], prepare: false, async: false, allow_retry: false)
             build_result(
-              internal_execute(query, name, async: async),
+              internal_execute(query, name, async: async, allow_retry: allow_retry),
               columns: query.columns
             )
           end
