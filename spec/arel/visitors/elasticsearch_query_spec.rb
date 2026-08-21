@@ -921,8 +921,10 @@ RSpec.describe Arel::Visitors::Elasticsearch do
     it 'raises for a grouped OR (Arel::Nodes::Or is not implemented)' do
       manager = Arel::SelectManager.new(table)
       manager.where(Arel::Nodes::Or.new(
-                      Arel::Nodes::Equality.new(table['a'], query_attribute('a', '1')),
-                      Arel::Nodes::Equality.new(table['b'], query_attribute('b', '2'))
+                      [
+                        Arel::Nodes::Equality.new(table['a'], query_attribute('a', '1')),
+                        Arel::Nodes::Equality.new(table['b'], query_attribute('b', '2'))
+                      ]
                     ))
 
       expect { visitor.compile(manager.ast) }

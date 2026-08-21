@@ -105,7 +105,7 @@ RSpec.describe ElasticsearchRecord::Relation::QueryMethods, :elasticsearch do
     it 'raises on an already loaded relation' do
       relation.load
 
-      expect { relation.kind!(:bool) }.to raise_error(ActiveRecord::ImmutableRelation)
+      expect { relation.kind!(:bool) }.to raise_error(ActiveRecord::UnmodifiableRelation)
     end
   end
 

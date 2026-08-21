@@ -115,7 +115,7 @@ RSpec.describe ElasticsearchRecord::Relation::CoreMethods, :elasticsearch do
     it 'makes the relation immutable' do
       relation.resolve
 
-      expect { relation.where!(name: 'alpha') }.to raise_error(ActiveRecord::ImmutableRelation)
+      expect { relation.where!(name: 'alpha') }.to raise_error(ActiveRecord::UnmodifiableRelation)
     end
 
     it 'instruments with a custom name' do

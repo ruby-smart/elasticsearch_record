@@ -9,6 +9,9 @@ module Arel # :nodoc: all
       # required for ActiveRecord
       attr_accessor :preparable
 
+      # required for ActiveRecord (rails 7.2 marks idempotent queries as retryable)
+      attr_accessor :retryable
+
       # returns the current bind index (default: 1)
       attr_reader :bind_index
 

@@ -8,7 +8,7 @@ module ElasticsearchRecord
 
       def kind_value=(value)
         # checks if records are already loaded - in this case we cannot mutate the query anymore
-        assert_mutability!
+        assert_modifiable!
 
         @values[:kind] = value.to_sym
       end
@@ -18,7 +18,7 @@ module ElasticsearchRecord
       end
 
       def configure_value=(value)
-        assert_mutability!
+        assert_modifiable!
 
         @values[:configure] = value
       end
@@ -28,7 +28,7 @@ module ElasticsearchRecord
       end
 
       def query_clause=(value)
-        assert_mutability!
+        assert_modifiable!
 
         @values[:query] = value
       end
@@ -38,7 +38,7 @@ module ElasticsearchRecord
       end
 
       def aggs_clause=(value)
-        assert_mutability!
+        assert_modifiable!
 
         @values[:aggs] = value
       end

@@ -10,7 +10,7 @@ module ElasticsearchRecord
       # transforms the current relation into arel, compiles it to query and executes the query.
       # returns the result object.
       #
-      # PLEASE NOTE: This makes the query +immutable+ and raises a +ActiveRecord::ImmutableRelation+
+      # PLEASE NOTE: This makes the query +immutable+ and raises a +ActiveRecord::UnmodifiableRelation+
       # if you try to change it's values.
       #
       # PLEASE NOTE: resolving records _(instantiate)_ is never possible after calling this method!

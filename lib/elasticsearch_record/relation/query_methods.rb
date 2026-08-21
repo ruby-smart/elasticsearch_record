@@ -260,7 +260,7 @@ module ElasticsearchRecord
             unless _valid_unscoping_values.include?(scope)
               raise ArgumentError, "Called unscope() with invalid unscoping argument ':#{scope}'. Valid arguments are :#{_valid_unscoping_values.to_a.join(", :")}."
             end
-            assert_mutability!
+            assert_modifiable!
             @values.delete(scope)
           when Hash
             scope.each do |key, target_value|

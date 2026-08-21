@@ -109,7 +109,8 @@ module ElasticsearchRecord # :nodoc:
           left = left[key]
           right = right[key]
 
-          or_clause = Arel::Nodes::Or.new(left, right)
+          # since rails 7.2 +Arel::Nodes::Or+ is a nary node and takes its children as a single Array
+          or_clause = Arel::Nodes::Or.new([left, right])
 
           common.predicates[key] = ElasticsearchRecord::Relation::QueryClause.new(key, [Arel::Nodes::Grouping.new(or_clause)])
           common
