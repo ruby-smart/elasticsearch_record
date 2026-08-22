@@ -172,6 +172,16 @@ module ElasticsearchRecord
       n ? computed_results.last(n) : computed_results.last
     end
 
+    # Returns the rows to instantiate records from - ActiveRecord resolves them through this
+    # method instead of iterating the result set itself.
+    # Each element is a Hash keyed by column / metadata name and therefore already provides the
+    # read surface of +ActiveRecord::Result::IndexedRow+ (+key?+, +[]+, +fetch+, +keys+, ...).
+    # used by +ActiveRecord+
+    # @return [Array<Hash>]
+    def indexed_rows # :nodoc:
+      computed_results
+    end
+
     # used by ActiveRecord
     def cancel # :nodoc:
       self
