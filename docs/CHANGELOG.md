@@ -1,6 +1,6 @@
 # ElasticsearchRecord - CHANGELOG
 
-## unreleased
+## [3.0.0] - 2026-09-08
 * [add] **BREAKING**: requires `activerecord ~> 7.2.0`
 * [add] `Quoting::ClassMethods#quote_column_name` & `#quote_table_name` - identifier quoting is class-level & mandatory now
 * [add] `ElasticsearchRecord::InternalMetadata` - always disabled _(the flag moved from the adapter to the database config)_

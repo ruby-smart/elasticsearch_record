@@ -7,7 +7,7 @@ module ElasticsearchRecord
   end
 
   module VERSION
-    MAJOR = 2
+    MAJOR = 3
     MINOR = 0
     TINY  = 0
     PRE   = nil
