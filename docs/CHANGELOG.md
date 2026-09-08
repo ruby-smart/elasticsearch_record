@@ -1,6 +1,6 @@
 # ElasticsearchRecord - CHANGELOG
 
-## unreleased
+## [4.0.0] - 2026-09-08
 * [add] **BREAKING**: requires `activerecord ~> 8.0.0`
 * [add] `ElasticsearchRecord::Result#indexed_rows` - rails 8.0 instantiates records through this method instead of iterating the result set itself.
 * [ref] `ElasticsearchAdapter#log` resolves the instrumenter through `#instrumenter` instead of the former `@instrumenter` ivar
