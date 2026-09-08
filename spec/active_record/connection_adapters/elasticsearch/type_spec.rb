@@ -6,7 +6,7 @@
 # plain Ruby - no cluster is involved, so every example works on the type object directly.
 #
 # The most important one is +MulticastValue+: Elasticsearch may return a single value OR an array
-# for ANY mapping type, so +#lookup_cast_type_from_column+ wraps every resolved type into it.
+# for ANY mapping type, so +#lookup_multicast_cast_type+ wraps every resolved type into it.
 #
 # see @ ActiveRecord::ConnectionAdapters::Elasticsearch::Type
 # see @ ActiveRecord::ConnectionAdapters::ElasticsearchAdapter::TYPE_MAP

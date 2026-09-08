@@ -379,15 +379,23 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaStatements
 
         expect(column.virtual?).to be(true)
       end
+
+      it 'resolves the cast type upfront and stores it on the column' do
+        field  = adapter.column_definitions(index_name).find { |d| d['name'] == 'count' }
+        column = adapter.new_column_from_field(index_name, field, nil)
+
+        expect(column.fetch_cast_type(adapter))
+          .to be_a(ActiveRecord::ConnectionAdapters::Elasticsearch::Type::MulticastValue)
+      end
     end
 
     # Elasticsearch may return a single value OR an array for ANY type - so every lookup is
     # wrapped into the multicast type
-    describe '#lookup_cast_type_from_column' do
+    describe '#lookup_multicast_cast_type' do
       it 'wraps the resolved type into a MulticastValue' do
         column = adapter.columns(index_name).find { |c| c.name == 'count' }
 
-        expect(adapter.lookup_cast_type_from_column(column))
+        expect(adapter.lookup_multicast_cast_type(column.sql_type))
           .to be_a(ActiveRecord::ConnectionAdapters::Elasticsearch::Type::MulticastValue)
       end
     end

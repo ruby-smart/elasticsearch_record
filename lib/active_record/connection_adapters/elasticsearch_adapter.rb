@@ -114,8 +114,8 @@ module ActiveRecord # :nodoc:
           # this special Type is required to parse a ES-value into the +nested_type+, array or hash.
           # For arrays & hashes it tries to cast the values with the provided +nested_type+
           # but falls back to provided value if cast fails.
-          # This type cannot be accessed through the mapping and is only called @ #lookup_cast_type_from_column
-          # @see ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaStatements#lookup_cast_type_from_column
+          # This type cannot be accessed through the mapping and is only called @ #lookup_multicast_cast_type
+          # @see ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaStatements#lookup_multicast_cast_type
           m.register_type :multicast_value do |_type, nested_type|
             ActiveRecord::ConnectionAdapters::Elasticsearch::Type::MulticastValue.new(nested_type: nested_type)
           end

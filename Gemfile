@@ -5,11 +5,6 @@ source "https://rubygems.org"
 # Specify your gem's dependencies in elasticsearch_record.gemspec
 gemspec
 
-# Pin ActiveRecord to the 8.0.x line for local development & specs.
-# The gemspec intentionally allows '>= 8.0', '< 8.2' - this pin only decides
-# which of the allowed minors the suite runs against.
-gem 'activerecord', '~> 8.0.0'
-
 # Pin the Elasticsearch client to the 8.x line for local development & specs.
 # The gemspec intentionally allows '>= 7.17', but the 9.x client sends an
 # 'Accept: application/vnd.elasticsearch+json; compatible-with=9' header that

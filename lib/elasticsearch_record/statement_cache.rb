@@ -4,8 +4,9 @@ module ElasticsearchRecord
   class StatementCache < ActiveRecord::StatementCache
 
     class PartialQuery < ActiveRecord::StatementCache::PartialQuery # :nodoc:
-      def initialize(values)
-        @values = values
+      def initialize(values, retryable:)
+        @values    = values
+        @retryable = retryable
         # no need to create indexes
       end
 
@@ -77,8 +78,8 @@ module ElasticsearchRecord
       end
     end
 
-    def self.partial_query(values)
-      PartialQuery.new(values)
+    def self.partial_query(...)
+      PartialQuery.new(...)
     end
 
     def self.partial_query_collector

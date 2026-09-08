@@ -160,7 +160,7 @@ module ActiveRecord
             raise ActiveRecord::StatementInvalid, 'Unable to execute! Provided query is invalid.' unless query.valid?
 
             # checks for write query - raises an exception if connection is locked to readonly ...
-            check_if_write_query(query)
+            ensure_writes_are_allowed(query) if write_query?(query)
 
             api(query.gate, query.query_arguments, name, async: async, allow_retry: allow_retry, materialize_transactions: materialize_transactions)
           end

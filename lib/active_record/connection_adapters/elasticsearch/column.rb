@@ -7,14 +7,14 @@ module ActiveRecord
 
         attr_reader :virtual, :fields, :properties, :meta, :enabled
 
-        def initialize(name, default, sql_type_metadata = nil, virtual: false, fields: nil, properties: nil, meta: nil, enabled: nil, **kwargs)
+        def initialize(name, cast_type, default, sql_type_metadata = nil, virtual: false, fields: nil, properties: nil, meta: nil, enabled: nil, **kwargs)
           @virtual    = virtual
           @fields     = fields.presence || []
           @properties = properties.presence || []
           @meta       = meta.presence || {}
           @enabled    = enabled.nil? ? true : enabled
 
-          super(name, default, sql_type_metadata, true, nil, **kwargs)
+          super(name, cast_type, default, sql_type_metadata, true, nil, **kwargs)
         end
 
         # returns comment from meta

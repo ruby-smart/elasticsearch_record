@@ -226,6 +226,8 @@ module ActiveRecord
           def new_column_from_field(_table_name, field, _definitions)
             ActiveRecord::ConnectionAdapters::Elasticsearch::Column.new(
               field["name"],
+              # the cast type is resolved upfront and stored on the column
+              lookup_multicast_cast_type(field["type"]),
               field["null_value"],
               fetch_type_metadata(field["type"]),
               meta: field['meta'],
@@ -236,13 +238,13 @@ module ActiveRecord
             )
           end
 
-          # lookups from building the @columns_hash.
+          # resolves the cast type of the provided +sql_type+ and wraps it into a +MulticastValue+.
           # since Elasticsearch has the "feature" to provide multicast values on any type, we need to fetch them ...
           # you know, ES can return an integer or an array of integers for any column ...
-          # @param [ActiveRecord::ConnectionAdapters::Elasticsearch::Column] column
+          # @param [String] sql_type
           # @return [ActiveRecord::ConnectionAdapters::Elasticsearch::Type::MulticastValue]
-          def lookup_cast_type_from_column(column)
-            type_map.lookup(:multicast_value, super)
+          def lookup_multicast_cast_type(sql_type)
+            type_map.lookup(:multicast_value, lookup_cast_type(sql_type))
           end
 
           # Returns a array of tables primary keys.
