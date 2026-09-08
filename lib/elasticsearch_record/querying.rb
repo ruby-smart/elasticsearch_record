@@ -123,17 +123,28 @@ module ElasticsearchRecord
         connection.exec_query(query, "#{name} Msearch")
       end
 
-      # executes a search by provided +RAW+ query - supports +Elasticsearch::DSL+ gem if loaded
+      # executes a search by provided +RAW+ query - supports +Elasticsearch::DSL+ gem if loaded.
+      #
+      # Without a block the trailing options-hash is used as query arguments.
+      # With a block the +Elasticsearch::DSL+ gem builds the query - if the gem is not
+      # available (or the block fails), the block is SILENTLY ignored and the
+      # options-hash is used instead.
       def search(*args, &block)
-        begin
-          # require the Elasticsearch::DSL gem, if loaded
-          require 'elasticsearch/dsl'
-          query = ::Elasticsearch::DSL::Search::Search.new(*args, &block).to_hash
-        rescue LoadError
-          query = args.extract_options!
-        rescue
-          query = args.extract_options!
-        end
+        query = if block_given?
+                  begin
+                    # require the Elasticsearch::DSL gem, if loaded
+                    require 'elasticsearch/dsl'
+                    # PLEASE NOTE: +Search#to_hash+ returns the request BODY - it must be nested
+                    # into the query arguments, otherwise it is sent as (invalid) URL parameters.
+                    { body: ::Elasticsearch::DSL::Search::Search.new(*args, &block).to_hash }
+                  rescue LoadError
+                    args.extract_options!
+                  rescue
+                    args.extract_options!
+                  end
+                else
+                  args.extract_options!
+                end
 
         find_by_query(query)
       end
