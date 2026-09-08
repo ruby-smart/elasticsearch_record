@@ -1,7 +1,24 @@
 # ElasticsearchRecord - CHANGELOG
 
 ## unreleased
-* [fix] `Querying::ClassMethods#search` to nest the `Elasticsearch::DSL` block result into the `body` _(`Search#to_hash` returns the request BODY - it was sent as invalid URL parameters and raised a 400)_ and to only enter the DSL branch **if a block was provided** - with the gem installed, a blockless `search(body: ...)` / `search(size: 1)` built an empty query and silently resolved every record
+* [add] **BREAKING**: requires `activerecord ~> 7.2.0`
+* [add] `Quoting::ClassMethods#quote_column_name` & `#quote_table_name` - identifier quoting is class-level & mandatory now
+* [add] `ElasticsearchRecord::InternalMetadata` - always disabled _(the flag moved from the adapter to the database config)_
+* [add] `patches/active_record/connection_pool_patch` - routes `#migrations_paths`, `#schema_migration` & `#internal_metadata` back to the adapter
+* [add] specs for `ElasticsearchAdapter#translate_exception`
+* [add] specs for `Relation::ValueMethods#limit_value=`
+* [add] specs for `Core#id=`, `#id_was`, `#write_attribute` & `#read_attribute`
+* [add] specs for `TableSettingDefinition`
+* [add] specs for `InternalMetadata#enabled?`
+* [ref] the adapter registers itself through `ActiveRecord::ConnectionAdapters.register` - `ConnectionHandling#elasticsearch_connection` removed
+* [ref] the adapter provides `#internal_metadata` & `#migration_context` again; `#schema_migration` builds from the **pool**
+* [ref] `SchemaMigration#integer_versions` resolves through `pool.with_connection`
+* [ref] `#find_by_sql`, `#find_by_query` & `#find_by_esql` resolve through `with_connection`; `allow_retry:` forwarded down to `#internal_exec_query`
+* [ref] `#_insert_record`, `#_insert_with_auto_increment` & `#cached_find_by_statement` take the connection as first argument
+* [ref] `Arel::Collectors::ElasticsearchQuery#retryable` accessor added _(rails marks idempotent queries as retryable)_
+* [ref] `assert_mutability!` -> `assert_modifiable!` & `ImmutableRelation` -> `UnmodifiableRelation`
+* [ref] `Arel::Nodes::Or` is a nary node now - takes its children as a single `Array`
+* [fix] `Querying::ClassMethods#search` to nest the `Elasticsearch::DSL` block result into the `body` and to only enter the DSL branch **if a block was provided**
 
 ## [2.0.0] - 2026-08-10
 * [add] `ElasticsearchRecord.decorate_table_names` _(default: `true`)_ as global kill-switch for the table name decoration - only provides the default for an omitted `decorate:`-argument, `#_env_table_name` stays unaffected
