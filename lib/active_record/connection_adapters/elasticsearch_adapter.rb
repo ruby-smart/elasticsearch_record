@@ -384,7 +384,9 @@ module ActiveRecord # :nodoc:
       # @raise [Exception] any exception encountered during execution, after translation.
       # @return [void]
       def log(gate, arguments, name = 'QUERY', async: false, statistics: nil, &block)
-        @instrumenter.instrument(
+        # +instrumenter+ instead of the former +@instrumenter+ ivar - the abstract adapter
+        # resolves it per execution context now
+        instrumenter.instrument(
           "query.elasticsearch_record",
           gate: gate,
           name: name,
