@@ -1,5 +1,8 @@
 # ElasticsearchRecord - CHANGELOG
 
+## unreleased
+* [fix] `Querying::ClassMethods#search` to nest the `Elasticsearch::DSL` block result into the `body` _(`Search#to_hash` returns the request BODY - it was sent as invalid URL parameters and raised a 400)_ and to only enter the DSL branch **if a block was provided** - with the gem installed, a blockless `search(body: ...)` / `search(size: 1)` built an empty query and silently resolved every record
+
 ## [2.0.0] - 2026-08-10
 * [add] `ElasticsearchRecord.decorate_table_names` _(default: `true`)_ as global kill-switch for the table name decoration - only provides the default for an omitted `decorate:`-argument, `#_env_table_name` stays unaffected
 * [add] `TableStatements#truncate_table` raises an `ArgumentError` for AR-internal indices - the statement runs a `drop` & `create` and would wipe the migration state. `#drop_table` stays unguarded by design _(AR resets both tables through it)_
