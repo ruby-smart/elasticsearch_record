@@ -151,14 +151,12 @@ module ActiveRecord
             end
 
             tbl.puts "  end"
-            tbl.puts
 
             tbl.rewind
             stream.print tbl.read
           rescue => e
             stream.puts "# Could not dump table #{table.inspect} because of following #{e.class}"
             stream.puts "#   #{e.message}"
-            stream.puts
           ensure
             self.table_name = nil
           end

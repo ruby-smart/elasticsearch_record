@@ -1,4 +1,7 @@
-# ElasticsearchRecord - CHANGELOG
+# ElasticsearchRecord :: rails-7-2-stable - CHANGELOG
+
+## [PATCH] 2026-09-08
+* [ref] `ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaDumper` remove redundant blank lines
 
 ## [3.0.0] - 2026-09-08
 * [add] **BREAKING**: requires `activerecord ~> 7.2.0`
