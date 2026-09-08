@@ -1,5 +1,11 @@
 # ElasticsearchRecord - CHANGELOG
 
+## unreleased
+* [add] **BREAKING**: requires `activerecord >= 8.0, < 8.2` _(the `rails-8-0` branch)_ 
+* [add] `ElasticsearchRecord::Result#indexed_rows` - rails 8.0 instantiates records through this method instead of iterating the result set itself.
+* [ref] `ElasticsearchAdapter#log` resolves the instrumenter through `#instrumenter` instead of the former `@instrumenter` ivar
+* [ref] `ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaDumper` remove redundant blank lines
+
 ## [3.0.0] - 2026-09-08
 * [add] **BREAKING**: requires `activerecord ~> 7.2.0`
 * [add] `Quoting::ClassMethods#quote_column_name` & `#quote_table_name` - identifier quoting is class-level & mandatory now

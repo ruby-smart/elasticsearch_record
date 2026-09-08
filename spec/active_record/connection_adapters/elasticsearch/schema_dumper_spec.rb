@@ -208,7 +208,7 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaDumper do
       end
 
       it 'closes the block' do
-        expect(output).to end_with("  end\n\n")
+        expect(output).to end_with("  end\n")
       end
 
       it 'dumps the metas' do
