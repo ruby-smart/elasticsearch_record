@@ -1,5 +1,17 @@
 # ElasticsearchRecord - CHANGELOG
 
+## unreleased
+* [add] **BREAKING**: requires `activerecord ~> 8.1.0`
+* [add] `ElasticsearchRecord::Result#indexed_rows` - rails 8.0 instantiates records through this method instead of iterating the result set itself.
+* [add] `Relation::ValueMethods#limit!` - keeps the `'__max__'` & `Float::INFINITY` limits, which rails now casts through `Integer()`
+* [add] specs for `SchemaStatements#new_column_from_field` resolving the cast type upfront
+* [ref] `Elasticsearch::Column#initialize` takes `cast_type` as 2nd positional argument
+* [ref] `SchemaStatements#lookup_cast_type_from_column` -> `#lookup_multicast_cast_type` - resolves from a `sql_type` and is called upfront
+* [ref] `DatabaseStatements#internal_execute` guards writes through `#write_query?` & `#ensure_writes_are_allowed`
+* [ref] `StatementCache::PartialQuery#initialize` takes the `retryable:` flag
+* [ref] `ElasticsearchAdapter#log` resolves the instrumenter through `#instrumenter` instead of the former `@instrumenter` ivar
+* [ref] `ActiveRecord::ConnectionAdapters::Elasticsearch::SchemaDumper` remove redundant blank lines
+
 ## [4.0.0] - 2026-09-08
 * [add] **BREAKING**: requires `activerecord ~> 8.0.0`
 * [add] `ElasticsearchRecord::Result#indexed_rows` - rails 8.0 instantiates records through this method instead of iterating the result set itself.

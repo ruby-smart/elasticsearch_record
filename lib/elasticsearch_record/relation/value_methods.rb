@@ -43,6 +43,14 @@ module ElasticsearchRecord
         @values[:aggs] = value
       end
 
+      # overwrite the +limit!+ method, since the default implementation casts the provided value
+      # through +Integer()+ before it reaches the +limit_value=+ setter - which would raise
+      # for our special values ('__max__' & +Float::INFINITY+).
+      def limit!(value)
+        self.limit_value = value
+        self
+      end
+
       # overwrite the limit_value setter, to provide a special behaviour of auto-setting the +max_result_window+.
       def limit_value=(limit)
         if limit == '__max__' || limit == Float::INFINITY || (limit.nil? && delegate_query_nil_limit?)
