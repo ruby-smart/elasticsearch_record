@@ -16,8 +16,8 @@ _ElasticsearchRecord is a ActiveRecord adapter and provides similar functionalit
 
 **PLEASE NOTE:**
 
-- This is the `main`-branch, which supports rails **8.0** _(see section 'Rails_Versions' for supported versions)_
-- supports ActiveRecord ~> 7.2 + Elasticsearch >= 7.17
+- This is the `main`-branch, which supports rails **8.1** _(see section 'Rails_Versions' for supported versions)_
+- supports ActiveRecord ~> 8.1 + Elasticsearch >= 7.17
 - added features up to Elasticsearch `8.17.1` _(tested against `8.19.14`)_
 - _ES|QL_ queries _(`TYPE_ESQL` / the `esql.query` gate)_ require **Elasticsearch >= 8.11**, where the feature became
   generally available. All other features remain available from Elasticsearch `7.17`.
@@ -27,6 +27,13 @@ _ElasticsearchRecord is a ActiveRecord adapter and provides similar functionalit
 ## Rails versions
 
 Supported rails versions:
+
+### Rails 8.1:
+_(since gem version 5.0)_
+
+https://github.com/ruby-smart/elasticsearch_record/tree/rails-8-1-stable
+
+[![rails-7-1-stable](https://img.shields.io/badge/rails-8.1.stable-orange.svg)](https://github.com/ruby-smart/elasticsearch_record/tree/rails-8-1-stable)
 
 ### Rails 8.0:
 _(since gem version 4.0)_
