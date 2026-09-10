@@ -211,4 +211,60 @@ RSpec.describe ActiveRecord::ConnectionAdapters::ElasticsearchAdapter do
       expect { log_raising(ArgumentError.new('nope')) }.to raise_error(ArgumentError, 'nope')
     end
   end
+
+  # Elasticsearch 8.19 made 'allow_partial_results' the ES|QL DEFAULT - a query no longer fails on
+  # (e.g.) an unavailable shard, it succeeds with an INCOMPLETE result-set and only raises the
+  # +is_partial+ flag. +#api+ can turn that into an error, so it cannot pass by unnoticed.
+  #
+  # see @ ElasticsearchRecord.error_on_partial_results
+  describe '#api partial results' do
+    # a response as the transport returns it - +#api+ only inspects it, no cluster is involved
+    def api_returning(body)
+      response = Elasticsearch::API::Response.new(
+        Elastic::Transport::Transport::Response.new(200, body)
+      )
+
+      allow(adapter).to receive(:with_raw_connection).and_yield(double(esql: response))
+      allow(adapter).to receive(:verified!)
+
+      adapter.api(:esql, { body: { query: 'FROM x' } })
+    end
+
+    around do |example|
+      previous = ElasticsearchRecord.error_on_partial_results
+      example.run
+      ElasticsearchRecord.error_on_partial_results = previous
+    end
+
+    context 'with the flag disabled' do
+      before { ElasticsearchRecord.error_on_partial_results = false }
+
+      it 'returns the partial response untouched' do
+        expect(api_returning({ 'is_partial' => true, 'values' => [[1]] })['values']).to eq([[1]])
+      end
+    end
+
+    context 'with the flag enabled (the default)' do
+      before { ElasticsearchRecord.error_on_partial_results = true }
+
+      it 'raises a PartialResultsError' do
+        expect { api_returning({ 'is_partial' => true }) }
+          .to raise_error(ElasticsearchRecord::PartialResultsError, /flagged as PARTIAL/)
+      end
+
+      it 'names the gate on the error' do
+        expect { api_returning({ 'is_partial' => true }) }
+          .to raise_error(ElasticsearchRecord::PartialResultsError, /'esql'/)
+      end
+
+      it 'does not raise for a complete response' do
+        expect(api_returning({ 'is_partial' => false, 'values' => [] })['values']).to eq([])
+      end
+
+      # a search / count / index response never carries the flag at all
+      it 'does not raise for a response without the flag' do
+        expect(api_returning({ 'took' => 3 })['took']).to eq(3)
+      end
+    end
+  end
 end

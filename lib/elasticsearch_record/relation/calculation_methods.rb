@@ -100,6 +100,36 @@ module ElasticsearchRecord
         calculate_aggregation(:stats, column_name)
       end
 
+      # An extended version of the +stats+ aggregation, where additional metrics are added:
+      # *sum_of_squares*, *variance*, *std_deviation* and *std_deviation_bounds*.
+      #
+      # PLEASE NOTE: this is the only aggregation that provides a *standard deviation* -
+      # Elasticsearch has no dedicated 'std_dev' metric aggregation.
+      #
+      #   Person.all.extended_stats(:age)
+      #   > {
+      #       "count": 10,
+      #       "min": 0.0,
+      #       "max": 990.0,
+      #       "sum": 16859,
+      #       "avg": 75.5,
+      #       "sum_of_squares": 2.53E7,
+      #       "variance": 1.8E6,
+      #       "std_deviation": 1341.6,
+      #       "std_deviation_bounds": { "upper": 2758.6, "lower": -2607.6, ... }
+      #     }
+      #
+      # @see https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-metrics-extendedstats-aggregation.html
+      #
+      # @note returns *nil* on a *NullRelation*
+      #
+      # @param [Symbol, String] column_name
+      # @param [Integer, nil] sigma - optional 'sigma' bounds of the +std_deviation_bounds+ node
+      # @return [Hash,nil]
+      def extended_stats(column_name, sigma: nil)
+        calculate_aggregation(:extended_stats, column_name, opts: (sigma.nil? ? {} : { sigma: sigma }))
+      end
+
       # A multi-value metrics aggregation that computes statistics over string values extracted from the aggregated documents.
       # These values can be retrieved either from specific keyword fields.
       #

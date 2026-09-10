@@ -89,6 +89,10 @@ module ActiveRecord # :nodoc:
 
           m.register_type 'date', Type::DateTime.new
 
+          # 'date_nanos' stores nanosecond resolution - +Type::DateTime+ keeps the full precision
+          # (a Ruby +Time+ carries nsec), so it casts losslessly and behaves like 'date'.
+          m.alias_type 'date_nanos', 'date'
+
           # force a hash
           m.register_type 'object', ActiveRecord::ConnectionAdapters::Elasticsearch::Type::Object.new
           m.alias_type 'flattened', "object"
@@ -285,6 +289,12 @@ module ActiveRecord # :nodoc:
 
               # raise timeouts
               raise(::ActiveRecord::StatementTimeout, "Elasticsearch api request failed due a timeout") if response['timed_out']
+
+              # raise PARTIAL responses - but only if explicitly requested.
+              # since Elasticsearch 8.19 an ES|QL query returns partial results instead of failing,
+              # so an incomplete result-set would otherwise pass by unnoticed.
+              # see @ ElasticsearchRecord.error_on_partial_results
+              raise(::ElasticsearchRecord::PartialResultsError, gate) if ::ElasticsearchRecord.error_on_partial_results && response['is_partial']
             end
 
             # return response

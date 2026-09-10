@@ -1,5 +1,21 @@
 # ElasticsearchRecord - CHANGELOG
 
+## unreleased
+_Elasticsearch **8.18** & **8.19** support_
+* [add] **BREAKING**: `ElasticsearchRecord.error_on_partial_results` _(default: `true`)_ - a response flagged as `is_partial` now raises an `ElasticsearchRecord::PartialResultsError` from `ElasticsearchAdapter#api`. Elasticsearch 8.19 made `allow_partial_results` the ES|QL **default**, so a query no longer fails on (e.g.) an unavailable shard but succeeds with an INCOMPLETE result-set - which reaches an application as missing records, never as an error. ActiveRecord cannot express "these rows are only some of the rows", so the query fails instead. Set the flag to `false` to accept partial results, or tell the cluster to fail the query itself per request (`allow_partial_results: false`) or globally (`esql.query.allow_partial_results`). **Only affects ES|QL** - a `search`, `count` or document response never carries the flag
+* [add] `ElasticsearchRecord::Result#partial?` - reads the `is_partial` flag, regardless of the setting above
+* [add] `ElasticsearchRecord::PartialResultsError`
+* [add] `Relation::CalculationMethods#extended_stats` - the only aggregation providing a **standard deviation** _(Elasticsearch has no `std_dev` metric)_; takes an optional `sigma:` for the `std_deviation_bounds`
+* [add] `date_nanos` to the `TYPE_MAP` _(as alias of `date`)_ - it resolved to a plain passthrough `Value` before and never cast to a `Time`
+* [add] `ColumnMethods` - `rank_vectors` _(new in 8.18)_, `counted_keyword` & `passthrough`
+* [add] `TableMappingDefinition::TYPE_ATTRIBUTES` - the mapping parameters documented on the individual field type. Without them a `strict:` definition could not map a lot of types at all: `scaling_factor` _(scaled_float)_, `dims` & `element_type` _(dense_vector)_ and `metrics` & `default_metric` _(aggregate_metric_double)_ are **required** by Elasticsearch. Also covers `semantic_text` _(GA since 8.18)_ through `inference_id`, `search_inference_id` & `chunking_settings`, plus `time_series_dimension`, `time_series_metric` & `synthetic_source_keep`
+* [add] `TableSettingDefinition` - the `mapping.*`, `lifecycle.*`, `sort.*`, `queries.*`, `time_series.*`, `write.*` & `*.slowlog` settings, `priority` & `max_slices_per_scroll`
+* [add] specs for `TableMappingDefinition` & `ElasticsearchRecord::Result#partial?`
+* [ref] `TableMappingDefinition::ATTRIBUTES` is the union of the new `COMMON_ATTRIBUTES` & `TYPE_ATTRIBUTES`
+* [fix] `TableSettingDefinition` name matching resolved through `String#match?`, so a name only had to **contain** a known one - `research` matched the `search` module, while every `index.mapping.*` name was rejected since no entry was a substring of it. The matchers now resolve a name against its dot-separated parents _(a leading `index.` is stripped first)_ and the **most specific** entry wins
+* [fix] `TableSettingDefinition#static?` reported `search.idle.after` as static _(it matched the `search` module)_ - a dynamic setting could therefore never be changed on an open index
+* [fix] `TableMappingDefinition#_validate_meta` rejected **every** `object` & `nested` mapping - `#meta` falls back to an empty hash, so the `nil?` guard in front of the 'no meta on object/nested types' check never fired
+
 ## [5.0.0] - 2026-09-10
 * [add] **BREAKING**: requires `activerecord ~> 8.1.0`
 * [add] `Relation::ValueMethods#limit!` - keeps the `'__max__'` & `Float::INFINITY` limits, which rails now casts through `Integer()`

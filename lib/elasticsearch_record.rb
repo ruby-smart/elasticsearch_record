@@ -81,6 +81,27 @@ module ElasticsearchRecord
   # see @ ActiveRecord::ConnectionAdapters::Elasticsearch::TableStatements
   singleton_class.attr_accessor :decorate_table_names
   self.decorate_table_names = true
+
+  ##
+  # :singleton-method:
+  # Specifies if a exception should be raised when a response was flagged as PARTIAL.
+  # Since Elasticsearch 8.19 an ES|QL query defaults to +allow_partial_results+ and no longer fails
+  # on (e.g.) an unavailable shard - it succeeds with whatever it could collect and only sets the
+  # +is_partial+ flag.
+  #
+  # This defaults to +true+: silently handing an INCOMPLETE result-set to an application that asked
+  # for a complete one is a correctness problem, not a convenience - a missed +is_partial+ shows up
+  # as missing records, never as an error. Since ActiveRecord has no way to express "these rows are
+  # only some of the rows", the query has to fail instead.
+  #
+  # Disable it to accept partial results (they stay readable through
+  # +ElasticsearchRecord::Result#partial?+ either way). Alternatively the cluster can be told to
+  # fail the query itself, per request (+allow_partial_results: false+) or globally
+  # (+esql.query.allow_partial_results+).
+  #
+  # see @ ElasticsearchRecord::PartialResultsError
+  singleton_class.attr_accessor :error_on_partial_results
+  self.error_on_partial_results = true
 end
 
 ActiveSupport.on_load(:active_record) do

@@ -304,6 +304,38 @@ RSpec.describe ElasticsearchRecord::Relation::CalculationMethods, :elasticsearch
         .to eq({ 'count' => 3, 'min' => 1.0, 'max' => 3.0, 'avg' => 2.0, 'sum' => 6.0 })
     end
 
+    # the extended version adds the spread metrics on top of the +stats+ node - it is the ONLY
+    # aggregation that provides a standard deviation (Elasticsearch has no 'std_dev' metric)
+    describe '#extended_stats' do
+      it 'returns the stats plus the spread metrics' do
+        result = relation.extended_stats(:count)
+
+        expect(result).to include('count' => 3, 'min' => 1.0, 'max' => 3.0, 'avg' => 2.0, 'sum' => 6.0)
+        expect(result['sum_of_squares']).to eq(14.0)
+        expect(result['variance']).to be_within(0.0001).of(0.6666)
+        expect(result['std_deviation']).to be_within(0.0001).of(0.8164)
+      end
+
+      # the bounds default to TWO standard deviations around the mean
+      it 'returns the default std_deviation_bounds' do
+        bounds = relation.extended_stats(:count)['std_deviation_bounds']
+
+        expect(bounds['upper']).to be_within(0.0001).of(3.6329)
+        expect(bounds['lower']).to be_within(0.0001).of(0.3670)
+      end
+
+      it 'applies a custom sigma to the bounds' do
+        bounds = relation.extended_stats(:count, sigma: 1)['std_deviation_bounds']
+
+        expect(bounds['upper']).to be_within(0.0001).of(2.8164)
+        expect(bounds['lower']).to be_within(0.0001).of(1.1835)
+      end
+
+      it 'ignores documents without the field' do
+        expect(relation.extended_stats(:count)['count']).to eq(3)
+      end
+    end
+
     it '#string_stats returns the string statistics' do
       stats = relation.string_stats(:name)
 
@@ -395,6 +427,7 @@ RSpec.describe ElasticsearchRecord::Relation::CalculationMethods, :elasticsearch
       cardinality:               [:count],
       median_absolute_deviation: [:count],
       stats:                     [:count],
+      extended_stats:            [:count],
       string_stats:              [:name],
       boxplot:                   [:count],
       percentiles:               [:count]

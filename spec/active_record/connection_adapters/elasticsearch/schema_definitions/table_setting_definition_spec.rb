@@ -8,10 +8,12 @@
 # - which class the setting belongs to (+final?+ / +static?+ / +dynamic?+)
 # - whether it may be applied to the index in its current state (the validations)
 #
-# The name classes are matched with +String#match?+, so the constants act as PATTERNS, not as an
-# exact list - a name merely has to CONTAIN one of them. That is intentional: it lets a nested
-# name ('translog.durability') and a prefixed one ('index.number_of_replicas') resolve to their
-# module, at the price of some false positives (see the examples below).
+# The name classes are matched against the dot-separated PARENTS of a name, so the constants act as
+# modules: an entry matches when it IS the name or is one of its parents. That lets a nested name
+# ('translog.durability') and a prefixed one ('index.number_of_replicas', whose 'index.' namespace
+# is stripped first) resolve to their module, without matching a name that merely CONTAINS one
+# ('research' is not a 'search' setting). Where several lists match, the MOST SPECIFIC entry wins
+# (see the examples below).
 #
 # The class is plain Ruby - no cluster is involved. The index state is injected through
 # +#with_state+ (see @ AttributeMethods), which is what +TableDefinition#new_setting_definition+
@@ -31,7 +33,7 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::TableSettingDefi
       expect(definition.value).to eq(2)
     end
 
-    # the name is ALWAYS stored as a String - the matchers rely on +String#match?+
+    # the name is ALWAYS stored as a String - the matchers do String comparisons
     it 'casts the name to a String' do
       expect(described_class.new(:refresh_interval, '1s').name).to eq('refresh_interval')
     end
@@ -72,7 +74,7 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::TableSettingDefi
       end
     end
 
-    # matching is a CONTAINS check, so the API-prefixed name is caught as well
+    # +match_ignore_names?+ is still a CONTAINS check, so the API-prefixed name is caught as well
     it 'matches a prefixed name' do
       expect(described_class.match_ignore_names?('index.provided_name')).to be(true)
     end
@@ -148,17 +150,42 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::TableSettingDefi
     end
   end
 
-  # the matchers are substring checks - a name that merely CONTAINS a known one is matched. This is
-  # documented rather than fixed: the validation is deliberately lenient so that a future
-  # Elasticsearch setting is not rejected by this gem.
-  describe 'the matching quirks' do
-    it 'matches a name that only contains a known name' do
-      # 'research' contains the static module 'search'
-      expect(described_class.match_static_names?('research')).to be(true)
+  # the matchers resolve a name against its dot-separated parents - an entry matches when it IS the
+  # name or is one of its modules. A name that merely CONTAINS a known one is NOT matched.
+  describe 'the matching rules' do
+    it 'does not match a name that only contains a known name' do
+      # 'research' contains - but is not nested under - the static module 'search'
+      expect(described_class.match_static_names?('research')).to be(false)
+      expect(described_class.match_valid_names?('research')).to be(false)
+    end
+
+    it 'does not match a partial path segment' do
+      # 'searchable.foo' starts with 'search', but not with the module 'search.'
+      expect(described_class.match_valid_names?('searchable.foo')).to be(false)
+    end
+
+    it 'resolves the most specific entry when several lists match' do
+      # 'search.idle.after' is nested under the STATIC module 'search', but is itself listed as
+      # DYNAMIC - the longer (more specific) entry has to win, otherwise the setting could never
+      # be changed on an open index
+      expect(described_class.match_dynamic_names?('search.idle.after')).to be(true)
+      expect(described_class.match_static_names?('search.idle.after')).to be(false)
+    end
+
+    it 'strips a leading "index." namespace' do
+      expect(described_class.match_dynamic_names?('index.number_of_replicas')).to be(true)
+      expect(described_class.match_final_names?('index.number_of_shards')).to be(true)
+    end
+
+    it 'matches the modern mapping & lifecycle settings' do
+      expect(described_class.match_dynamic_names?('mapping.total_fields.limit')).to be(true)
+      expect(described_class.match_dynamic_names?('lifecycle.name')).to be(true)
+      # the '_source' mode is fixed at creation time
+      expect(described_class.match_static_names?('mapping.source.mode')).to be(true)
     end
 
     it 'matches an ignored name as valid, too' do
-      # 'routing.allocation.initial_recovery' is ignored, but contains the static module 'routing' -
+      # 'routing.allocation.initial_recovery' is ignored, but is nested under the static module 'routing' -
       # the caller therefore has to check +match_ignore_names?+ FIRST
       # see @ CreateTableDefinition#from_state
       expect(described_class.match_ignore_names?('routing.allocation.initial_recovery')).to be(true)

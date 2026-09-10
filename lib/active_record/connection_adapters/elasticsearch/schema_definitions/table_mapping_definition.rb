@@ -9,12 +9,55 @@ module ActiveRecord
         include AttributeMethods
         include ActiveModel::Validations
 
-        # available mapping properties
+        # available mapping properties, that are common to some or all field data types
         # - see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-params.html
-        ATTRIBUTES = [:analyzer, :coerce, :copy_to, :doc_values, :dynamic, :eager_global_ordinals, :enabled,
-                      :fielddata, :fields, :format, :ignore_above, :ignore_malformed, :index_options, :index_phrases,
-                      :index_prefixes, :index, :meta, :normalizer, :norms, :null_value, :position_increment_gap,
-                      :properties, :search_analyzer, :similarity, :subobjects, :store, :term_vector].freeze
+        COMMON_ATTRIBUTES = [:analyzer, :coerce, :copy_to, :doc_values, :dynamic, :eager_global_ordinals, :enabled,
+                             :fielddata, :fields, :format, :ignore_above, :ignore_malformed, :index_options,
+                             :index_phrases, :index_prefixes, :index, :meta, :normalizer, :norms, :null_value,
+                             :position_increment_gap, :properties, :search_analyzer, :search_quote_analyzer,
+                             :similarity, :subobjects, :store, :term_vector].freeze
+
+        # available mapping properties, that are only documented on the individual field data type.
+        # Without those a lot of types cannot be mapped at all - +scaling_factor+ (scaled_float),
+        # +dims+ (dense_vector) or +metrics+ (aggregate_metric_double) are even *required*.
+        # - see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html
+        TYPE_ATTRIBUTES = [
+          # scaled_float
+          :scaling_factor,
+          # dense_vector & rank_vectors
+          :dims, :element_type,
+          # semantic_text - see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/semantic-text.html
+          :inference_id, :search_inference_id, :chunking_settings,
+          # aggregate_metric_double
+          :metrics, :default_metric,
+          # join
+          :relations,
+          # alias
+          :path,
+          # passthrough
+          :priority,
+          # rank_feature
+          :positive_score_impact,
+          # flattened
+          :depth_limit,
+          # search_as_you_type
+          :max_shingle_size,
+          # completion
+          :max_input_length, :preserve_separators, :preserve_position_increments,
+          # geo_shape / shape / point
+          :orientation, :ignore_z_value,
+          # date & date_nanos
+          :locale,
+          # runtime / scripted fields
+          :script, :on_script_error,
+          # time series data streams (TSDS)
+          :time_series_dimension, :time_series_metric,
+          # synthetic source - see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-source-field.html
+          :synthetic_source_keep
+        ].freeze
+
+        # all assignable mapping properties
+        ATTRIBUTES = (COMMON_ATTRIBUTES + TYPE_ATTRIBUTES).freeze
 
         # define virtual attributes, that must be assigned due a special logic
         ASSIGNABLE_ATTRIBUTES = [:comment, :primary_key, :auto_increment, :meta].freeze
@@ -132,7 +175,9 @@ module ActiveRecord
 
         # validates metadata restrictions
         def _validate_meta
-          return true if meta.nil?
+          # IMPORTANT: +#meta+ falls back to an EMPTY hash, so a +nil?+ check never fires - which
+          # made every 'object' & 'nested' mapping invalid, even without any meta at all.
+          return true if meta.blank?
 
           return invalid!("'meta' must be a hash", :attributes) unless meta.is_a?(Hash)
           return invalid!("'meta' enforces at most 5 entries", :attributes) if meta.length > 5

@@ -22,6 +22,12 @@ module ActiveRecord
         STATIC_NAMES = ['number_of_routing_shards', 'codec', 'mode',
                         'soft_deletes.retention_lease.period',
                         'load_fixed_bitset_filters_eagerly', 'shard.check_on_startup',
+                        # index sorting & the query cache can only be chosen at creation time
+                        'sort', 'queries',
+                        # the '_source' mode (synthetic vs. stored) is fixed at creation time
+                        'mapping.source.mode',
+                        # time series data streams (TSDS)
+                        'time_series',
 
                         # modules
                         'analysis', 'routing', 'unassigned', 'merge', 'similarity', 'search', 'store', 'indexing_pressure'].freeze
@@ -33,10 +39,12 @@ module ActiveRecord
                          'max_refresh_listeners', 'analyze.max_token_count', 'highlight.max_analyzed_offset',
                          'max_terms_count', 'max_regex_length', 'query.default_field', 'routing.allocation.enable',
                          'routing.rebalance.enable', 'gc_deletes', 'default_pipeline', 'final_pipeline',
-                         'hidden', 'blocks',
+                         'hidden', 'blocks', 'priority', 'max_slices_per_scroll',
+                         # the 'end_time' is the one TSDS setting that can be rolled forward
+                         'time_series.end_time',
 
                          # modules
-                         'translog'].freeze
+                         'translog', 'mapping', 'lifecycle', 'write', 'search.slowlog', 'indexing.slowlog'].freeze
 
         VALID_NAMES = (FINAL_NAMES + STATIC_NAMES + DYNAMIC_NAMES).freeze
 
@@ -58,19 +66,53 @@ module ActiveRecord
         end
 
         def self.match_valid_names?(name)
-          VALID_NAMES.any? { |invalid| name.match?(invalid) }
+          !!_best_match(VALID_NAMES, name)
         end
 
         def self.match_final_names?(name)
-          FINAL_NAMES.any? { |invalid| name.match?(invalid) }
+          _resolve_scope(name) == :final
         end
 
         def self.match_dynamic_names?(name)
-          DYNAMIC_NAMES.any? { |invalid| name.match?(invalid) }
+          _resolve_scope(name) == :dynamic
         end
 
         def self.match_static_names?(name)
-          STATIC_NAMES.any? { |invalid| name.match?(invalid) }
+          _resolve_scope(name) == :static
+        end
+
+        # returns the longest entry from +names+ that either IS the provided +name+ or is one of its
+        # dot-separated parents (its 'module') - or +nil+ if none applies.
+        #
+        # PLEASE NOTE: this used to be a +String#match?+ (substring) check, which matched far too
+        # much - 'research' matched the 'search' module and every +index.mapping.*+ name was
+        # rejected outright since no entry was a substring of it.
+        #
+        # PLEASE NOTE: a leading 'index.' is stripped first - the API returns (and a migration may
+        # provide) every setting under that namespace, but the name lists are stored without it.
+        #
+        # @param [Array<String>] names
+        # @param [String] name
+        # @return [String, nil]
+        def self._best_match(names, name)
+          name = name.delete_prefix('index.')
+
+          names.select { |valid| name == valid || name.start_with?("#{valid}.") }.max_by(&:length)
+        end
+
+        # resolves the scope (+:final+, +:static+ or +:dynamic+) a setting name belongs to.
+        #
+        # IMPORTANT: the MOST SPECIFIC entry wins - a name may match a module in one list and an
+        # explicit entry in another. 'search.idle.after' matches the static 'search' module, but is
+        # itself listed as dynamic - so it must resolve as dynamic (otherwise it could never be
+        # changed on an open index).
+        #
+        # @param [String] name
+        # @return [Symbol, nil]
+        def self._resolve_scope(name)
+          { final: FINAL_NAMES, static: STATIC_NAMES, dynamic: DYNAMIC_NAMES }.
+            filter_map { |scope, names| (match = _best_match(names, name)) && [scope, match.length] }.
+            max_by(&:last)&.first
         end
 
         def initialize(name, value)

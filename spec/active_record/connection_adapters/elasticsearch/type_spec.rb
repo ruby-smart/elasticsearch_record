@@ -295,5 +295,28 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::Type do
       expect(version.cast('1.2.3')).to eq('1.2.3')
       expect(version.cast('1.2')).to eq('')
     end
+
+    # 'date_nanos' is an alias of 'date' - an unregistered mapping type would silently fall back to
+    # a plain (passthrough) +Value+ and never cast to a Time at all
+    describe "the 'date_nanos' alias" do
+      subject(:type) { type_map.lookup('date_nanos') }
+
+      it 'resolves as a DateTime' do
+        expect(type).to be_a(ActiveRecord::Type::DateTime)
+        expect(type_map.lookup('date_nanos').type).to eq(type_map.lookup('date').type)
+      end
+
+      # a Ruby +Time+ carries nanoseconds, so the full resolution survives the cast
+      it 'keeps the nanosecond precision' do
+        value = type.cast('2015-01-01T12:10:30.123456789Z')
+
+        expect(value).to be_a(Time)
+        expect(value.nsec).to eq(123456789)
+      end
+
+      it 'casts a plain date like the "date" type' do
+        expect(type.cast('2015-01-01')).to eq(type_map.lookup('date').cast('2015-01-01'))
+      end
+    end
   end
 end

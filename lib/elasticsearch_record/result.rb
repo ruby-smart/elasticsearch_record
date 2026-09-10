@@ -45,6 +45,20 @@ module ElasticsearchRecord
       response['result'] || ''
     end
 
+    # returns true if the response was flagged as PARTIAL - which means the returned data is
+    # INCOMPLETE (e.g. a shard was unavailable).
+    #
+    # PLEASE NOTE: since Elasticsearch 8.19 an ES|QL query defaults to +allow_partial_results+ and
+    # no longer fails on such an error - it succeeds and only sets this flag. So a caller that
+    # cares about completeness *must* check it.
+    #
+    # see @ ElasticsearchRecord.error_on_partial_results - to raise instead
+    #
+    # @return [Boolean]
+    def partial?
+      !!response['is_partial']
+    end
+
     # returns the response total value.
     # either chops the +total+ value directly from response, from hits or aggregations.
     # @return [Integer]
