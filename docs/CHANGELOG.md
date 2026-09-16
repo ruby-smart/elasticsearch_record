@@ -1,5 +1,9 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.7.6] - 2026-09-16 _(no gem release)_
+* [fix] `Elasticsearch::Column#==`, `#eql?` & `#hash` also compare `virtual`, `fields`, `properties`, `meta` & `enabled` - same-named columns of different indexes no longer share a single deduplicated object
+* [fix] `Elasticsearch::Column#init_with` & `#encode_with` serialize the elasticsearch-specific attributes
+
 ## [1.7.5] - 2024-11-26 _(no gem release)_
 * [ref] `ElasticsearchRecord::Relation::QueryMethods#build_query_clause` to raise an exception instead of building an empty `QueryClause`
 
