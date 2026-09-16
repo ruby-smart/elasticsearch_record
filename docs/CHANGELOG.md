@@ -1,6 +1,11 @@
 # ElasticsearchRecord  :: rails-7-1-stable - CHANGELOG
 
-## [PATCH] - 2026-09-08
+## [2.0.0-patch2] - 2026-09-16
+* [add] specs for `Elasticsearch::Column` identity, deduplication & YAML round-trip
+* [fix] `Elasticsearch::Column#==`, `#eql?` & `#hash` also compare `virtual`, `fields`, `properties`, `meta` & `enabled` - same-named columns of different indexes no longer share a single deduplicated object
+* [fix] `Elasticsearch::Column#init_with` & `#encode_with` serialize the elasticsearch-specific attributes
+
+## [2.0.0-patch1] - 2026-09-08
 * [fix] `Querying::ClassMethods#search` to nest the `Elasticsearch::DSL` block result into the `body` and to only enter the DSL branch **if a block was provided**
 
 ## [2.0.0] - 2026-08-10
