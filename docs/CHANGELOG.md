@@ -1,5 +1,10 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [4.0.0-patch1] - 2026-09-16
+* [add] specs for `Elasticsearch::Column` identity, deduplication & YAML round-trip
+* [fix] `Elasticsearch::Column#==`, `#eql?` & `#hash` also compare `virtual`, `fields`, `properties`, `meta` & `enabled` - same-named columns of different indexes no longer share a single deduplicated object
+* [fix] `Elasticsearch::Column#init_with` & `#encode_with` serialize the elasticsearch-specific attributes
+
 ## [4.0.0] - 2026-09-08
 * [add] **BREAKING**: requires `activerecord ~> 8.0.0`
 * [add] `ElasticsearchRecord::Result#indexed_rows` - rails 8.0 instantiates records through this method instead of iterating the result set itself.
