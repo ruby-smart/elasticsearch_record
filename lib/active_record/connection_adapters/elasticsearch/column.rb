@@ -22,6 +22,53 @@ module ActiveRecord
           meta? && meta['comment']
         end
 
+        def init_with(coder)
+          @virtual    = coder['virtual']
+          @fields     = coder['fields']
+          @properties = coder['properties']
+          @meta       = coder['meta']
+          @enabled    = coder['enabled']
+          super
+        end
+
+        def encode_with(coder)
+          coder['virtual']    = @virtual
+          coder['fields']     = @fields
+          coder['properties'] = @properties
+          coder['meta']       = @meta
+          coder['enabled']    = @enabled
+          super
+        end
+
+        # ActiveRecord deduplicates columns process-wide through +Deduplicable+, which
+        # keys its registry by +#hash+ & +#eql?+ - so columns that only differ in the
+        # elasticsearch-specific attributes must NOT compare equal.
+        # Without this a +keyword+ column with a +analyzed+ sub-field would share the
+        # object of a same-named +keyword+ column without any fields - whichever index
+        # loaded its schema first wins & the other one silently gains or loses its
+        # +fields+ (breaking e.g. +where('code.analyzed' => ...)+).
+        def ==(other)
+          other.is_a?(Column) &&
+            super &&
+            virtual == other.virtual &&
+            fields == other.fields &&
+            properties == other.properties &&
+            meta == other.meta &&
+            enabled == other.enabled
+        end
+
+        alias :eql? :==
+
+        def hash
+          Column.hash ^
+            super.hash ^
+            virtual.hash ^
+            fields.hash ^
+            properties.hash ^
+            meta.hash ^
+            enabled.hash
+        end
+
         # returns true if this column is enabled (= searchable by queries)
         # @return [Boolean]
         def enabled?

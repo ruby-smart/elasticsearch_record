@@ -1,5 +1,10 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [5.0.1] - 2026-09-16
+* [add] specs for `Elasticsearch::Column` identity, deduplication & YAML round-trip
+* [fix] `Elasticsearch::Column#==`, `#eql?` & `#hash` also compare `virtual`, `fields`, `properties`, `meta` & `enabled` - same-named columns of different indexes no longer share a single deduplicated object
+* [fix] `Elasticsearch::Column#init_with` & `#encode_with` serialize the elasticsearch-specific attributes
+
 ## [5.0.0] - 2026-09-10
 * [add] **BREAKING**: requires `activerecord ~> 8.1.0`
 * [add] `Relation::ValueMethods#limit!` - keeps the `'__max__'` & `Float::INFINITY` limits, which rails now casts through `Integer()`
