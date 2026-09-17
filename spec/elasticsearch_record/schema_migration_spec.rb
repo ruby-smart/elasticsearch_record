@@ -257,6 +257,47 @@ RSpec.describe ElasticsearchRecord::SchemaMigration, :elasticsearch do
       end
     end
 
+    # the delete runs through +Arel::DeleteManager+ on the plain table & compiles into a
+    # delete-by-query - see +Arel::Visitors::ElasticsearchQuery#visit_Arel_Nodes_DeleteStatement+
+    describe '#delete_version' do
+      it 'removes the provided version' do
+        create_versions('20240101120000', '20240101120001')
+
+        migration.delete_version('20240101120000')
+
+        expect(migration.versions).to eq(['20240101120001'])
+      end
+
+      it 'refreshes the index, so the version is instantly gone' do
+        create_versions('20240101120000')
+
+        migration.delete_version('20240101120000')
+
+        expect(migration.versions).to eq([])
+      end
+
+      it 'does not raise for an unknown version' do
+        create_versions('20240101120000')
+
+        expect { migration.delete_version('20240101120009') }.not_to raise_error
+        expect(migration.versions).to eq(['20240101120000'])
+      end
+    end
+
+    describe '#delete_all_versions' do
+      it 'removes every version' do
+        create_versions('20240101120000', '20240101120001')
+
+        migration.delete_all_versions
+
+        expect(migration.versions).to eq([])
+      end
+
+      it 'does not raise without any version' do
+        expect { migration.delete_all_versions }.not_to raise_error
+      end
+    end
+
     describe '#integer_versions' do
       it 'casts every version to an Integer' do
         create_versions('20240101120000', '20240101120001')
@@ -281,7 +322,7 @@ RSpec.describe ElasticsearchRecord::SchemaMigration, :elasticsearch do
     end
   end
 
-  # These inherited methods build Arel the ES visitor cannot compile. They are pinned as-is
+  # This inherited method builds Arel the ES visitor cannot compile. It is pinned as-is
   # (NOT as desired behaviour) so a future fix shows up as a failing example here.
   describe 'the inherited surface that Elasticsearch cannot serve' do
     # +ActiveRecord::SchemaMigration#count+ projects +Arel::Nodes::Count+ - there is no
@@ -294,37 +335,6 @@ RSpec.describe ElasticsearchRecord::SchemaMigration, :elasticsearch do
 
         expect { migration.count }
           .to raise_error(Arel::Visitors::ElasticsearchBase::UnsupportedVisitError, /visit_Arel_Nodes_Count/)
-      end
-    end
-
-    # +ActiveRecord::SchemaMigration#delete_version+ builds a +DeleteManager+ whose relation stays
-    # a plain +Arel::Table+ - the visitor only supports a delete-BY-QUERY and raises for that shape.
-    # CONSEQUENCE: rolling a migration back cannot remove its version.
-    # see @ Arel::Visitors::ElasticsearchQuery#visit_Arel_Nodes_DeleteStatement
-    describe '#delete_version' do
-      it 'raises a NotImplementedError' do
-        create_versions('20240101120000')
-
-        expect { migration.delete_version('20240101120000') }.to raise_error(NotImplementedError)
-      end
-
-      it 'leaves the version in place' do
-        create_versions('20240101120000')
-
-        expect { migration.delete_version('20240101120000') }.to raise_error(NotImplementedError)
-        expect(migration.versions).to eq(['20240101120000'])
-      end
-    end
-
-    describe '#delete_all_versions' do
-      it 'raises through the first delete_version' do
-        create_versions('20240101120000')
-
-        expect { migration.delete_all_versions }.to raise_error(NotImplementedError)
-      end
-
-      it 'does not raise without any version' do
-        expect { migration.delete_all_versions }.not_to raise_error
       end
     end
   end
