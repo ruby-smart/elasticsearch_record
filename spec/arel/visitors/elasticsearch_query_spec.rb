@@ -175,9 +175,34 @@ RSpec.describe Arel::Visitors::Elasticsearch do
       expect(query.body[:max_docs]).to eq(3)
     end
 
-    it 'raises for a plain table relation (the single-record shape)' do
-      expect { visitor.compile(Arel::Nodes::DeleteStatement.new(table)) }
-        .to raise_error(NotImplementedError)
+    # the shape +ActiveRecord::SchemaMigration#delete_version+ builds: a +DeleteManager+ straight on
+    # the table, the version as a casted where - it has to compile like a relation's +delete_all+,
+    # otherwise a rolled back migration keeps its version
+    context 'with a plain table relation (the SchemaMigration#delete_version shape)' do
+      let(:manager) do
+        Arel::DeleteManager.new(table).tap do |dm|
+          dm.wheres = [table['version'].eq('20240101120000')]
+        end
+      end
+
+      it 'claims a delete_by_query type & the index' do
+        expect(query.type).to eq(ElasticsearchRecord::Query::TYPE_DELETE_BY_QUERY)
+        expect(query.index).to eq('bar')
+      end
+
+      it 'forces a refresh' do
+        expect(query.refresh).to be(true)
+      end
+
+      it 'resolves the casted where clause into a term filter' do
+        expect(query.body).to eq({ query: { bool: { filter: [{ term: { 'version' => '20240101120000' } }] } } })
+      end
+
+      # without a condition the statement would wipe the index - that is no delete statement
+      it 'still raises without any condition' do
+        expect { visitor.compile(Arel::Nodes::DeleteStatement.new(table)) }
+          .to raise_error(NotImplementedError)
+      end
     end
   end
 
@@ -885,6 +910,18 @@ RSpec.describe Arel::Visitors::Elasticsearch do
     end
   end
 
+  describe 'casted visits' do
+    # the nodes +Arel::Attributes::Attribute#eq+ & co. wrap a plain value in
+    # see @ Arel::Nodes.build_quoted
+    it 'returns the database value of a Casted node' do
+      expect(visitor.send(:visit, Arel::Nodes.build_quoted('x', table['name']))).to eq('x')
+    end
+
+    it 'returns the value of a Quoted node' do
+      expect(visitor.send(:visit, Arel::Nodes::Quoted.new(42))).to eq(42)
+    end
+  end
+
   describe '#visit_Arel_Nodes_ValuesList' do
     # does not claim anything - it only builds the "name => value" Hash for insert / update
     it 'reduces the rows into a single Hash' do
@@ -910,12 +947,12 @@ RSpec.describe Arel::Visitors::Elasticsearch do
   describe 'unsupported nodes' do
     it 'raises an UnsupportedVisitError' do
       manager = Arel::SelectManager.new(table)
-      # +Arel::Nodes::Casted+ is what a plain +table['a'].eq(1)+ produces - the gem always goes
-      # through the predicate builder (QueryAttribute) instead
-      manager.where(table['a'].eq(1))
+      # +Arel::Nodes::Count+ is what +ActiveRecord::SchemaMigration#count+ projects - an
+      # aggregation belongs into a custom +Arel::Nodes::SelectAgg+, not into a projection
+      manager.project(table['a'].count)
 
       expect { visitor.compile(manager.ast) }
-        .to raise_error(Arel::Visitors::ElasticsearchBase::UnsupportedVisitError, /visit_Arel_Nodes_Casted/)
+        .to raise_error(Arel::Visitors::ElasticsearchBase::UnsupportedVisitError, /visit_Arel_Nodes_Count/)
     end
 
     it 'raises for a grouped OR (Arel::Nodes::Or is not implemented)' do
@@ -940,7 +977,7 @@ RSpec.describe Arel::Visitors::Elasticsearch do
   describe 'state isolation between compiles' do
     it 'resets the nested state after a failed compile' do
       broken = Arel::SelectManager.new(table)
-      broken.where(table['a'].eq(1))
+      broken.project(table['a'].count)
 
       expect { visitor.compile(broken.ast) }.to raise_error(Arel::Visitors::ElasticsearchBase::UnsupportedVisitError)
 
