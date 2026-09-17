@@ -1,5 +1,9 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [1.7.7] - 2026-09-17 _(no gem release)_
+* [add] `Arel::Visitors::ElasticsearchQuery#visit_Arel_Nodes_Casted` & `#visit_Arel_Nodes_Quoted` - the value nodes `Arel::Attributes::Attribute#eq` & co. build for plain values
+* [fix] `Arel::Visitors::ElasticsearchQuery#visit_Arel_Nodes_DeleteStatement` compiles a delete on a plain table into a delete-by-query instead of raising a `NotImplementedError`
+
 ## [1.7.6] - 2026-09-16 _(no gem release)_
 * [fix] `Elasticsearch::Column#==`, `#eql?` & `#hash` also compare `virtual`, `fields`, `properties`, `meta` & `enabled` - same-named columns of different indexes no longer share a single deduplicated object
 * [fix] `Elasticsearch::Column#init_with` & `#encode_with` serialize the elasticsearch-specific attributes

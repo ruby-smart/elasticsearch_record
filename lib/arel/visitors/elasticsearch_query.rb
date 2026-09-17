@@ -63,9 +63,16 @@ module Arel # :nodoc: all
       end
 
       # DELETE (by query - not a single record...)
+      #
+      # A plain +Arel::Table+ relation is the shape of a +DeleteManager+ built straight on a table -
+      # +ActiveRecord::SchemaMigration#delete_version+ does exactly that to remove a rolled back version.
+      # Elasticsearch has no "delete by column value" apart from a delete-by-query, and a single record
+      # never reaches Arel (see @ ElasticsearchRecord::ModelApi#delete), so the conditions of such a
+      # statement are compiled into a delete-by-query on that index - the same as a relation's +delete_all+.
+      # Without any condition the statement would wipe the whole index, which is not what a delete means.
       def visit_Arel_Nodes_DeleteStatement(o)
-        # switch between updating a single Record or multiple by query
-        if o.relation.is_a?(::Arel::Table)
+        # a plain table without conditions is neither a single record nor a query
+        if o.relation.is_a?(::Arel::Table) && o.wheres.blank?
           raise NotImplementedError, "if you've made it this far, something went wrong ..."
         end
 
@@ -429,6 +436,16 @@ module Arel # :nodoc: all
       alias :visit_NilClass :visit_Struct_Raw
       alias :visit_String :visit_Struct_Raw
       alias :visit_Arel_Nodes_SqlLiteral :visit_Struct_Raw
+
+      # CASTED / QUOTED values - the nodes +Arel::Attributes::Attribute#eq+ & co. wrap a plain value in
+      # (see @ Arel::Nodes.build_quoted). Returns the database value: the attribute of a model table
+      # type casts it, the attribute of a plain +Arel::Table+ returns the value unchanged.
+      def visit_Arel_Nodes_Casted(o)
+        o.value_for_database
+      end
+
+      # alias for QUOTED returns
+      alias :visit_Arel_Nodes_Quoted :visit_Arel_Nodes_Casted
 
       # used by insert / update statements.
       # does not claim / assign any values!
