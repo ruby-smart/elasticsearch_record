@@ -17,10 +17,13 @@ _ElasticsearchRecord is a ActiveRecord adapter and provides similar functionalit
 **PLEASE NOTE:**
 
 - This is the `main`-branch, which supports rails **8.1** _(see section 'Rails_Versions' for supported versions)_
-- supports ActiveRecord ~> 8.1 + Elasticsearch >= 7.17
-- added features up to Elasticsearch `8.17.1` _(tested against `8.19.14`)_
+- supports ActiveRecord ~> 8.1 + Elasticsearch >= 8.0, < 9
+- added features up to Elasticsearch `8.19`
+- tested against Elasticsearch `8.19.14`
 - _ES|QL_ queries _(`TYPE_ESQL` / the `esql.query` gate)_ require **Elasticsearch >= 8.11**, where the feature became
-  generally available. All other features remain available from Elasticsearch `7.17`.
+  generally available - the adapter raises for an older cluster.
+- the `elasticsearch` client is locked to the **8.x** line: a 7.x client cannot address an 8.x server outside of the
+  compatibility mode, and the 9.x client sends a `compatible-with=9` header that every 8.x server rejects.
 
 -----
 
@@ -320,12 +323,78 @@ Search.where(name: ['A nice object','or other object'])
 Search.where(name: nil)
 # > must_not: { exists: { field: 'name' } }
 
+# use it with a range
+Search.where(amount: 10..20)
+# > filter: {range: {amount: {gte: 10, lte: 20}}}
+
+Search.where(amount: 10...20)
+# > filter: {range: {amount: {gte: 10, lt: 20}}}
+
+# endless & beginless ranges
+Search.where(amount: 10..)
+# > filter: {range: {amount: {gte: 10}}}
+Search.where(amount: ..20)
+# > filter: {range: {amount: {lte: 20}}}
+
+# negated
+Search.where.not(amount: 10..20)
+# > must_not: [{range: {amount: {gte: 10, lte: 20}}}]
+
+# PLEASE NOTE: rails inverts a single open-ended bound itself (SQL semantic - a missing field never matches)
+Search.where.not(amount: 10..)
+# > filter: [{range: {amount: {lt: 10}}}]
+
 # -------------------------------------------------------------------
 
 # use it with a prefix
 Search.where(:should, term: {name: 'Mano'})
 # > should: {term: {name: 'Mano'}}
+
+# combine two scopes with OR
+Search.where(name: 'A').or(Search.where(name: 'B'))
+# > filter: [{bool: {should: [{bool: {filter: [{term: {name: 'A'}}]}},
+# >                          {bool: {filter: [{term: {name: 'B'}}]}}], minimum_should_match: 1}}]
 ```
+
+_PLEASE NOTE: only the modern `gte` / `gt` / `lte` / `lt` range keys are generated - Elasticsearch deprecated
+`from`, `to`, `include_lower` & `include_upper` with 8.16._
+
+### Vector search & source filtering:
+
+```ruby
+# approximate nearest neighbour search - combines with the query / filter chain (Elasticsearch >= 8.12)
+Search.where(kind: 'article').knn(field: :embedding, query_vector: [0.1, 0.2], k: 10, num_candidates: 100)
+
+# filter the transferred _source - exclude_vectors requires Elasticsearch >= 8.19
+Search.restrict(excludes: [:embedding])
+Search.restrict(exclude_vectors: true)
+
+# the timeout requires an elasticsearch time value
+Search.where(name: 'A').timeout('30s')
+```
+
+### Totals, partial results & deprecation warnings:
+
+```ruby
+# elasticsearch stops counting at 10.000 hits - the total is then only a LOWER BOUND
+Search.all.total          # > 10000
+Search.all.total_exact?   # > false
+Search.all.total_relation # > "gte"
+
+# since Elasticsearch 8.19 an ES|QL query returns PARTIAL results instead of failing.
+# A partial response raises a ElasticsearchRecord::PartialResultsError by default ...
+ElasticsearchRecord.error_on_partial_results = false # ... or accept (and log) it
+result = Search.esql("FROM search | LIMIT 10")
+result.partial?          # > false
+result.documents_found   # > 10
+result.values_loaded     # > 30
+
+# ... or let the cluster fail the query
+Search.esql("FROM search | LIMIT 10", allow_partial_results: false)
+```
+
+Deprecation warnings _(the HTTP `Warning` header)_ are published as `payload[:statistics][:warnings]` and logged by the
+`ElasticsearchRecord::Instrumentation::LogSubscriber` at WARN level - each distinct message once per process.
 
 ### Result methods:
 You can simply return RAW data without instantiating ActiveRecord objects:
@@ -334,7 +403,7 @@ You can simply return RAW data without instantiating ActiveRecord objects:
 
 # returns the response RAW hits hash.
 hits = Search.where(name: 'A nice object').hits
-# > {"total"=>{"value"=>5, "relation"=>"eq"}, "max_score"=>1.0, "hits"=>[{ "_index": "search", "_type": "_doc", "_id": "abc123", "_score": 1.0, "_source": { "name": "A nice object", ...
+# > {"total"=>{"value"=>5, "relation"=>"eq"}, "max_score"=>1.0, "hits"=>[{ "_index": "search", "_id": "abc123", "_score": 1.0, "_source": { "name": "A nice object", ...
 
 # Returns the RAW +_source+ data from each hit - aka. +rows+.
 results = Search.where(name: 'A nice object').results
@@ -390,7 +459,8 @@ _(also see @ [github](https://github.com/ruby-smart/elasticsearch_record/blob/ma
 - must_not
 - must
 - should
-- aggregate
+- knn
+- restrict
 - select _(raises on metadata fields - see @ [Upgrading to 2.0](#2-select-raises-on-metadata-fields))_
 
 _see simple documentation about these methods @ {ElasticsearchRecord::Relation::QueryMethods rubydoc}_

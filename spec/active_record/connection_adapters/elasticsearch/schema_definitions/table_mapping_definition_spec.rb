@@ -76,12 +76,17 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::TableMappingDefi
       'completion'        => { max_input_length: 50, preserve_separators: true },
       'geo_shape'         => { orientation: 'ccw', ignore_z_value: true },
       'date_nanos'        => { locale: 'de' },
+      'constant_keyword'  => { value: 'debug' },
       'keyword'           => { script: "emit('x')", on_script_error: 'continue' }
     }.each do |type, attributes|
       it "accepts #{attributes.keys.join(' & ')} on a '#{type}'" do
         expect(definition(type, attributes)).to be_valid
       end
     end
+  end
+
+  it "accepts split_queries_on_whitespace on a 'keyword'" do
+    expect(definition('keyword', { split_queries_on_whitespace: true })).to be_valid
   end
 
   # time series data streams & synthetic source - the 8.19 relevant parameters

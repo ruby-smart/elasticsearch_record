@@ -24,6 +24,10 @@ module ActiveRecord
         TYPE_ATTRIBUTES = [
           # scaled_float
           :scaling_factor,
+          # constant_keyword
+          :value,
+          # keyword
+          :split_queries_on_whitespace,
           # dense_vector & rank_vectors
           :dims, :element_type,
           # semantic_text - see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/semantic-text.html

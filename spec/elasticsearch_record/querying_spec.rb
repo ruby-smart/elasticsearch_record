@@ -340,12 +340,18 @@ RSpec.describe ElasticsearchRecord::Querying::ClassMethods, :elasticsearch do
     # not the query it sent
     let(:connection_stub) { instance_double(ActiveRecord::ConnectionAdapters::ElasticsearchAdapter) }
 
+    # +#esql+ asserts the cluster is new enough to know the 'esql' namespace at all
+    # see @ ElasticsearchRecord::Querying::ClassMethods#_esql_query
+    before do
+      allow(connection_stub).to receive(:cluster_info).and_return({ version: Gem::Version.new('8.19.0') })
+    end
+
     def capture_esql_query
       # resolve the columns BEFORE the connection gets stubbed
       model.source_column_names
 
       captured = nil
-      allow(model).to receive(:connection).and_return(connection_stub)
+      allow(model).to receive(:with_connection).and_yield(connection_stub)
       allow(connection_stub).to receive(:exec_query) do |query, *_args, **_opts|
         captured = query
         ElasticsearchRecord::Result.empty
@@ -354,6 +360,28 @@ RSpec.describe ElasticsearchRecord::Querying::ClassMethods, :elasticsearch do
       yield
 
       captured
+    end
+
+    it 'raises for a cluster that does not know ES|QL yet' do
+      allow(model).to receive(:with_connection).and_yield(connection_stub)
+      allow(connection_stub).to receive(:cluster_info).and_return({ version: Gem::Version.new('8.10.4') })
+
+      expect { model.esql("FROM #{TestIndex.name} | LIMIT 10") }
+        .to raise_error(ActiveRecord::StatementInvalid, /ES\|QL requires Elasticsearch >= 8.11/)
+    end
+
+    it 'forwards an explicit allow_partial_results argument' do
+      query = capture_esql_query do
+        model.esql("FROM #{TestIndex.name} | LIMIT 10", allow_partial_results: false)
+      end
+
+      expect(query.query_arguments[:allow_partial_results]).to be(false)
+    end
+
+    it 'does not send an allow_partial_results argument by default' do
+      query = capture_esql_query { model.esql("FROM #{TestIndex.name} | LIMIT 10") }
+
+      expect(query.query_arguments).not_to have_key(:allow_partial_results)
     end
 
     it 'builds an ES|QL query from the provided string' do
@@ -373,7 +401,7 @@ RSpec.describe ElasticsearchRecord::Querying::ClassMethods, :elasticsearch do
     it 'instruments the query with the model name' do
       model.source_column_names
 
-      allow(model).to receive(:connection).and_return(connection_stub)
+      allow(model).to receive(:with_connection).and_yield(connection_stub)
       expect(connection_stub).to receive(:exec_query)
                                    .with(anything, "#{model.name} ES|QL")
                                    .and_return(ElasticsearchRecord::Result.empty)

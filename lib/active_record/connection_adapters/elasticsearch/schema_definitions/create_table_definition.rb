@@ -14,11 +14,12 @@ module ActiveRecord
           @aliases  = HashWithIndifferentAccess.new
           @metas    = HashWithIndifferentAccess.new
 
-          # HINT: Currently there is only one attribute, that cannot be assigned to any of the top hash kind, and also not opts:
-          # * dynamic
-          # This attribute must be assigned below the *mappings* node but as sibling to *properties*.
-          # This can only be done to create a special kind of options (@flags ???) and assign & fetch them within the required arel.
-          # Since this only setting can also be assigned to each individual mapping, there is currently no need to build this ...
+          # holds every node that lives BELOW 'mappings' but as a SIBLING of 'properties' -
+          # e.g. 'dynamic', 'dynamic_templates', 'runtime', '_source', '_routing', 'date_detection'.
+          # They are carried through verbatim, so a definition that was read back from the cluster
+          # can recreate the index without losing them.
+          # see @ #transform_mappings! / Arel::Visitors::ElasticsearchSchema#visit_CreateTableDefinition
+          @mapping_options = HashWithIndifferentAccess.new
 
           transform_settings!(settings) if settings.present?
           transform_mappings!(mappings) if mappings.present?
@@ -44,6 +45,20 @@ module ActiveRecord
         # @return [Array]
         def metas
           @metas.values
+        end
+
+        # returns the raw mapping-root nodes that are neither '_meta' nor 'properties'.
+        # see @ #transform_mappings!
+        # @return [HashWithIndifferentAccess]
+        def mapping_options
+          @mapping_options
+        end
+
+        # adds (or overwrites) a single mapping-root node.
+        # @param [String, Symbol] name
+        # @param [Object] value
+        def mapping_option(name, value)
+          @mapping_options[name] = value
         end
 
         # provide backwards compatibility to columns
@@ -229,6 +244,17 @@ module ActiveRecord
           if mappings['properties'].present?
             mappings['properties'].each do |name, attributes|
               self.mapping(name, attributes.delete('type'), force: true, **attributes)
+            end
+
+            # IMPORTANT: keep every OTHER node of the mapping root.
+            # This method is what +truncate_table+, +create_table(copy_from:)+ and
+            # +change_table(recreate: true)+ feed the current cluster mapping into - so dropping
+            # anything here does not just lose it from the definition, it DESTROYS it on the
+            # recreated index (a 'truncate' would silently strip e.g. 'dynamic_templates').
+            mappings.each do |name, value|
+              next if %w[_meta properties].include?(name.to_s)
+
+              self.mapping_option(name, value)
             end
           elsif mappings.present? && mappings.values[0].is_a?(Hash)
             # raw settings where provided with just (key => attributes)

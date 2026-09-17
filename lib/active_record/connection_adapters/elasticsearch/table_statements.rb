@@ -363,6 +363,10 @@ module ActiveRecord
           def create_table(table_name, force: false, copy_from: nil, if_not_exists: false, decorate: nil, **options)
             table_name = _decorate_table_name(table_name, decorate: decorate)
 
+            # IMPORTANT: validate the FINAL name - a +table_name_prefix+ / +table_name_suffix+ can
+            # turn a perfectly fine base name into an invalid index name.
+            _validate_table_name!(table_name)
+
             return if if_not_exists && table_exists?(table_name)
 
             # copy schema from existing table
@@ -535,7 +539,51 @@ module ActiveRecord
             name
           end
 
+          # characters elasticsearch refuses within an index name.
+          # PLEASE NOTE: written as an explicit Array - a %w[] literal cannot carry the space.
+          # see @ https://www.elastic.co/guide/en/elasticsearch/reference/8.19/indices-create-index.html
+          INVALID_TABLE_NAME_CHARS = ['\\', '/', '*', '?', '"', '<', '>', '|', ',', '#', ' '].freeze
+
+          # the maximum byte length of an index name
+          MAX_TABLE_NAME_BYTESIZE = 255
+
           private
+
+          # validates the provided (already decorated) index name against the elasticsearch naming
+          # rules and raises before the request is even sent.
+          #
+          # Without this the cluster answers with an +invalid_index_name_exception+ that names the
+          # RESOLVED index - which is confusing whenever a +table_name_prefix+ / +table_name_suffix+
+          # was involved, since that name appears nowhere in the migration.
+          #
+          # @param [String] table_name
+          def _validate_table_name!(table_name)
+            error = case table_name
+                    when nil, ''
+                      'it must not be empty'
+                    when '.', '..'
+                      "'.' and '..' are reserved"
+                    else
+                      if table_name != table_name.downcase
+                        'it must be lowercase'
+                      elsif (found = INVALID_TABLE_NAME_CHARS.select { |char| table_name.include?(char) }).any?
+                        "it must not contain #{found.map(&:inspect).join(', ')}"
+                      elsif table_name.start_with?('-', '_', '+')
+                        "it must not start with '-', '_' or '+'"
+                      elsif table_name.start_with?('.')
+                        # reserved for system indices, and deprecated for everything else since 8.16
+                        "a leading '.' is reserved for internal indices"
+                      elsif table_name.bytesize > MAX_TABLE_NAME_BYTESIZE
+                        "it must not be longer than #{MAX_TABLE_NAME_BYTESIZE} bytes (is #{table_name.bytesize})"
+                      end
+                    end
+
+            return if error.nil?
+
+            raise ArgumentError,
+                  "Invalid index name #{table_name.inspect} - #{error}. " \
+                  "HINT: the name includes the configured 'table_name_prefix' & 'table_name_suffix'."
+          end
 
           # resolves the provided +table_name+ through +#_env_table_name+, unless the decoration was
           # disabled - either for this call (+decorate: false+) or globally.

@@ -148,6 +148,25 @@ RSpec.describe ActiveRecord::ConnectionAdapters::Elasticsearch::TableSettingDefi
     it 'does not match a final name' do
       expect(described_class.match_dynamic_names?('number_of_shards')).to be(false)
     end
+
+    it 'matches the shard request cache toggle' do
+      expect(described_class.match_dynamic_names?('requests.cache.enable')).to be(true)
+      expect(described_class.match_dynamic_names?('index.requests.cache.enable')).to be(true)
+    end
+
+    # the query cache shares no module with the request cache - it can only be chosen at creation time
+    it 'does not match the query cache toggle' do
+      expect(described_class.match_dynamic_names?('queries.cache.enabled')).to be(false)
+      expect(described_class.match_static_names?('queries.cache.enabled')).to be(true)
+    end
+
+    # time series data streams: only the 'end_time' can be rolled forward
+    it 'resolves the time series settings' do
+      expect(described_class.match_static_names?('look_ahead_time')).to be(true)
+      expect(described_class.match_static_names?('look_back_time')).to be(true)
+      expect(described_class.match_static_names?('time_series.start_time')).to be(true)
+      expect(described_class.match_dynamic_names?('time_series.end_time')).to be(true)
+    end
   end
 
   # the matchers resolve a name against its dot-separated parents - an entry matches when it IS the

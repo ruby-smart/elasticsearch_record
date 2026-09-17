@@ -23,13 +23,18 @@ module Arel # :nodoc: all
         # set the name of the index
         claim(:index, visit(o.name))
 
-        if o.metas.present? || o.mappings.present?
+        if o.metas.present? || o.mappings.present? || o.mapping_options.present?
           assign(:mappings, {}) do
             # sets metas
             resolve(o, :visit_TableMetas) if o.metas.present?
 
             # sets mappings
             resolve(o, :visit_TableMappings) if o.mappings.present?
+
+            # sets every remaining mapping-root node ('dynamic', 'dynamic_templates', 'runtime',
+            # '_source', ...) - they are siblings of 'properties', not properties themselves.
+            # see @ ActiveRecord::ConnectionAdapters::Elasticsearch::CreateTableDefinition#mapping_options
+            o.mapping_options.each { |key, value| assign(key.to_sym, value) }
           end
         end
 

@@ -27,7 +27,7 @@ module ActiveRecord
                         # the '_source' mode (synthetic vs. stored) is fixed at creation time
                         'mapping.source.mode',
                         # time series data streams (TSDS)
-                        'time_series',
+                        'time_series', 'look_ahead_time', 'look_back_time',
 
                         # modules
                         'analysis', 'routing', 'unassigned', 'merge', 'similarity', 'search', 'store', 'indexing_pressure'].freeze
@@ -42,6 +42,9 @@ module ActiveRecord
                          'hidden', 'blocks', 'priority', 'max_slices_per_scroll',
                          # the 'end_time' is the one TSDS setting that can be rolled forward
                          'time_series.end_time',
+
+                         # the shard request cache can be toggled on a live index
+                         'requests.cache.enable',
 
                          # modules
                          'translog', 'mapping', 'lifecycle', 'write', 'search.slowlog', 'indexing.slowlog'].freeze
