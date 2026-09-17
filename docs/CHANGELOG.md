@@ -1,5 +1,10 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [4.0.2] - 2026-09-17 _(no gem release)_
+* [add] `Arel::Visitors::ElasticsearchQuery#visit_Arel_Nodes_Casted` & `#visit_Arel_Nodes_Quoted` - the value nodes `Arel::Attributes::Attribute#eq` & co. build for plain values
+* [add] specs for `SchemaMigration#delete_version` & `#delete_all_versions`
+* [fix] `Arel::Visitors::ElasticsearchQuery#visit_Arel_Nodes_DeleteStatement` compiles a delete on a plain table _(the `ActiveRecord::SchemaMigration#delete_version` shape)_ into a delete-by-query - rolling a migration back removes its version again instead of raising a `NotImplementedError`
+
 ## [4.0.1] - 2026-09-16 _(no gem release)_
 * [add] specs for `Elasticsearch::Column` identity, deduplication & YAML round-trip
 * [fix] `Elasticsearch::Column#==`, `#eql?` & `#hash` also compare `virtual`, `fields`, `properties`, `meta` & `enabled` - same-named columns of different indexes no longer share a single deduplicated object

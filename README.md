@@ -3,7 +3,7 @@
 [![GitHub](https://img.shields.io/badge/github-ruby--smart/elasticsearch_record-blue.svg)](http://github.com/ruby-smart/elasticsearch_record)
 [![Documentation](https://img.shields.io/badge/docs-rdoc.info-blue.svg)](http://rubydoc.info/gems/elasticsearch_record)
 
-[![Gem Version](https://badge.fury.io/rb/elasticsearch_record.svg)](https://badge.fury.io/rb/elasticsearch_record)
+[![Branch Version](https://img.shields.io/badge/gem_version-4.0.2-green.svg)](http://github.com/ruby-smart/elasticsearch_record)
 [![License](https://img.shields.io/github/license/ruby-smart/elasticsearch_record)](docs/LICENSE)
 
 [![Coverage Status](https://coveralls.io/repos/github/ruby-smart/elasticsearch_record/badge.svg?branch=main&kill_cache=1)](https://coveralls.io/github/ruby-smart/elasticsearch_record?branch=main)
