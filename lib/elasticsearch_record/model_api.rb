@@ -19,7 +19,7 @@ module ElasticsearchRecord
     #   unblock!
     %w(open close refresh block unblock).each do |method|
       define_method("#{method}!") do
-        _connection.send("#{method}_table", _index_name)
+        _with_connection { |c| c.send("#{method}_table", _index_name) }
       end
     end
 
@@ -34,7 +34,7 @@ module ElasticsearchRecord
     #   reindex!(:new_table_name)
     %w(create clone rename backup restore reindex).each do |method|
       define_method("#{method}!") do |*args|
-        _connection.send("#{method}_table", _index_name, *args)
+        _with_connection { |c| c.send("#{method}_table", _index_name, *args) }
       end
     end
 
@@ -47,7 +47,7 @@ module ElasticsearchRecord
     %w(drop truncate).each do |method|
       define_method("#{method}!") do |confirm: false|
         raise "#{method} of table '#{_index_name}' aborted!\nexecution not confirmed!\ncall with: #{klass}.api.#{method}!(confirm: true)" unless confirm
-        _connection.send("#{method}_table", _index_name)
+        _with_connection { |c| c.send("#{method}_table", _index_name) }
       end
     end
 
@@ -63,7 +63,7 @@ module ElasticsearchRecord
     #   exists?
     %w(mappings metas settings aliases state schema exists?).each do |method|
       define_method(method) do |*args|
-        _connection.send("table_#{method}", _index_name, *args)
+        _with_connection { |c| c.send("table_#{method}", _index_name, *args) }
       end
     end
 
@@ -76,7 +76,7 @@ module ElasticsearchRecord
     #   meta_exists?
     %w(alias_exists? setting_exists? mapping_exists? meta_exists?).each do |method|
       define_method(method) do |*args|
-        _connection.send(method, _index_name, *args)
+        _with_connection { |c| c.send(method, _index_name, *args) }
       end
     end
 
@@ -270,18 +270,20 @@ module ElasticsearchRecord
     def bulk(data, operation = :index, refresh: true, **options)
       data = [data] unless data.is_a?(Array)
 
-      _connection.api(:bulk, {
-        index:   _index_name,
-        body:    case operation
-                 when :update
-                   data.map { |item| { update: { _id: (item[:_id].presence || item['_id']), data: { doc: item.except(:_id, '_id') } } } }
-                 when :delete
-                   data.map { |item| { delete: { _id: (item[:_id].presence || item['_id']) } } }
-                 else
-                   data.map { |item| { operation => { _id: (item[:_id].presence || item['_id']), data: item.except(:_id, '_id') } } }
-                 end,
-        refresh: refresh
-      }, "BULK #{operation.to_s.upcase}", **options)
+      _with_connection do |c|
+        c.api(:bulk, {
+          index:   _index_name,
+          body:    case operation
+                   when :update
+                     data.map { |item| { update: { _id: (item[:_id].presence || item['_id']), data: { doc: item.except(:_id, '_id') } } } }
+                   when :delete
+                     data.map { |item| { delete: { _id: (item[:_id].presence || item['_id']) } } }
+                   else
+                     data.map { |item| { operation => { _id: (item[:_id].presence || item['_id']), data: item.except(:_id, '_id') } } }
+                   end,
+          refresh: refresh
+        }, "BULK #{operation.to_s.upcase}", **options)
+      end
     end
 
     private
@@ -290,8 +292,9 @@ module ElasticsearchRecord
       klass.index_name
     end
 
-    def _connection
-      klass.connection
+    # yields a connection of the model's pool - see @ ActiveRecord::ConnectionHandling#with_connection
+    def _with_connection(&block)
+      klass.with_connection(&block)
     end
   end
 end

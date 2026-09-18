@@ -2,44 +2,40 @@
 
 ## unreleased
 _Elasticsearch **8.18** & **8.19** support_
-* [add] **BREAKING**: `ElasticsearchRecord.error_on_partial_results` _(default: `true`)_ - a response flagged as `is_partial` now raises an `ElasticsearchRecord::PartialResultsError` from `ElasticsearchAdapter#api`. Elasticsearch 8.19 made `allow_partial_results` the ES|QL **default**, so a query no longer fails on (e.g.) an unavailable shard but succeeds with an INCOMPLETE result-set - which reaches an application as missing records, never as an error. ActiveRecord cannot express "these rows are only some of the rows", so the query fails instead. Set the flag to `false` to accept partial results, or tell the cluster to fail the query itself per request (`allow_partial_results: false`) or globally (`esql.query.allow_partial_results`). **Only affects ES|QL** - a `search`, `count` or document response never carries the flag
-* [add] `ElasticsearchRecord::Result#partial?` - reads the `is_partial` flag, regardless of the setting above
+
+* [add] **BREAKING**: `ElasticsearchRecord.error_on_partial_results` _(default: `true`)_ - a PARTIAL ES|QL response raises a `ElasticsearchRecord::PartialResultsError`
+* [add] range & comparison predicates - `where(year: 2020..2021)`, `2020...2021`, `2020..`, `..2021` & `where.not(...)` compile into a `range` query
+* [add] `Relation#knn` for approximate nearest neighbour search
+* [add] `Relation#restrict` to filter the transferred `_source` _(incl. the 8.19 `exclude_vectors:`)_
+* [add] `Relation::CalculationMethods#extended_stats` - the only aggregation providing a standard deviation
+* [add] `Result#total_relation` & `#total_exact?` _(also on the relation)_ - tells an exact total apart from a lower bound
+* [add] `Result#partial?`, `#documents_found` & `#values_loaded`
+* [add] `allow_partial_results:` argument on `.esql` & `.find_by_esql`
+* [add] deprecation warnings _(the HTTP `Warning` header)_ are published as `payload[:statistics][:warnings]` and logged
+* [add] `.esql` & `.find_by_esql` raise for a cluster below **8.11**
+* [add] index name validation in `create_table`
+* [add] `date_nanos` to the `TYPE_MAP` _(as alias of `date`)_
+* [add] `ColumnMethods` - `rank_vectors`, `counted_keyword` & `passthrough`
+* [add] `TableMappingDefinition::TYPE_ATTRIBUTES` - the type specific mapping parameters _(`dims`, `inference_id`, `metrics`, `value`, ...)_
+* [add] `TableSettingDefinition` - the `mapping.*`, `lifecycle.*`, `sort.*`, `queries.*`, `time_series.*`, `write.*` & `*.slowlog` settings
 * [add] `ElasticsearchRecord::PartialResultsError`
-* [add] `Relation::CalculationMethods#extended_stats` - the only aggregation providing a **standard deviation** _(Elasticsearch has no `std_dev` metric)_; takes an optional `sigma:` for the `std_deviation_bounds`
-* [add] `date_nanos` to the `TYPE_MAP` _(as alias of `date`)_ - it resolved to a plain passthrough `Value` before and never cast to a `Time`
-* [add] `ColumnMethods` - `rank_vectors` _(new in 8.18)_, `counted_keyword` & `passthrough`
-* [add] `TableMappingDefinition::TYPE_ATTRIBUTES` - the mapping parameters documented on the individual field type. Without them a `strict:` definition could not map a lot of types at all: `scaling_factor` _(scaled_float)_, `dims` & `element_type` _(dense_vector)_ and `metrics` & `default_metric` _(aggregate_metric_double)_ are **required** by Elasticsearch. Also covers `semantic_text` _(GA since 8.18)_ through `inference_id`, `search_inference_id` & `chunking_settings`, plus `time_series_dimension`, `time_series_metric` & `synthetic_source_keep`
-* [add] `TableSettingDefinition` - the `mapping.*`, `lifecycle.*`, `sort.*`, `queries.*`, `time_series.*`, `write.*` & `*.slowlog` settings, `priority` & `max_slices_per_scroll`
-* [add] specs for `TableMappingDefinition` & `ElasticsearchRecord::Result#partial?`
+* [add] specs for the range predicates, `#or`, `knn`, `restrict`, `timeout`, `total_exact?`, deprecation warnings, partial results, the index name validation, the connection handling & the schema definitions
+* [ref] **BREAKING**: gemspec locks `elasticsearch` to `>= 8.0, < 9` _(was `>= 7.17`)_
+* [ref] **BREAKING**: `Relation#timeout` requires an elasticsearch time value _(`'30s'`, `'500ms'`, ...)_
+* [ref] **BREAKING**: removed `_type` from `ElasticsearchAdapter::METADATA_FIELDS`
+* [ref] every connection resolves through `with_connection` instead of the soft deprecated `Model.connection`
+* [ref] `ModelSchema.table_name_prefix` & `.table_name_suffix` resolve from the pools `db_config` - without leasing a connection
 * [ref] `TableMappingDefinition::ATTRIBUTES` is the union of the new `COMMON_ATTRIBUTES` & `TYPE_ATTRIBUTES`
-* [fix] `TableSettingDefinition` name matching resolved through `String#match?`, so a name only had to **contain** a known one - `research` matched the `search` module, while every `index.mapping.*` name was rejected since no entry was a substring of it. The matchers now resolve a name against its dot-separated parents _(a leading `index.` is stripped first)_ and the **most specific** entry wins
-* [fix] `TableSettingDefinition#static?` reported `search.idle.after` as static _(it matched the `search` module)_ - a dynamic setting could therefore never be changed on an open index
-* [fix] `TableMappingDefinition#_validate_meta` rejected **every** `object` & `nested` mapping - `#meta` falls back to an empty hash, so the `nil?` guard in front of the 'no meta on object/nested types' check never fired
-* [add] **range & comparison predicates** - `where(year: 2020..2021)`, `2020...2021`, `2020..`, `..2021`, `nil..nil` and `where.not(...)` compile into a `range` query instead of raising an `UnsupportedVisitError`. New visits: `Between`, `GreaterThan`, `GreaterThanOrEqual`, `LessThan`, `LessThanOrEqual`, `Not` & `NotIn`
-  * only the modern `gte` / `gt` / `lte` / `lt` keys are generated - `from` / `to` / `include_lower` / `include_upper` are deprecated since **8.16**
-  * an exclusive range is merged into ONE clause _(`{gte: 2020, lt: 2021}`)_ - only a **lower with an upper** bound of the same field, merging two bounds of the same half would silently **widen** the query
-  * a negated conjunction is wrapped into a nested `bool` _(De Morgan)_
-* [add] `Relation#knn` for approximate nearest neighbour search _(part of the search body since **8.12**, combines with the `query` / `filter` chain)_
-* [add] `Relation#restrict` to filter the transferred `_source` _(`includes:`, `excludes:` and the 8.19 `exclude_vectors:`)_
-* [add] `Result#total_relation` & `#total_exact?` _(also on the relation)_ - tells a real total apart from the 10.000 lower bound _(`relation: 'gte'`)_. `#total` returns `nil` for a `track_total_hits: false` query and resolves a plain Integer total _(`rest_total_hits_as_int`)_
-* [add] **deprecation warnings are surfaced** - the HTTP `Warning` header is read in `ElasticsearchAdapter#api`, published as `payload[:statistics][:warnings]` and logged by the `LogSubscriber` _(at WARN, independent of the log level, each distinct message once per process)_
-* [add] `Result#documents_found` & `#values_loaded` _(ES|QL, 8.19)_
-* [add] `allow_partial_results:` argument on `.esql` / `.find_by_esql` - lets the cluster fail a partial ES|QL query itself
-* [add] `.esql` / `.find_by_esql` raise a readable `ActiveRecord::StatementInvalid` for a cluster below **8.11** _(`Query::ESQL_MIN_VERSION`)_
-* [add] an accepted partial response _(`error_on_partial_results = false`)_ is reported as warning through the `LogSubscriber`
-* [add] index name validation in `create_table` - raises a readable `ArgumentError` instead of an `invalid_index_name_exception` that names the **resolved** _(prefixed & suffixed)_ index
-* [add] `TableMappingDefinition::TYPE_ATTRIBUTES` - `value` _(constant_keyword)_ & `split_queries_on_whitespace` _(keyword)_
-* [add] `TableSettingDefinition` - the static `look_ahead_time` & `look_back_time` _(TSDS)_ and the dynamic `requests.cache.enable` settings
-* [add] specs for the range predicates, `#or`, `knn`, `restrict`, `timeout`, `total_exact?`, deprecation warnings, partial results & the index name validation _(incl. a live 8.19 compatibility spec)_
-* [ref] **BREAKING**: gemspec locks `elasticsearch` to `>= 8.0, < 9` _(was `>= 7.17`)_ - a 7.x client cannot address an 8.x server outside the compatibility mode, and the 9.x client sends a `compatible-with=9` header that 8.x servers reject
-* [ref] **BREAKING**: `Relation#timeout` requires an elasticsearch time value _(`'30s'`, `'500ms'`, ...)_ - `nil` / `false` removes it again
-* [ref] **BREAKING**: removed `_type` from `ElasticsearchAdapter::METADATA_FIELDS` - elasticsearch stopped returning the field with 8.0, so it only ever resolved to `nil`
-* [ref] `.esql` & `.find_by_esql` resolve their connection through `with_connection`
-* [fix] **`#or` silently returned NOTHING** - the visitor failed EVERY `Arel::Nodes::Grouping`. A grouped `Or` now compiles into a `bool.should` with `minimum_should_match: 1` _(elasticsearch defaults it to 0 as soon as the `bool` also carries a `filter`)_ - every child of the **nary** `Or` node is resolved, so a chained `a.or(b).or(c)` keeps all three operands. Adds `visit_ElasticsearchRecord_Relation_QueryClause` for the `query_clause` side of an OR
-* [fix] **`truncate_table` / `create_table(copy_from:)` / `change_table(recreate: true)` destroyed mapping nodes** - `dynamic`, `dynamic_templates`, `runtime`, `_source`, `_routing`, `date_detection` & co are carried through verbatim _(`CreateTableDefinition#mapping_options`)_
-* [fix] **`Relation#timeout` was unusable** - its `value = true` default sent `?timeout=true`, which elasticsearch rejects with a `400 illegal_argument_exception`
-* [fix] `ResultMethods#point_in_time` leaked its PIT whenever the block raised - the close also runs on the error path _(a failing close no longer replaces the original exception)_. The `pit_results` cursor reads `sort` / `pit_id` defensively
+* [fix] `#or` silently returned NOTHING - a grouped `Or` compiles into a `bool.should` with `minimum_should_match: 1` now
+* [fix] `truncate_table` / `create_table(copy_from:)` / `change_table(recreate: true)` destroyed every mapping node beside `properties` _(`dynamic`, `runtime`, `_source`, ...)_
+* [fix] `Relation#timeout` sent a `?timeout=true`, which elasticsearch rejects
+* [fix] `Result#total` reported a capped count as exact and raised for a `track_total_hits: false` query
+* [fix] `ResultMethods#point_in_time` leaked its PIT whenever the block raised
+* [fix] `ModelSchema.auto_increment?` never memoized a `false` status - a regular index resolved its mapping on EVERY insert
 * [fix] `SchemaStatements#cluster_settings` reads `persistent` & `transient` defensively
+* [fix] `TableSettingDefinition` name matching only had to **contain** a known name - it resolves through the dot-separated parents now, most specific first
+* [fix] `TableSettingDefinition#static?` reported the dynamic `search.idle.after` as static
+* [fix] `TableMappingDefinition#_validate_meta` rejected every `object` & `nested` mapping
 
 ## [5.0.0] - 2026-09-10
 * [add] **BREAKING**: requires `activerecord ~> 8.1.0`

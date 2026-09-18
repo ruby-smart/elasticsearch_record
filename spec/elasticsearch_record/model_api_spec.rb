@@ -24,7 +24,10 @@ RSpec.describe ElasticsearchRecord::ModelApi do
     # a verifying double: every delegation target must really exist on the adapter
     let(:connection) { instance_double(ActiveRecord::ConnectionAdapters::ElasticsearchAdapter) }
 
-    let(:klass) { double('MyModel', index_name: 'my-index', connection: connection) }
+    # the api resolves its connection through the model's +with_connection+ (rails 8.1)
+    let(:klass) do
+      double('MyModel', index_name: 'my-index').tap { |k| allow(k).to receive(:with_connection).and_yield(connection) }
+    end
 
     it 'exposes the provided klass' do
       expect(api.klass).to be(klass)
@@ -172,7 +175,10 @@ RSpec.describe ElasticsearchRecord::ModelApi do
 
     let(:connection) { instance_double(ActiveRecord::ConnectionAdapters::ElasticsearchAdapter) }
 
-    let(:klass) { double('MyModel', index_name: 'my-index', connection: connection) }
+    # the api resolves its connection through the model's +with_connection+ (rails 8.1)
+    let(:klass) do
+      double('MyModel', index_name: 'my-index').tap { |k| allow(k).to receive(:with_connection).and_yield(connection) }
+    end
 
     # captures the arguments the bulk API was called with
     def capture_bulk

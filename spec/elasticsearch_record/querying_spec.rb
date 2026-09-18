@@ -445,7 +445,7 @@ RSpec.describe ElasticsearchRecord::Querying::ClassMethods, :elasticsearch do
       model.source_column_names
 
       captured = nil
-      allow(model).to receive(:connection).and_return(connection_stub)
+      allow(model).to receive(:with_connection).and_yield(connection_stub)
       allow(connection_stub).to receive(:exec_query) do |query, *_args, **_opts|
         captured = query
         ElasticsearchRecord::Result.empty
@@ -480,7 +480,7 @@ RSpec.describe ElasticsearchRecord::Querying::ClassMethods, :elasticsearch do
     it 'instruments the query with the model name' do
       model.source_column_names
 
-      allow(model).to receive(:connection).and_return(connection_stub)
+      allow(model).to receive(:with_connection).and_yield(connection_stub)
       expect(connection_stub).to receive(:exec_query)
                                    .with(anything, "#{model.name} Msearch")
                                    .and_return(ElasticsearchRecord::Result.empty)

@@ -43,7 +43,7 @@ module ElasticsearchRecord
           refresh: true)
 
         # execute query and return total updates
-        connection.update(query, "#{self} Update")
+        with_connection { |c| c.update(query, "#{self} Update") }
       end
 
       # removes a persistent entry from the Elasticsearch index
@@ -57,7 +57,7 @@ module ElasticsearchRecord
           refresh: true)
 
         # execute query and return total deletes
-        connection.delete(query, "#{self} Delete")
+        with_connection { |c| c.delete(query, "#{self} Delete") }
       end
 
       private

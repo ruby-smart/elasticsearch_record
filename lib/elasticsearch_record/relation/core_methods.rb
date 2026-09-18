@@ -20,7 +20,7 @@ module ElasticsearchRecord
       def resolve(name = 'Load')
         # this acts the same like +#_query_by_sql+ but we can customize the instrumentation name and
         # do not store the records.
-        klass.connection.select_all(arel, "#{klass.name} #{name}")
+        klass.with_connection { |c| c.select_all(arel, "#{klass.name} #{name}") }
       end
 
       # returns the query hash for the current relation
@@ -106,7 +106,7 @@ module ElasticsearchRecord
         # - either it is NOT the '_id' column
         # OR
         # - it is the '_id'-column, but +access_id_fielddata?+ is also enabled!
-        valid_primary_key = if primary_key != '_id' || klass.connection.access_id_fielddata?
+        valid_primary_key = if primary_key != '_id' || klass.with_connection(&:access_id_fielddata?)
                               primary_key
                             else
                               nil
@@ -130,7 +130,7 @@ module ElasticsearchRecord
       # checks against the +#access_id_fielddata?+ to ensure the Elasticsearch Cluster allows access on the +_id+ field.
       def reverse_sql_order(order_query)
         if order_query.empty?
-          return [table[primary_key].desc] if primary_key != '_id' || klass.connection.access_id_fielddata?
+          return [table[primary_key].desc] if primary_key != '_id' || klass.with_connection(&:access_id_fielddata?)
           raise ActiveRecord::IrreversibleOrderError,
                 "Relation has no current order and fielddata access on the _id field is disallowed! However, you can re-enable it by updating the dynamic cluster setting: indices.id_field_data.enabled"
         end

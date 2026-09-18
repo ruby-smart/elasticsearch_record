@@ -66,10 +66,15 @@ module ElasticsearchRecord
       # @return [nil, String] - either returns the pit_id (no block given) or nil
       def point_in_time(keep_alive: '1m')
         # resolve a initial PIT id
-        initial_pit_id = klass.connection.api(:open_point_in_time, { index: klass.table_name, keep_alive: keep_alive }, "#{klass} Open Pit").dig('id')
+        initial_pit_id = klass.with_connection { |c| c.api(:open_point_in_time, { index: klass.table_name, keep_alive: keep_alive }, "#{klass} Open Pit").dig('id') }
 
         return initial_pit_id unless block_given?
 
+        # PLEASE NOTE: the yielded block is NOT wrapped into a connection lease on purpose.
+        # Holding one across arbitrary caller code would block a pool connection for as long as
+        # that code runs - rails resolves its own batching the same way (a lease per query,
+        # see @ ActiveRecord::Batches). Every query of the block leases on its own and a nested
+        # +with_connection+ reuses an already leased connection anyway.
         begin
           # block provided, so yield with id
           yield initial_pit_id
@@ -120,7 +125,7 @@ module ElasticsearchRecord
         # FALLBACK (without any order) for restricted access to the '_id' field.
         # with PIT a order by '_shard_doc' can also be used
         # see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/paginate-search-results.html
-        relation.order!(_shard_doc: :asc) if relation.order_values.empty? && klass.connection.access_shard_doc?
+        relation.order!(_shard_doc: :asc) if relation.order_values.empty? && klass.with_connection(&:access_shard_doc?)
 
         # clear limit & offset
         relation.offset!(nil).limit!(nil)
@@ -232,11 +237,11 @@ module ElasticsearchRecord
 
           # delete all IDs through +API+
           # does not refresh index at this point (this is done below, if not disabled)
-          klass.connection.api(:bulk, { index: klass.table_name, body: results.map { |result| { delete: { _id: result['_id'] } } }, refresh: false }, "#{klass} Pit Delete")
+          klass.with_connection { |c| c.api(:bulk, { index: klass.table_name, body: results.map { |result| { delete: { _id: result['_id'] } } }, refresh: false }, "#{klass} Pit Delete") }
         end
 
         # refresh index
-        klass.connection.refresh_table(klass.table_name) if refresh
+        klass.with_connection { |c| c.refresh_table(klass.table_name) } if refresh
 
         # return total count
         delete_count
@@ -326,7 +331,7 @@ module ElasticsearchRecord
       # see @ #point_in_time
       # @param [String] pit_id
       def _close_point_in_time(pit_id)
-        klass.connection.api(:close_point_in_time, { body: { id: pit_id } }, "#{klass} Close Pit")
+        klass.with_connection { |c| c.api(:close_point_in_time, { body: { id: pit_id } }, "#{klass} Close Pit") }
       end
     end
   end

@@ -29,7 +29,7 @@ module ElasticsearchSpec
       return @available if defined?(@available)
 
       @available = begin
-        ElasticsearchRecord::Base.connection.verify!
+        ElasticsearchRecord::Base.lease_connection.verify!
         true
       rescue StandardError => e
         @unavailable_reason = "#{e.class}: #{e.message}"
@@ -41,8 +41,10 @@ module ElasticsearchSpec
       @unavailable_reason
     end
 
+    # PLEASE NOTE: the specs deliberately hold a permanent lease - +lease_connection+ is the
+    # non-deprecated way to request one (+Model.connection+ is soft deprecated since rails 7.2)
     def connection
-      ElasticsearchRecord::Base.connection
+      ElasticsearchRecord::Base.lease_connection
     end
   end
 end

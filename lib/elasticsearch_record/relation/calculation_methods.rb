@@ -42,12 +42,12 @@ module ElasticsearchRecord
           # HINT: +:__query__+ directly interacts with the query-object and sets the 'terminate_after' argument
           # see @ ElasticsearchRecord::Query#arguments & Arel::Collectors::ElasticsearchQuery#assign
           arel = spawn.unscope!(:offset, :limit, :order, :configure, :aggs).configure!(:__query__, argument: { terminate_after: limit_value }).arel
-          _resolve_limited_count(klass.connection.select_count(arel, "#{klass.name} Count"))
+          _resolve_limited_count(klass.with_connection { |c| c.select_count(arel, "#{klass.name} Count") })
         else
           # since total will be limited to 10000 results, we need to resolve the real values by a custom query.
           # This query is called through +#select_count+.
           arel = spawn.unscope!(:offset, :limit, :order, :configure, :aggs)
-          _resolve_limited_count(klass.connection.select_count(arel, "#{klass.name} Count"))
+          _resolve_limited_count(klass.with_connection { |c| c.select_count(arel, "#{klass.name} Count") })
         end
       end
 
