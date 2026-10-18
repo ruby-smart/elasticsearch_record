@@ -291,7 +291,7 @@ module ElasticsearchRecord
     end
 
     def _connection
-      klass.connection
+      klass.lease_connection
     end
   end
 end

@@ -157,8 +157,8 @@ RSpec.describe ElasticsearchRecord::Relation::CalculationMethods, :elasticsearch
       # the argument is still built - it is a (best-effort) early termination hint for the cluster
       it 'builds the terminate_after argument from the limit' do
         captured = nil
-        allow(model.connection).to receive(:select_count).and_wrap_original do |original, arel, *args|
-          captured = model.connection.to_sql(model.connection.send(:arel_from_relation, arel))
+        allow(model.lease_connection).to receive(:select_count).and_wrap_original do |original, arel, *args|
+          captured = model.lease_connection.to_sql(model.lease_connection.send(:arel_from_relation, arel))
           original.call(arel, *args)
         end
 
@@ -366,10 +366,10 @@ RSpec.describe ElasticsearchRecord::Relation::CalculationMethods, :elasticsearch
 
       # the guard is an argument check - it fires before the query is ever built
       it 'raises without touching the cluster' do
-        allow(model.connection).to receive(:api).and_call_original
+        allow(model.lease_connection).to receive(:api).and_call_original
 
         expect { relation.matrix_stats(:count) }.to raise_error(ArgumentError)
-        expect(model.connection).not_to have_received(:api)
+        expect(model.lease_connection).not_to have_received(:api)
       end
 
       # ... and before the NullRelation short-circuit, so a wrong call never passes silently
@@ -414,11 +414,11 @@ RSpec.describe ElasticsearchRecord::Relation::CalculationMethods, :elasticsearch
 
     # the NullRelation guard fires before any query is built - nothing reaches the cluster
     it 'does not execute any query' do
-      allow(model.connection).to receive(:api).and_call_original
+      allow(model.lease_connection).to receive(:api).and_call_original
 
       relation.sum(:count)
 
-      expect(model.connection).not_to have_received(:api)
+      expect(model.lease_connection).not_to have_received(:api)
     end
   end
 end

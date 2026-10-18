@@ -24,7 +24,7 @@ RSpec.describe ElasticsearchRecord::ModelApi do
     # a verifying double: every delegation target must really exist on the adapter
     let(:connection) { instance_double(ActiveRecord::ConnectionAdapters::ElasticsearchAdapter) }
 
-    let(:klass) { double('MyModel', index_name: 'my-index', connection: connection) }
+    let(:klass) { double('MyModel', index_name: 'my-index', lease_connection: connection) }
 
     it 'exposes the provided klass' do
       expect(api.klass).to be(klass)
@@ -172,7 +172,7 @@ RSpec.describe ElasticsearchRecord::ModelApi do
 
     let(:connection) { instance_double(ActiveRecord::ConnectionAdapters::ElasticsearchAdapter) }
 
-    let(:klass) { double('MyModel', index_name: 'my-index', connection: connection) }
+    let(:klass) { double('MyModel', index_name: 'my-index', lease_connection: connection) }
 
     # captures the arguments the bulk API was called with
     def capture_bulk
@@ -443,7 +443,7 @@ RSpec.describe ElasticsearchRecord::ModelApi do
       it '#drop! removes the index when confirmed' do
         api.drop!(confirm: true)
 
-        expect(model.connection.table_exists?(TestIndex.name)).to be(false)
+        expect(model.lease_connection.table_exists?(TestIndex.name)).to be(false)
       end
 
       it '#drop! leaves the index untouched without a confirmation' do
@@ -542,7 +542,7 @@ RSpec.describe ElasticsearchRecord::ModelApi do
       it 'creates the target index' do
         api.clone!(clone_name)
 
-        expect(model.connection.table_exists?(clone_name)).to be(true)
+        expect(model.lease_connection.table_exists?(clone_name)).to be(true)
       end
     end
   end

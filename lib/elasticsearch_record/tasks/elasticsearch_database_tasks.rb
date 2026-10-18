@@ -3,10 +3,16 @@
 module ElasticsearchRecord
   module Tasks
     class ElasticsearchDatabaseTasks
-      delegate :connection, :establish_connection, to: ElasticsearchRecord::Base
+      delegate :establish_connection, to: ElasticsearchRecord::Base
 
       def initialize(db_config)
         @db_config = db_config
+      end
+
+      # resolves the connection like rails' own tasks classes (+ActiveRecord::Tasks::AbstractTasks#connection+) -
+      # +ElasticsearchRecord::Base.connection+ is soft-deprecated since rails 7.2.
+      def connection
+        ElasticsearchRecord::Base.lease_connection
       end
 
       def create

@@ -29,7 +29,7 @@ module ElasticsearchSpec
       return @available if defined?(@available)
 
       @available = begin
-        ElasticsearchRecord::Base.connection.verify!
+        ElasticsearchRecord::Base.lease_connection.verify!
         true
       rescue StandardError => e
         @unavailable_reason = "#{e.class}: #{e.message}"
@@ -42,7 +42,7 @@ module ElasticsearchSpec
     end
 
     def connection
-      ElasticsearchRecord::Base.connection
+      ElasticsearchRecord::Base.lease_connection
     end
   end
 end

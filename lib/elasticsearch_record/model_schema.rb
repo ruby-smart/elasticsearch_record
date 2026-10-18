@@ -13,13 +13,13 @@ module ElasticsearchRecord
       # overwrite this method to provide an optional +table_name_prefix+ from the connection config.
       # @return [String]
       def table_name_prefix
-        super.presence || connection.table_name_prefix
+        super.presence || lease_connection.table_name_prefix
       end
 
       # overwrite this method to provide an optional +table_name_suffix+ from the connection config.
       # @return [String]
       def table_name_suffix
-        super.presence || connection.table_name_suffix
+        super.presence || lease_connection.table_name_suffix
       end
 
       # Guesses the table name, but does not decorate it with prefix and suffix information.
@@ -31,14 +31,14 @@ module ElasticsearchRecord
       # returns the configured +max_result_window+ (default: 10000)
       # @return [Integer]
       def max_result_window
-        @max_result_window ||= connection.max_result_window(table_name)
+        @max_result_window ||= lease_connection.max_result_window(table_name)
       end
 
       # returns true, if the table should behave as +auto_increment+ by creating new records.
       # resolves the auto_increment status from the tables +_meta+.
       # @return [Boolean]
       def auto_increment?
-        @auto_increment ||= !!connection.table_metas(table_name).dig('auto_increment')
+        @auto_increment ||= !!lease_connection.table_metas(table_name).dig('auto_increment')
       end
 
       # returns an array with columns names, that are not virtual (and not a base structure).

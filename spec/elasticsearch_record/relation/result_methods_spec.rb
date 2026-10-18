@@ -118,7 +118,7 @@ RSpec.describe ElasticsearchRecord::Relation::ResultMethods, :elasticsearch do
       expect(pit_id).to be_a(String).and be_present
 
       # cleanup - the pit is only auto-closed when a block was provided
-      model.connection.api(:close_point_in_time, { body: { id: pit_id } }, 'Close Pit')
+      model.lease_connection.api(:close_point_in_time, { body: { id: pit_id } }, 'Close Pit')
     end
 
     it 'yields the pit id and returns nil with a provided block' do
@@ -135,20 +135,20 @@ RSpec.describe ElasticsearchRecord::Relation::ResultMethods, :elasticsearch do
 
       # a closed pit cannot be reused
       expect {
-        model.connection.api(:search, { body: { pit: { id: yielded, keep_alive: '1m' } } }, 'Search Pit')
+        model.lease_connection.api(:search, { body: { pit: { id: yielded, keep_alive: '1m' } } }, 'Search Pit')
       }.to raise_error(ActiveRecord::StatementInvalid)
     end
 
     it 'forwards the provided keep_alive' do
-      allow(model.connection).to receive(:api).and_call_original
+      allow(model.lease_connection).to receive(:api).and_call_original
 
-      expect(model.connection).to receive(:api)
+      expect(model.lease_connection).to receive(:api)
         .with(:open_point_in_time, hash_including(keep_alive: '5m'), anything)
         .and_call_original
 
       pit_id = model.all.point_in_time(keep_alive: '5m')
 
-      model.connection.api(:close_point_in_time, { body: { id: pit_id } }, 'Close Pit')
+      model.lease_connection.api(:close_point_in_time, { body: { id: pit_id } }, 'Close Pit')
     end
 
     it 'is aliased as #pit' do
@@ -270,11 +270,11 @@ RSpec.describe ElasticsearchRecord::Relation::ResultMethods, :elasticsearch do
                                                 }
                                               })
 
-      allow(model.connection).to receive(:api).and_call_original
+      allow(model.lease_connection).to receive(:api).and_call_original
       # prevents a real (never closed) pit - the raise skips the +close_point_in_time+
-      allow(model.connection).to receive(:api)
+      allow(model.lease_connection).to receive(:api)
         .with(:open_point_in_time, anything, anything).and_return({ 'id' => 'STUCK' })
-      allow(model.connection).to receive(:select_all).and_return(stuck)
+      allow(model.lease_connection).to receive(:select_all).and_return(stuck)
 
       expect {
         model.all.pit_results(batch_size: 1)
@@ -282,9 +282,9 @@ RSpec.describe ElasticsearchRecord::Relation::ResultMethods, :elasticsearch do
     end
 
     it 'closes the pit after resolving' do
-      allow(model.connection).to receive(:api).and_call_original
+      allow(model.lease_connection).to receive(:api).and_call_original
 
-      expect(model.connection).to receive(:api)
+      expect(model.lease_connection).to receive(:api)
         .with(:close_point_in_time, anything, anything)
         .and_call_original
 
@@ -342,7 +342,7 @@ RSpec.describe ElasticsearchRecord::Relation::ResultMethods, :elasticsearch do
     end
 
     it 'refreshes the index by default' do
-      expect(model.connection).to receive(:refresh_table).with(model.table_name).and_call_original
+      expect(model.lease_connection).to receive(:refresh_table).with(model.table_name).and_call_original
 
       model.all.pit_delete
 
@@ -351,10 +351,10 @@ RSpec.describe ElasticsearchRecord::Relation::ResultMethods, :elasticsearch do
     end
 
     it 'does not refresh the index when disabled' do
-      allow(model.connection).to receive(:refresh_table).and_call_original
+      allow(model.lease_connection).to receive(:refresh_table).and_call_original
 
       expect(model.all.pit_delete(refresh: false)).to eq(4)
-      expect(model.connection).not_to have_received(:refresh_table)
+      expect(model.lease_connection).not_to have_received(:refresh_table)
     end
   end
 
@@ -574,7 +574,7 @@ RSpec.describe ElasticsearchRecord::Relation::ResultMethods, :elasticsearch do
       relation.load
 
       # a loaded relation must not send another query
-      expect(model.connection).not_to receive(:select_all)
+      expect(model.lease_connection).not_to receive(:select_all)
       expect(relation.total).to eq(4)
     end
 
