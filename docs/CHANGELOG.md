@@ -1,5 +1,8 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [unreleased]
+* [fix] `ElasticsearchRecord::Tasks::ElasticsearchDatabaseTasks#check_current_protected_environment!` - rails 8.1 asks every tasks class for it, so 'db:drop', 'db:purge', 'db:schema:load' & 'db:test:prepare' no longer abort with a `NoMethodError`
+
 ## [5.0.2] - 2026-09-17
 * [add] `Arel::Visitors::ElasticsearchQuery#visit_Arel_Nodes_Casted` & `#visit_Arel_Nodes_Quoted` - the value nodes `Arel::Attributes::Attribute#eq` & co. build for plain values
 * [add] specs for `SchemaMigration#delete_version` & `#delete_all_versions`

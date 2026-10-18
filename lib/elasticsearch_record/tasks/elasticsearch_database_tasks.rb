@@ -34,6 +34,17 @@ module ElasticsearchRecord
         nil
       end
 
+      # Since rails 8.1 the protected-environment check of 'db:drop', 'db:purge', 'db:schema:load'
+      # & co. is asked of the tasks class of every database config
+      # (+ActiveRecord::Tasks::DatabaseTasks.check_protected_environments!+) - without this method
+      # each of these tasks aborts with a NoMethodError.
+      # The cluster never stores an environment (+ElasticsearchRecord::InternalMetadata#enabled?+ is
+      # false), so there is nothing to protect or to mismatch - the outcome the central check of
+      # rails <= 8.0 had for an elasticsearch config as well.
+      def check_current_protected_environment!(*)
+        nil
+      end
+
       private
 
       attr_reader :db_config
