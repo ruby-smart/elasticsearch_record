@@ -66,7 +66,7 @@ module ElasticsearchRecord
       # @return [nil, String] - either returns the pit_id (no block given) or nil
       def point_in_time(keep_alive: '1m')
         # resolve a initial PIT id
-        initial_pit_id = klass.connection.api(:open_point_in_time, { index: klass.table_name, keep_alive: keep_alive }, "#{klass} Open Pit").dig('id')
+        initial_pit_id = klass.lease_connection.api(:open_point_in_time, { index: klass.table_name, keep_alive: keep_alive }, "#{klass} Open Pit").dig('id')
 
         return initial_pit_id unless block_given?
 
@@ -74,7 +74,7 @@ module ElasticsearchRecord
         yield initial_pit_id
 
         # close PIT
-        klass.connection.api(:close_point_in_time, { body: { id: initial_pit_id } }, "#{klass} Close Pit")
+        klass.lease_connection.api(:close_point_in_time, { body: { id: initial_pit_id } }, "#{klass} Close Pit")
 
         # return nil if everything was ok
         nil
@@ -104,7 +104,7 @@ module ElasticsearchRecord
         # FALLBACK (without any order) for restricted access to the '_id' field.
         # with PIT a order by '_shard_doc' can also be used
         # see @ https://www.elastic.co/guide/en/elasticsearch/reference/current/paginate-search-results.html
-        relation.order!(_shard_doc: :asc) if relation.order_values.empty? && klass.connection.access_shard_doc?
+        relation.order!(_shard_doc: :asc) if relation.order_values.empty? && klass.lease_connection.access_shard_doc?
 
         # clear limit & offset
         relation.offset!(nil).limit!(nil)
@@ -203,11 +203,11 @@ module ElasticsearchRecord
 
           # delete all IDs through +API+
           # does not refresh index at this point (this is done below, if not disabled)
-          klass.connection.api(:bulk, { index: klass.table_name, body: results.map { |result| { delete: { _id: result['_id'] } } }, refresh: false }, "#{klass} Pit Delete")
+          klass.lease_connection.api(:bulk, { index: klass.table_name, body: results.map { |result| { delete: { _id: result['_id'] } } }, refresh: false }, "#{klass} Pit Delete")
         end
 
         # refresh index
-        klass.connection.refresh_table(klass.table_name) if refresh
+        klass.lease_connection.refresh_table(klass.table_name) if refresh
 
         # return total count
         delete_count

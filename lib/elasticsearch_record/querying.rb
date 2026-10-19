@@ -117,7 +117,7 @@ module ElasticsearchRecord
           # IMPORTANT: Always provide all columns
           columns: source_column_names)
 
-        connection.exec_query(query, "#{name} ES|QL")
+        lease_connection.exec_query(query, "#{name} ES|QL")
       end
 
 
@@ -133,7 +133,7 @@ module ElasticsearchRecord
           # IMPORTANT: Always provide all columns
           columns: source_column_names)
 
-        connection.exec_query(query, "#{name} Msearch")
+        lease_connection.exec_query(query, "#{name} Msearch")
       end
 
       # executes a search by provided +RAW+ query - supports +Elasticsearch::DSL+ gem if loaded.
@@ -164,7 +164,7 @@ module ElasticsearchRecord
 
       # execute query by msearch
       def _query_by_msearch(queries, async: false)
-        connection.select_multiple(queries, "#{name} Msearch", async: async)
+        lease_connection.select_multiple(queries, "#{name} Msearch", async: async)
       end
     end
   end

@@ -66,7 +66,7 @@ RSpec.describe ElasticsearchRecord::InternalMetadata do
       TestIndex.drop!(metadata_table_name)
     end
 
-    let(:connection) { ElasticsearchRecord::Base.connection }
+    let(:connection) { ElasticsearchRecord::Base.lease_connection }
 
     # stays within +TestIndex::ALLOWED+, so a regression can never create a real metadata index
     let(:metadata_table_name) { "#{TestIndex.name}_metadata" }

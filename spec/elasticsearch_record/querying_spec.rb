@@ -36,7 +36,7 @@ RSpec.describe ElasticsearchRecord::Querying::ClassMethods, :elasticsearch do
   def capture_query(method = :select_all)
     captured = nil
 
-    allow(model.connection).to receive(method).and_wrap_original do |original, query, *args, **opts|
+    allow(model.lease_connection).to receive(method).and_wrap_original do |original, query, *args, **opts|
       captured = query
       original.call(query, *args, **opts)
     end
@@ -345,7 +345,7 @@ RSpec.describe ElasticsearchRecord::Querying::ClassMethods, :elasticsearch do
       model.source_column_names
 
       captured = nil
-      allow(model).to receive(:connection).and_return(connection_stub)
+      allow(model).to receive(:lease_connection).and_return(connection_stub)
       allow(connection_stub).to receive(:exec_query) do |query, *_args, **_opts|
         captured = query
         ElasticsearchRecord::Result.empty
@@ -373,7 +373,7 @@ RSpec.describe ElasticsearchRecord::Querying::ClassMethods, :elasticsearch do
     it 'instruments the query with the model name' do
       model.source_column_names
 
-      allow(model).to receive(:connection).and_return(connection_stub)
+      allow(model).to receive(:lease_connection).and_return(connection_stub)
       expect(connection_stub).to receive(:exec_query)
                                    .with(anything, "#{model.name} ES|QL")
                                    .and_return(ElasticsearchRecord::Result.empty)
@@ -417,7 +417,7 @@ RSpec.describe ElasticsearchRecord::Querying::ClassMethods, :elasticsearch do
       model.source_column_names
 
       captured = nil
-      allow(model).to receive(:connection).and_return(connection_stub)
+      allow(model).to receive(:lease_connection).and_return(connection_stub)
       allow(connection_stub).to receive(:exec_query) do |query, *_args, **_opts|
         captured = query
         ElasticsearchRecord::Result.empty
@@ -452,7 +452,7 @@ RSpec.describe ElasticsearchRecord::Querying::ClassMethods, :elasticsearch do
     it 'instruments the query with the model name' do
       model.source_column_names
 
-      allow(model).to receive(:connection).and_return(connection_stub)
+      allow(model).to receive(:lease_connection).and_return(connection_stub)
       expect(connection_stub).to receive(:exec_query)
                                    .with(anything, "#{model.name} Msearch")
                                    .and_return(ElasticsearchRecord::Result.empty)
@@ -546,11 +546,11 @@ RSpec.describe ElasticsearchRecord::Querying::ClassMethods, :elasticsearch do
     end
 
     it 'instruments the query with the model name' do
-      allow(model.connection).to receive(:select_multiple).and_call_original
+      allow(model.lease_connection).to receive(:select_multiple).and_call_original
 
       model._query_by_msearch([model.all.arel])
 
-      expect(model.connection).to have_received(:select_multiple).with(anything, "#{model.name} Msearch", async: false)
+      expect(model.lease_connection).to have_received(:select_multiple).with(anything, "#{model.name} Msearch", async: false)
     end
 
     it 'raises for an async call' do

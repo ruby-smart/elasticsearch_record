@@ -43,7 +43,7 @@ module ElasticsearchRecord
           refresh: true)
 
         # execute query and return total updates
-        connection.update(query, "#{self} Update")
+        lease_connection.update(query, "#{self} Update")
       end
 
       # removes a persistent entry from the Elasticsearch index
@@ -57,7 +57,7 @@ module ElasticsearchRecord
           refresh: true)
 
         # execute query and return total deletes
-        connection.delete(query, "#{self} Delete")
+        lease_connection.delete(query, "#{self} Delete")
       end
 
       private

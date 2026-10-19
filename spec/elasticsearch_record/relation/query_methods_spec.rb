@@ -253,7 +253,7 @@ RSpec.describe 'ElasticsearchRecord::Relation::QueryMethods projections', :elast
     # ActiveRecord's +pluck+ always provides an Array, so this path is only reachable
     # through a direct call - it must not raise.
     it 'casts multiple columns without provided type overrides' do
-      result = model.connection.select_all(model.all.arel, 'QueryMethodsSpec Load')
+      result = model.lease_connection.select_all(model.all.arel, 'QueryMethodsSpec Load')
 
       expect(result.columns.size).to be > 1
       expect { result.cast_values({}) }.not_to raise_error
@@ -261,7 +261,7 @@ RSpec.describe 'ElasticsearchRecord::Relation::QueryMethods projections', :elast
     end
 
     it 'casts a single column without provided type overrides' do
-      result = model.connection.select_all(model.select(:name).arel, 'QueryMethodsSpec Load')
+      result = model.lease_connection.select_all(model.select(:name).arel, 'QueryMethodsSpec Load')
 
       expect { result.cast_values({}) }.not_to raise_error
       expect(result.cast_values({})).to match_array(%w[alpha beta])

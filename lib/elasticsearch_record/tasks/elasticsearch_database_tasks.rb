@@ -3,10 +3,16 @@
 module ElasticsearchRecord
   module Tasks
     class ElasticsearchDatabaseTasks
-      delegate :connection, :establish_connection, to: ElasticsearchRecord::Base
+      delegate :establish_connection, to: ElasticsearchRecord::Base
 
       def initialize(db_config)
         @db_config = db_config
+      end
+
+      # resolves the connection like rails' own tasks classes (+ActiveRecord::Tasks::AbstractTasks#connection+) -
+      # +ElasticsearchRecord::Base.connection+ is soft-deprecated since rails 7.2.
+      def connection
+        ElasticsearchRecord::Base.lease_connection
       end
 
       def create
@@ -31,6 +37,17 @@ module ElasticsearchRecord
 
       def structure_load(*)
         $stdout.puts "\n>>> 'structure_load' elasticsearch is not supported and will be ignored!"
+        nil
+      end
+
+      # Since rails 8.1 the protected-environment check of 'db:drop', 'db:purge', 'db:schema:load'
+      # & co. is asked of the tasks class of every database config
+      # (+ActiveRecord::Tasks::DatabaseTasks.check_protected_environments!+) - without this method
+      # each of these tasks aborts with a NoMethodError.
+      # The cluster never stores an environment (+ElasticsearchRecord::InternalMetadata#enabled?+ is
+      # false), so there is nothing to protect or to mismatch - the outcome the central check of
+      # rails <= 8.0 had for an elasticsearch config as well.
+      def check_current_protected_environment!(*)
         nil
       end
 

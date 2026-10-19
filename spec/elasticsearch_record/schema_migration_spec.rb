@@ -34,7 +34,7 @@ RSpec.describe ElasticsearchRecord::SchemaMigration, :elasticsearch do
 
   subject(:migration) { described_class.new(connection.pool) }
 
-  let(:connection) { ElasticsearchRecord::Base.connection }
+  let(:connection) { ElasticsearchRecord::Base.lease_connection }
 
   # stays within +TestIndex::ALLOWED+, so it can never wipe a real migrations index
   let(:migrations_table_name) { "#{TestIndex.name}_migrations" }

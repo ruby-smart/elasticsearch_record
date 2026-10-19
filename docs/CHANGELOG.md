@@ -1,5 +1,9 @@
 # ElasticsearchRecord - CHANGELOG
 
+## [unreleased]
+* [fix] `ElasticsearchRecord::Tasks::ElasticsearchDatabaseTasks#check_current_protected_environment!` - rails 8.1 asks every tasks class for it, so 'db:drop', 'db:purge', 'db:schema:load' & 'db:test:prepare' no longer abort with a `NoMethodError`
+* [ref] model, relation & tasks code resolves its connection with `lease_connection` instead of the soft-deprecated `Model.connection` - runs under `ActiveRecord.permanent_connection_checkout = :deprecated` / `:disallowed`
+
 ## [5.0.2] - 2026-09-17
 * [add] `Arel::Visitors::ElasticsearchQuery#visit_Arel_Nodes_Casted` & `#visit_Arel_Nodes_Quoted` - the value nodes `Arel::Attributes::Attribute#eq` & co. build for plain values
 * [add] specs for `SchemaMigration#delete_version` & `#delete_all_versions`

@@ -119,19 +119,19 @@ RSpec.describe ElasticsearchRecord::Relation::CoreMethods, :elasticsearch do
     end
 
     it 'instruments with a custom name' do
-      allow(model.connection).to receive(:select_all).and_call_original
+      allow(model.lease_connection).to receive(:select_all).and_call_original
 
       relation.resolve('Custom')
 
-      expect(model.connection).to have_received(:select_all).with(anything, "#{model.name} Custom")
+      expect(model.lease_connection).to have_received(:select_all).with(anything, "#{model.name} Custom")
     end
 
     it 'instruments with "Load" by default' do
-      allow(model.connection).to receive(:select_all).and_call_original
+      allow(model.lease_connection).to receive(:select_all).and_call_original
 
       relation.resolve
 
-      expect(model.connection).to have_received(:select_all).with(anything, "#{model.name} Load")
+      expect(model.lease_connection).to have_received(:select_all).with(anything, "#{model.name} Load")
     end
   end
 
@@ -249,20 +249,20 @@ RSpec.describe ElasticsearchRecord::Relation::CoreMethods, :elasticsearch do
     # sorting on the '_id' field requires the (by default disabled) cluster setting
     context "with the '_id' primary_key" do
       it 'does not order when the fielddata access is disallowed' do
-        allow(model.connection).to receive(:access_id_fielddata?).and_return(false)
+        allow(model.lease_connection).to receive(:access_id_fielddata?).and_return(false)
 
         expect(relation.ordered_relation.order_values).to be_empty
       end
 
       it 'orders by the _id when the fielddata access is allowed' do
-        allow(model.connection).to receive(:access_id_fielddata?).and_return(true)
+        allow(model.lease_connection).to receive(:access_id_fielddata?).and_return(true)
 
         expect(relation.ordered_relation.order_values.size).to eq(1)
       end
 
       # the implicit_order_column is usable even without the _id access
       it 'orders by the implicit_order_column alone' do
-        allow(model.connection).to receive(:access_id_fielddata?).and_return(false)
+        allow(model.lease_connection).to receive(:access_id_fielddata?).and_return(false)
         model.implicit_order_column = 'name'
 
         expect(relation.ordered_relation.order_values.size).to eq(1)
@@ -305,14 +305,14 @@ RSpec.describe ElasticsearchRecord::Relation::CoreMethods, :elasticsearch do
       end
 
       it "reverses by the '_id' when the fielddata access is allowed" do
-        allow(model.connection).to receive(:access_id_fielddata?).and_return(true)
+        allow(model.lease_connection).to receive(:access_id_fielddata?).and_return(true)
 
         expect(relation.send(:reverse_sql_order, []).size).to eq(1)
       end
 
       # this is the case most clusters are in - there is simply no reversible order
       it 'raises when the _id fielddata access is disallowed' do
-        allow(model.connection).to receive(:access_id_fielddata?).and_return(false)
+        allow(model.lease_connection).to receive(:access_id_fielddata?).and_return(false)
 
         expect { relation.send(:reverse_sql_order, []) }
           .to raise_error(ActiveRecord::IrreversibleOrderError, /indices.id_field_data.enabled/)
@@ -322,7 +322,7 @@ RSpec.describe ElasticsearchRecord::Relation::CoreMethods, :elasticsearch do
     # +#last+ resolves through the reversed order - so it inherits the restriction
     describe 'through #last' do
       it 'raises on an unordered relation with a restricted _id' do
-        allow(model.connection).to receive(:access_id_fielddata?).and_return(false)
+        allow(model.lease_connection).to receive(:access_id_fielddata?).and_return(false)
 
         expect { relation.last }.to raise_error(ActiveRecord::IrreversibleOrderError)
       end
